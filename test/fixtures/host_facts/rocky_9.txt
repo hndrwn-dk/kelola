@@ -1,0 +1,19 @@
+---OS---
+PRETTY_NAME="Rocky Linux 9.4 (Blue Onyx)"
+NAME="Rocky Linux"
+VERSION_ID="9.4"
+ID=rocky
+---INIT---
+/usr/lib/systemd/systemd
+systemd 252 (252-32.el9)
+---PKG---
+/usr/bin/dnf
+/usr/bin/yum
+---FW---
+/usr/bin/firewall-cmd
+/usr/sbin/nft
+/usr/sbin/iptables
+---JOURNAL---
+hendra wheel systemd-journal
+---ARCH---
+x86_64
