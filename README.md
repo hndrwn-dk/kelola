@@ -23,14 +23,16 @@ One hardware key per phone, reused for every host. That is intentional.
 | Area | Status |
 |---|---|
 | Hardware SSH identity (StrongBox / Secure Enclave) | Working on physical Android |
-| Host inventory, ssh_config import (IdentityFile ignored) | Working |
+| Host inventory, notes, recents, search, ssh_config import | Working |
 | Enrollment QR + TOFU host-key pinning | Working |
 | HostFacts + dashboard | Working against Ubuntu/OpenSSH |
-| systemd unit list, detail, start/stop/restart/enable/disable | Working; OpenRC lists without crashing |
-| Self-lockout guard on SSH/network units | Working |
-| Password sudo | Detected and refused (`sudo -n`); no hang |
+| systemd units (list/detail/start/stop/restart) | Working; OpenRC lists without crashing |
+| journald logs (filter, grep, older page) | Working |
+| Disk (`df` + `du`), processes, containers | Working (read) |
+| Local audit log (write-before-exec, JSON copy) | Working |
+| Read-only host switch | Enforced at the SSH dispatcher |
 
-Still ahead (see [`readiness/MILESTONES.md`](readiness/MILESTONES.md)): journald, audit UI, containers, SFTP, incident sheets, tunnels, packages/firewall/disk, terminal, fleet, NAT.
+Still ahead: log follow, SFTP, tunnels, packages/firewall apply, terminal, fleet, NAT, LLM. See [`readiness/MILESTONES.md`](readiness/MILESTONES.md).
 
 Specs: [`readiness/SPEC.md`](readiness/SPEC.md) · design: [`readiness/DESIGN.html`](readiness/DESIGN.html) · M0 decision: [`readiness/M0-GO-NO-GO.md`](readiness/M0-GO-NO-GO.md).
 

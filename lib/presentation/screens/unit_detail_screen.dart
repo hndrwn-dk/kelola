@@ -9,6 +9,7 @@ import 'package:kelola/domain/probes/unit_detail_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/screens/journal_screen.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart';
 import 'package:kelola/presentation/widgets/confirm_unit_action.dart';
 import 'package:kelola/presentation/widgets/risk_band.dart';
@@ -164,6 +165,19 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
+                OutlinedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => JournalScreen(
+                          hostId: widget.host.id,
+                          unit: widget.unitName,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('journal'),
+                ),
                 for (final verb in UnitVerb.values)
                   OutlinedButton(
                     onPressed: _busy ? null : () => _act(verb),

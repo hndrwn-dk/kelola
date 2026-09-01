@@ -132,3 +132,7 @@ final hostsProvider = FutureProvider<List<Host>>((ref) async {
   final hosts = await ref.watch(hostRepositoryProvider).list();
   return sortByAttention(hosts);
 });
+
+final recentsProvider = FutureProvider<List<Host>>((ref) {
+  return ref.watch(hostRepositoryProvider).recentHosts();
+});

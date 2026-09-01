@@ -1,0 +1,3 @@
+{"__CURSOR":"s=abc","__REALTIME_TIMESTAMP":"1756721400000000","PRIORITY":"3","MESSAGE":"Failed to bind","_SYSTEMD_UNIT":"nginx.service","SYSLOG_IDENTIFIER":"nginx"}
+not json
+{"__CURSOR":"s=def","__REALTIME_TIMESTAMP":"1756721460000000","PRIORITY":"6","MESSAGE":[72,105],"UNIT":"cron.service"}
