@@ -54,6 +54,14 @@ class SshSessionPool {
     }
     final command = probe.command(facts ?? HostFacts.undiscovered);
     final started = DateTime.now();
+    final auditId = await _repository.beginAudit(
+      hostId: host.id,
+      hostAlias: host.alias,
+      remoteUser: host.username,
+      command: command.trim().split('\n').first,
+      risk: probe.risk.name,
+      usedSudo: probe.needsSudo,
+    );
     try {
       final client = await _acquire(host, onUnknownHostKey: onUnknownHostKey);
       final result = await client.runWithResult(command).timeout(probe.timeout);
@@ -62,25 +70,15 @@ class SshSessionPool {
         utf8.decode(result.stderr),
         result.exitCode ?? -1,
       );
-      await _repository.recordAudit(
-        hostId: host.id,
-        hostAlias: host.alias,
-        remoteUser: host.username,
-        command: command.trim().split('\n').first,
-        risk: probe.risk.name,
-        usedSudo: probe.needsSudo,
+      await _repository.finishAudit(
+        auditId,
         exitCode: result.exitCode,
         durationMs: DateTime.now().difference(started).inMilliseconds,
       );
       return parsed;
     } catch (e) {
-      await _repository.recordAudit(
-        hostId: host.id,
-        hostAlias: host.alias,
-        remoteUser: host.username,
-        command: command.trim().split('\n').first,
-        risk: probe.risk.name,
-        usedSudo: probe.needsSudo,
+      await _repository.finishAudit(
+        auditId,
         durationMs: DateTime.now().difference(started).inMilliseconds,
         errorSummary: e.runtimeType.toString(),
       );

@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:kelola/data/db/database.dart';
+import 'package:kelola/domain/audit/audit_event.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -252,6 +253,75 @@ class HostRepository {
         );
   }
 
+  Future<void> setReadOnly(String id, bool value) {
+    return (_db.update(_db.hosts)..where((t) => t.id.equals(id))).write(
+      HostsCompanion(readOnly: Value(value)),
+    );
+  }
+
+  Future<List<Host>> recentHosts() async {
+    final rows = await (_db.select(_db.recents)
+          ..where((t) => t.kind.equals('host'))
+          ..orderBy([(t) => OrderingTerm.desc(t.viewedAt)])
+          ..limit(20))
+        .get();
+    final seen = <String>{};
+    final hosts = <Host>[];
+    for (final row in rows) {
+      if (!seen.add(row.hostId)) {
+        continue;
+      }
+      final host = await get(row.hostId);
+      if (host != null) {
+        hosts.add(host);
+      }
+      if (hosts.length >= 10) {
+        break;
+      }
+    }
+    return hosts;
+  }
+
+  Future<String> beginAudit({
+    required String hostId,
+    required String hostAlias,
+    required String remoteUser,
+    required String command,
+    required String risk,
+    required bool usedSudo,
+  }) async {
+    final id = _uuid.v7();
+    await _db.into(_db.auditRecords).insert(
+          AuditRecordsCompanion.insert(
+            id: id,
+            timestampUtc: DateTime.now().toUtc(),
+            hostId: hostId,
+            hostAlias: hostAlias,
+            remoteUser: remoteUser,
+            command: command,
+            risk: risk,
+            usedSudo: usedSudo,
+            appVersion: '0.1.0',
+          ),
+        );
+    return id;
+  }
+
+  Future<void> finishAudit(
+    String id, {
+    int? exitCode,
+    int durationMs = 0,
+    String? errorSummary,
+  }) {
+    return (_db.update(_db.auditRecords)..where((t) => t.id.equals(id))).write(
+      AuditRecordsCompanion(
+        exitCode: Value(exitCode),
+        durationMs: Value(durationMs),
+        errorSummary: Value(errorSummary),
+      ),
+    );
+  }
+
   Future<void> recordAudit({
     required String hostId,
     required String hostAlias,
@@ -279,6 +349,34 @@ class HostRepository {
             appVersion: '0.1.0',
           ),
         );
+  }
+
+  Future<List<AuditEvent>> listAudit({String? hostId, int limit = 200}) async {
+    final query = _db.select(_db.auditRecords)
+      ..orderBy([(t) => OrderingTerm.desc(t.timestampUtc)])
+      ..limit(limit);
+    if (hostId != null) {
+      query.where((t) => t.hostId.equals(hostId));
+    }
+    final rows = await query.get();
+    return rows
+        .map(
+          (row) => AuditEvent(
+            id: row.id,
+            timestampUtc: row.timestampUtc,
+            hostId: row.hostId,
+            hostAlias: row.hostAlias,
+            remoteUser: row.remoteUser,
+            command: row.command,
+            risk: row.risk,
+            usedSudo: row.usedSudo,
+            durationMs: row.durationMs,
+            appVersion: row.appVersion,
+            exitCode: row.exitCode,
+            errorSummary: row.errorSummary,
+          ),
+        )
+        .toList();
   }
 
   Host _toHost(HostRow row) {

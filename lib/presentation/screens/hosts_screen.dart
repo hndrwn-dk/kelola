@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/presentation/screens/add_host_screen.dart';
+import 'package:kelola/presentation/screens/audit_screen.dart';
 import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/screens/search_screen.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart';
@@ -14,11 +16,20 @@ class HostsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).extension<KelolaColors>()!;
     final hosts = ref.watch(hostsProvider);
+    final recents = ref.watch(recentsProvider).valueOrNull ?? [];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Hosts'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.receipt_long),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AuditScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {
@@ -34,6 +45,7 @@ class HostsScreen extends ConsumerWidget {
                 MaterialPageRoute<void>(builder: (_) => const AddHostScreen()),
               );
               ref.invalidate(hostsProvider);
+              ref.invalidate(recentsProvider);
             },
           ),
         ],
@@ -68,30 +80,41 @@ class HostsScreen extends ConsumerWidget {
               ),
             );
           }
+          final recentIds = recents.map((h) => h.id).toSet();
           return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(hostsProvider),
-            child: ListView.builder(
+            onRefresh: () async {
+              ref.invalidate(hostsProvider);
+              ref.invalidate(recentsProvider);
+            },
+            child: ListView(
               padding: const EdgeInsets.all(14),
-              itemCount: list.length,
-              itemBuilder: (context, i) {
-                final host = list[i];
-                return HostCard(
-                  host: host,
-                  onTap: () async {
-                    await ref.read(hostRepositoryProvider).setLastHost(host.id);
-                    await ref.read(hostRepositoryProvider).touchRecent(host);
-                    if (!context.mounted) {
-                      return;
-                    }
-                    await Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => HostDashboardScreen(hostId: host.id),
-                      ),
-                    );
-                    ref.invalidate(hostsProvider);
-                  },
-                );
-              },
+              children: [
+                if (recents.isNotEmpty) ...[
+                  Text(
+                    'Recent',
+                    style: TextStyle(color: colors.dim, fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final h in recents)
+                        ActionChip(
+                          label: Text(h.alias),
+                          onPressed: () => _openHost(context, ref, h),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                for (final host in list)
+                  HostCard(
+                    host: host,
+                    onTap: () => _openHost(context, ref, host),
+                  ),
+                if (recentIds.isNotEmpty) const SizedBox(height: 8),
+              ],
             ),
           );
         },
@@ -99,5 +122,20 @@ class HostsScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('$e')),
       ),
     );
+  }
+
+  Future<void> _openHost(BuildContext context, WidgetRef ref, Host host) async {
+    await ref.read(hostRepositoryProvider).setLastHost(host.id);
+    await ref.read(hostRepositoryProvider).touchRecent(host);
+    if (!context.mounted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => HostDashboardScreen(hostId: host.id),
+      ),
+    );
+    ref.invalidate(hostsProvider);
+    ref.invalidate(recentsProvider);
   }
 }

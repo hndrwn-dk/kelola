@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:kelola/presentation/screens/hosts_screen.dart';
+import 'package:kelola/presentation/screens/boot_gate.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart';
 
 class KelolaApp extends StatelessWidget {
@@ -13,7 +13,7 @@ class KelolaApp extends StatelessWidget {
       title: 'Kelola',
       debugShowCheckedModeBanner: false,
       theme: kelolaTheme(),
-      home: home ?? const HostsScreen(),
+      home: home ?? const BootGate(),
     );
   }
 }
