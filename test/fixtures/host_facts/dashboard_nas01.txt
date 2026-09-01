@@ -1,0 +1,19 @@
+---UPTIME---
+4060800.15 16243200.10
+---LOAD---
+0.84 0.60 0.41 1/218 41988
+---MEM---
+MemTotal:       16384000 kB
+MemFree:         2048000 kB
+MemAvailable:    6389760 kB
+Buffers:          512000 kB
+Cached:          4096000 kB
+---DISK---
+Filesystem     Type  1024-blocks      Used Available Capacity Mounted on
+/dev/sda2      ext4    482344960 376228864  81553408      83% /
+tmpfs          tmpfs     8192000         0   8192000       0% /dev/shm
+---FAILED---
+2
+---FAILED_NAMES---
+nginx.service
+borgmatic.service

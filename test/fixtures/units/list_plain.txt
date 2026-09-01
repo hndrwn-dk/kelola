@@ -1,0 +1,8 @@
+---UNITS_JSON---
+Failed to parse JSON
+---UNITS_PLAIN---
+cron.service loaded active running Regular background program processing daemon
+broken.service loaded failed failed The broken one
+---FILES_PLAIN---
+cron.service     enabled
+broken.service   disabled

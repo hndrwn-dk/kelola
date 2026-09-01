@@ -1,0 +1,8 @@
+---OPENRC---
+Runlevel: default
+ docker                                                 [  started  ]
+ sshd                                                   [  started  ]
+ nginx                                                  [  crashed  ]
+Dynamic Runlevel: hotplugged
+Dynamic Runlevel: needed/wanted
+Dynamic Runlevel: manual

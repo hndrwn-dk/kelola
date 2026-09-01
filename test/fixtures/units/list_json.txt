@@ -1,0 +1,32 @@
+---UNITS_JSON---
+[
+  {
+    "unit": "cron.service",
+    "load": "loaded",
+    "active": "active",
+    "sub": "running",
+    "description": "Regular background program processing daemon"
+  },
+  {
+    "unit": "nginx.service",
+    "load": "loaded",
+    "active": "failed",
+    "sub": "failed",
+    "description": "A high performance web server"
+  },
+  {
+    "unit": "ssh.service",
+    "load": "loaded",
+    "active": "active",
+    "sub": "running",
+    "description": "OpenBSD Secure Shell server"
+  }
+]
+---UNITS_PLAIN---
+cron.service loaded active running Regular background program processing daemon
+nginx.service loaded failed failed A high performance web server
+ssh.service loaded active running OpenBSD Secure Shell server
+---FILES_PLAIN---
+cron.service          enabled enabled
+nginx.service         enabled enabled
+ssh.service           enabled enabled

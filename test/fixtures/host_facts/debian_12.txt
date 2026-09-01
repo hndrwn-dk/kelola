@@ -1,0 +1,17 @@
+---OS---
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+ID=debian
+---INIT---
+/usr/lib/systemd/systemd
+systemd 252 (252.31-1~deb12u1)
+---PKG---
+/usr/bin/apt-get
+---FW---
+/usr/sbin/nft
+/usr/sbin/iptables
+---JOURNAL---
+hendra sudo
+---ARCH---
+x86_64

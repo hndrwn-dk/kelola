@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kelola — Design System &amp; Screens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0E1116;
+  --surface:#161A21;
+  --surface-2:#1E242D;
+  --surface-3:#262E39;
+  --line:#2A323D;
+  --text:#E4E8EE;
+  --muted:#8A95A5;
+  --dim:#5C6675;
+  --amber:#F0A02C;
+  --amber-dim:#8A5D1A;
+  --red:#E5484D;
+  --red-dim:#7A2528;
+  --green:#46A758;
+  --blue:#5B8DEF;
+
+  --display:'Space Grotesk',sans-serif;
+  --body:'IBM Plex Sans',sans-serif;
+  --mono:'IBM Plex Mono',monospace;
+
+  --r-sm:6px; --r-md:10px; --r-lg:16px; --r-xl:24px;
+}
+
+.diff{font-family:var(--mono);font-size:9px;line-height:1.7;padding:5px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.diff.add{background:rgba(70,167,88,.08);color:#8FCB9B;border-left:2px solid var(--green)}
+.diff.del{background:rgba(229,72,77,.08);color:#F2A9AB;border-left:2px solid var(--red)}
+.diff.ctx{color:var(--dim);border-left:2px solid transparent}
+
+.toast{
+  position:absolute;left:12px;right:12px;bottom:58px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);
+  padding:10px 12px;display:flex;align-items:center;gap:10px;
+  box-shadow:0 10px 28px -16px #000;
+}
+.toast .msg{flex:1;font-size:12px}
+.toast .act{font-family:var(--display);font-weight:600;font-size:12px;color:var(--amber)}
+
+.widg{
+  width:100%;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-lg);padding:14px 14px 12px;position:relative;overflow:hidden;
+}
+.widg::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--red)}
+
+.kbd{
+  font-family:var(--mono);font-size:9px;color:var(--dim);
+  border:1px solid var(--line);border-radius:4px;padding:1px 5px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--ink);
+  color:var(--text);
+  font-family:var(--body);
+  font-size:15px;
+  line-height:1.55;
+  padding:48px 24px 120px;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1240px;margin:0 auto}
+
+/* ── Doc chrome ───────────────────────── */
+.masthead{border-bottom:1px solid var(--line);padding-bottom:32px;margin-bottom:56px}
+.eyebrow{
+  font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--amber);margin-bottom:14px;
+}
+h1{font-family:var(--display);font-size:clamp(38px,6vw,62px);font-weight:700;letter-spacing:-.03em;line-height:1}
+.lede{color:var(--muted);max-width:60ch;margin-top:16px;font-size:17px}
+
+h2{
+  font-family:var(--display);font-size:13px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  margin:72px 0 24px;padding-bottom:12px;border-bottom:1px solid var(--line);
+  display:flex;align-items:baseline;gap:14px;
+}
+h2 .n{font-family:var(--mono);color:var(--amber);font-size:12px}
+h3{font-family:var(--display);font-size:19px;font-weight:600;margin:36px 0 12px;letter-spacing:-.01em}
+.note{color:var(--muted);max-width:66ch;margin-bottom:24px;font-size:14px}
+.note strong{color:var(--text);font-weight:600}
+code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:2px 6px;border-radius:4px;color:var(--amber)}
+
+/* ── Tokens ───────────────────────────── */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+.sw{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden}
+.sw .chip{height:64px}
+.sw .meta{padding:10px 12px;background:var(--surface)}
+.sw .name{font-size:12px;font-weight:600}
+.sw .hex{font-family:var(--mono);font-size:11px;color:var(--dim)}
+
+.typerow{border-bottom:1px solid var(--line);padding:20px 0;display:grid;grid-template-columns:150px 1fr;gap:24px;align-items:baseline}
+.typerow .lbl{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+
+/* ── Risk band: the signature ─────────── */
+.riskdemo{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.rd{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:16px 16px 16px 22px;position:relative;overflow:hidden}
+.rd::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px}
+.rd.read::before{background:var(--dim)}
+.rd.mutate::before{background:var(--amber)}
+.rd.destructive::before{
+  background:repeating-linear-gradient(135deg,var(--red) 0 5px,#3A1416 5px 10px);
+}
+.rd .t{font-family:var(--display);font-weight:600;font-size:15px;margin-bottom:3px}
+.rd .d{font-size:12.5px;color:var(--muted)}
+
+/* ── Phone frame ──────────────────────── */
+.screens{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:40px 28px;margin-top:8px}
+.screen{display:flex;flex-direction:column;gap:12px}
+.cap{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.09em;text-transform:uppercase}
+.cap b{color:var(--amber);font-weight:500}
+.phone{
+  width:100%;aspect-ratio:9/19.5;background:var(--ink);
+  border:1px solid var(--line);border-radius:var(--r-xl);
+  overflow:hidden;display:flex;flex-direction:column;position:relative;
+  box-shadow:0 18px 40px -20px #000;
+}
+.sb{
+  height:26px;flex:none;display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;font-family:var(--mono);font-size:9px;color:var(--dim);
+}
+.body{flex:1;overflow:hidden;display:flex;flex-direction:column}
+
+/* app bar */
+.abar{
+  flex:none;padding:10px 16px 12px;display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--line);
+}
+.abar .ttl{font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:-.01em}
+.abar .sub{font-family:var(--mono);font-size:9.5px;color:var(--dim);display:block;font-weight:400;letter-spacing:.04em}
+.abar .ico{margin-left:auto;display:flex;gap:12px;color:var(--muted);font-size:13px}
+.back{color:var(--muted);font-size:15px}
+
+/* content */
+.c{flex:1;overflow:hidden;padding:12px 14px;display:flex;flex-direction:column;gap:9px}
+.c.tight{gap:5px}
+.c.p0{padding:0}
+
+/* nav */
+.nav{
+  flex:none;height:50px;border-top:1px solid var(--line);background:var(--surface);
+  display:flex;align-items:center;justify-content:space-around;padding:0 6px;
+}
+.nav div{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:8.5px;color:var(--dim);font-family:var(--mono);letter-spacing:.03em}
+.nav div span{font-size:14px;line-height:1}
+.nav div.on{color:var(--amber)}
+
+/* cards & rows */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:11px 12px}
+.card.band{padding-left:15px;position:relative;overflow:hidden}
+.card.band::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--dim)}
+.card.band.ok::before{background:var(--green)}
+.card.band.warn::before{background:var(--amber)}
+.card.band.bad::before{background:var(--red)}
+.card.band.dz::before{background:repeating-linear-gradient(135deg,var(--red) 0 4px,#3A1416 4px 8px)}
+
+.row{display:flex;align-items:center;gap:9px}
+.row .grow{flex:1;min-width:0}
+.nm{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mt{font-family:var(--mono);font-size:9.5px;color:var(--dim);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mt.a{color:var(--amber)}
+.mt.r{color:var(--red)}
+.mt.g{color:var(--green)}
+
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.dot.g{background:var(--green)}.dot.a{background:var(--amber)}.dot.r{background:var(--red)}.dot.d{background:var(--dim)}
+
+.pill{
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;
+  padding:2.5px 7px;border-radius:20px;border:1px solid var(--line);color:var(--muted);flex:none;
+}
+.pill.g{color:var(--green);border-color:#23482C}
+.pill.a{color:var(--amber);border-color:var(--amber-dim)}
+.pill.r{color:var(--red);border-color:var(--red-dim)}
+.pill.f{background:var(--amber);color:#1A1206;border-color:var(--amber);font-weight:600}
+
+/* stat grid */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 11px}
+.stat .k{font-family:var(--mono);font-size:8.5px;color:var(--dim);letter-spacing:.09em;text-transform:uppercase}
+.stat .v{font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:-.02em;margin-top:2px}
+.stat .v small{font-size:11px;color:var(--muted);font-weight:400;margin-left:2px}
+
+/* bar meter */
+.meter{height:4px;background:var(--surface-3);border-radius:3px;overflow:hidden;margin-top:7px}
+.meter i{display:block;height:100%;background:var(--amber);border-radius:3px}
+.meter i.g{background:var(--green)}
+.meter i.r{background:var(--red)}
+
+/* spark */
+.spark{height:34px;width:100%;display:block;margin-top:6px}
+
+/* buttons */
+.btn{
+  font-family:var(--display);font-weight:600;font-size:12px;padding:9px 12px;
+  border-radius:var(--r-sm);text-align:center;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--text);
+}
+.btn.pri{background:var(--amber);color:#1A1206;border-color:var(--amber)}
+.btn.dgr{background:transparent;color:var(--red);border-color:var(--red-dim)}
+.btn.gst{background:transparent;color:var(--muted)}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.btns.t{grid-template-columns:1fr 1fr 1fr}
+
+/* log lines */
+.log{font-family:var(--mono);font-size:9px;line-height:1.75;padding:6px 10px;border-left:2px solid transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log .ts{color:var(--dim)}
+.log.err{border-left-color:var(--red);background:rgba(229,72,77,.055);color:#F2A9AB}
+.log.wrn{border-left-color:var(--amber);background:rgba(240,160,44,.05);color:#E8C285}
+.log.inf{color:var(--muted)}
+
+/* terminal */
+.term{font-family:var(--mono);font-size:9.5px;line-height:1.7;padding:10px;color:#B9C4D2;flex:1;overflow:hidden}
+.term .p{color:var(--green)}
+.term .c{color:var(--text)}
+.keys{flex:none;display:flex;gap:4px;padding:7px 8px;border-top:1px solid var(--line);background:var(--surface)}
+.keys span{
+  flex:1;text-align:center;font-family:var(--mono);font-size:9.5px;padding:6px 0;
+  background:var(--surface-2);border-radius:5px;color:var(--muted);border:1px solid var(--line);
+}
+
+/* input */
+.field{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 11px}
+.field .lbl{font-family:var(--mono);font-size:8.5px;color:var(--dim);letter-spacing:.09em;text-transform:uppercase}
+.field .val{font-family:var(--mono);font-size:12px;margin-top:3px}
+.field .val.ph{color:var(--dim)}
+.field.focus{border-color:var(--amber)}
+
+/* modal */
+.scrim{position:absolute;inset:0;background:rgba(6,8,11,.82);display:flex;align-items:flex-end;padding:14px}
+.sheet{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px 16px;width:100%;position:relative;overflow:hidden}
+.sheet.dz::before{content:'';position:absolute;left:0;right:0;top:0;height:4px;background:repeating-linear-gradient(135deg,var(--red) 0 6px,#3A1416 6px 12px)}
+.sheet h4{font-family:var(--display);font-size:17px;font-weight:600;margin-bottom:7px;letter-spacing:-.01em}
+.sheet p{font-size:12px;color:var(--muted);margin-bottom:13px;line-height:1.6}
+.sheet .warn{
+  font-family:var(--mono);font-size:10px;color:#F2A9AB;background:rgba(229,72,77,.08);
+  border:1px solid var(--red-dim);border-radius:var(--r-sm);padding:9px 10px;margin-bottom:13px;line-height:1.65;
+}
+
+/* grid (fleet) */
+.fleet{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.fnode{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 10px;position:relative;overflow:hidden}
+.fnode::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--green)}
+.fnode.w::before{background:var(--amber)}
+.fnode.b::before{background:var(--red)}
+.fnode.o::before{background:var(--dim)}
+
+/* section label inside screens */
+.slab{font-family:var(--mono);font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);margin-top:3px}
+
+/* QR */
+.qr{background:var(--text);border-radius:var(--r-sm);padding:9px;align-self:center}
+
+/* onboarding art */
+.hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px}
+.hero h3{font-family:var(--display);font-size:21px;font-weight:600;text-align:center;letter-spacing:-.02em;margin:0}
+.hero p{font-size:12.5px;color:var(--muted);text-align:center;line-height:1.6}
+.dots{display:flex;gap:6px}
+.dots i{width:5px;height:5px;border-radius:50%;background:var(--surface-3)}
+.dots i.on{background:var(--amber);width:16px;border-radius:3px}
+
+/* assets */
+.assets{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:28px;align-items:start}
+.asset{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--surface)}
+.asset .h{padding:10px 14px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+.asset .b{padding:22px;display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap}
+.feature{width:100%;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;display:block}
+
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);font-weight:400}
+td code{font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Tursina Labs · Design specification v0.2</div>
+  <h1>Kelola</h1>
+  <p class="lede">Linux administration from a phone. Structured, auditable, agentless. The visual system exists to make a tired person confident about what a tap is going to do — and fast enough that they are done before the next alert.</p>
+</header>
+
+<!-- ─────────── DIRECTION ─────────── -->
+<h2><span class="n">01</span> Direction</h2>
+<p class="note">The obvious move for a sysadmin tool is black-and-acid-green terminal cosplay. Rejected — this app's entire premise is that it is <em>not</em> a terminal. The reference instead is a <strong>rack-mount instrument panel</strong>: deep blue-black ink, a single warm amber that reads as a status LED, and colour used only where it carries meaning. Green appears solely to mean healthy. Red appears solely to mean danger. Nothing is decorative.</p>
+
+<h3>Palette</h3>
+<div class="swatches">
+  <div class="sw"><div class="chip" style="background:#0E1116"></div><div class="meta"><div class="name">Ink</div><div class="hex">#0E1116</div></div></div>
+  <div class="sw"><div class="chip" style="background:#161A21"></div><div class="meta"><div class="name">Surface</div><div class="hex">#161A21</div></div></div>
+  <div class="sw"><div class="chip" style="background:#1E242D"></div><div class="meta"><div class="name">Surface 2</div><div class="hex">#1E242D</div></div></div>
+  <div class="sw"><div class="chip" style="background:#2A323D"></div><div class="meta"><div class="name">Line</div><div class="hex">#2A323D</div></div></div>
+  <div class="sw"><div class="chip" style="background:#F0A02C"></div><div class="meta"><div class="name">Amber — brand</div><div class="hex">#F0A02C</div></div></div>
+  <div class="sw"><div class="chip" style="background:#E5484D"></div><div class="meta"><div class="name">Red — destructive</div><div class="hex">#E5484D</div></div></div>
+  <div class="sw"><div class="chip" style="background:#46A758"></div><div class="meta"><div class="name">Green — healthy</div><div class="hex">#46A758</div></div></div>
+  <div class="sw"><div class="chip" style="background:#E4E8EE"></div><div class="meta"><div class="name">Text</div><div class="hex">#E4E8EE</div></div></div>
+</div>
+
+<h3>Type</h3>
+<p class="note">Three roles, two families. <strong>Space Grotesk</strong> for anything a human named — screen titles, host names, unit names. <strong>IBM Plex Sans</strong> for prose. <strong>IBM Plex Mono</strong> for anything a machine produced — commands, log lines, timestamps, exit codes. The split is semantic: if the string came from the server, it is monospaced. That rule alone tells the user what is theirs and what is the machine's.</p>
+<div class="typerow"><div class="lbl">Display / 700</div><div style="font-family:var(--display);font-size:30px;font-weight:700;letter-spacing:-.03em">nginx.service</div></div>
+<div class="typerow"><div class="lbl">Display / 600</div><div style="font-family:var(--display);font-size:19px;font-weight:600">Failed units</div></div>
+<div class="typerow"><div class="lbl">Body / 400</div><div style="font-family:var(--body);font-size:15px">Three units failed since the last check.</div></div>
+<div class="typerow"><div class="lbl">Mono / 400</div><div style="font-family:var(--mono);font-size:13px;color:var(--muted)">systemctl restart nginx.service</div></div>
+
+<h3>Signature — the risk band</h3>
+<p class="note">Every actionable surface carries a 4px edge encoding its <code>RiskLevel</code>. Read is grey and silent. Mutate is amber. Destructive uses <strong>hazard striping</strong> lifted straight from industrial safety marking — the one place the design raises its voice. This is not decoration: it is the spec's core abstraction made visible, and it is consistent from a list row to a confirmation sheet.</p>
+<div class="riskdemo">
+  <div class="rd read"><div class="t">Read</div><div class="d">Inspect only. Permitted in read-only mode. No confirmation.</div></div>
+  <div class="rd mutate"><div class="t">Mutate</div><div class="d">Changes state. Blocked in read-only mode. Single confirmation.</div></div>
+  <div class="rd destructive"><div class="t">Destructive</div><div class="d">Data loss or lockout possible. Type the hostname to proceed.</div></div>
+</div>
+
+<!-- ─────────── BRAND ASSETS ─────────── -->
+<h2><span class="n">02</span> Brand assets</h2>
+<p class="note">The mark is a <strong>status stack</strong>: three rounded bars of unequal length — a unit list — with one struck amber, and an indicator dot. It reads as "something here needs you" at 48px, and it avoids every terminal-prompt cliché in the category.</p>
+
+<div class="assets">
+  <div class="asset">
+    <div class="h">App icon · adaptive · 512px</div>
+    <div class="b">
+      <svg width="132" height="132" viewBox="0 0 108 108" aria-label="Kelola app icon">
+        <rect width="108" height="108" rx="24" fill="#0E1116"/>
+        <rect x="14" y="14" width="80" height="80" rx="16" fill="none" stroke="#2A323D" stroke-width="1.5"/>
+        <rect x="28" y="36" width="46" height="8" rx="4" fill="#3B4553"/>
+        <rect x="28" y="50" width="52" height="8" rx="4" fill="#F0A02C"/>
+        <rect x="28" y="64" width="34" height="8" rx="4" fill="#3B4553"/>
+        <circle cx="76" cy="30" r="5" fill="#F0A02C"/>
+      </svg>
+      <svg width="60" height="60" viewBox="0 0 108 108" aria-label="Kelola icon at small size">
+        <rect width="108" height="108" rx="24" fill="#0E1116"/>
+        <rect x="28" y="36" width="46" height="8" rx="4" fill="#3B4553"/>
+        <rect x="28" y="50" width="52" height="8" rx="4" fill="#F0A02C"/>
+        <rect x="28" y="64" width="34" height="8" rx="4" fill="#3B4553"/>
+        <circle cx="76" cy="30" r="5" fill="#F0A02C"/>
+      </svg>
+      <svg width="36" height="36" viewBox="0 0 108 108" aria-label="Kelola icon at launcher size">
+        <rect width="108" height="108" rx="24" fill="#0E1116"/>
+        <rect x="28" y="36" width="46" height="8" rx="4" fill="#3B4553"/>
+        <rect x="28" y="50" width="52" height="8" rx="4" fill="#F0A02C"/>
+        <rect x="28" y="64" width="34" height="8" rx="4" fill="#3B4553"/>
+        <circle cx="76" cy="30" r="5" fill="#F0A02C"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="asset">
+    <div class="h">Splash · 1080 × 1920</div>
+    <div class="b">
+      <svg width="150" height="267" viewBox="0 0 216 384" aria-label="Splash screen">
+        <rect width="216" height="384" fill="#0E1116"/>
+        <g transform="translate(78,150)">
+          <rect x="0" y="0" width="34" height="6" rx="3" fill="#3B4553"/>
+          <rect x="0" y="11" width="40" height="6" rx="3" fill="#F0A02C"/>
+          <rect x="0" y="22" width="25" height="6" rx="3" fill="#3B4553"/>
+          <circle cx="55" cy="3" r="4" fill="#F0A02C"/>
+        </g>
+        <text x="108" y="222" text-anchor="middle" fill="#E4E8EE" font-family="Space Grotesk,sans-serif" font-size="21" font-weight="700" letter-spacing="-0.5">Kelola</text>
+        <text x="108" y="240" text-anchor="middle" fill="#5C6675" font-family="IBM Plex Mono,monospace" font-size="7.5" letter-spacing="1.6">AGENTLESS · KEY-ONLY</text>
+        <rect x="88" y="336" width="40" height="2" rx="1" fill="#2A323D"/>
+        <rect x="88" y="336" width="17" height="2" rx="1" fill="#F0A02C"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<h3>Play Store feature graphic · 1024 × 500</h3>
+<svg class="feature" viewBox="0 0 1024 500" aria-label="Play Store feature graphic">
+  <defs>
+    <linearGradient id="fg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#12161D"/>
+      <stop offset="55%" stop-color="#0E1116"/>
+      <stop offset="100%" stop-color="#15110A"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="500" fill="url(#fg)"/>
+  <g opacity="0.5">
+    <line x1="0" y1="125" x2="1024" y2="125" stroke="#1B222B" stroke-width="1"/>
+    <line x1="0" y1="250" x2="1024" y2="250" stroke="#1B222B" stroke-width="1"/>
+    <line x1="0" y1="375" x2="1024" y2="375" stroke="#1B222B" stroke-width="1"/>
+  </g>
+  <g transform="translate(72,142)">
+    <rect x="0" y="0" width="46" height="9" rx="4.5" fill="#3B4553"/>
+    <rect x="0" y="16" width="54" height="9" rx="4.5" fill="#F0A02C"/>
+    <rect x="0" y="32" width="33" height="9" rx="4.5" fill="#3B4553"/>
+    <circle cx="74" cy="4.5" r="5.5" fill="#F0A02C"/>
+  </g>
+  <text x="72" y="268" fill="#E4E8EE" font-family="Space Grotesk,sans-serif" font-size="74" font-weight="700" letter-spacing="-2.6">Kelola</text>
+  <text x="72" y="316" fill="#F0A02C" font-family="Space Grotesk,sans-serif" font-size="25" font-weight="600" letter-spacing="-0.4">Your servers, without the terminal</text>
+  <text x="72" y="356" fill="#8A95A5" font-family="IBM Plex Sans,sans-serif" font-size="17">Services, logs, containers and disks — as taps, not flags.</text>
+  <text x="72" y="404" fill="#5C6675" font-family="IBM Plex Mono,monospace" font-size="12.5" letter-spacing="2.4">NOTHING TO INSTALL · KEYS NEVER LEAVE THE PHONE · FREE</text>
+
+  <g transform="translate(700,88)">
+    <rect x="0" y="0" width="248" height="324" rx="26" fill="#161A21" stroke="#2A323D" stroke-width="1.5"/>
+    <rect x="20" y="30" width="122" height="11" rx="5.5" fill="#E4E8EE"/>
+    <rect x="20" y="50" width="76" height="7" rx="3.5" fill="#3B4553"/>
+    <g transform="translate(20,78)">
+      <rect x="0" y="0" width="208" height="46" rx="9" fill="#1E242D"/>
+      <rect x="0" y="0" width="4" height="46" rx="2" fill="#E5484D"/>
+      <rect x="16" y="13" width="96" height="8" rx="4" fill="#E4E8EE"/>
+      <rect x="16" y="28" width="62" height="6" rx="3" fill="#5C6675"/>
+      <circle cx="192" cy="23" r="5" fill="#E5484D"/>
+    </g>
+    <g transform="translate(20,134)">
+      <rect x="0" y="0" width="208" height="46" rx="9" fill="#1E242D"/>
+      <rect x="0" y="0" width="4" height="46" rx="2" fill="#F0A02C"/>
+      <rect x="16" y="13" width="80" height="8" rx="4" fill="#E4E8EE"/>
+      <rect x="16" y="28" width="104" height="6" rx="3" fill="#5C6675"/>
+      <circle cx="192" cy="23" r="5" fill="#F0A02C"/>
+    </g>
+    <g transform="translate(20,190)">
+      <rect x="0" y="0" width="208" height="46" rx="9" fill="#1E242D"/>
+      <rect x="0" y="0" width="4" height="46" rx="2" fill="#46A758"/>
+      <rect x="16" y="13" width="70" height="8" rx="4" fill="#E4E8EE"/>
+      <rect x="16" y="28" width="88" height="6" rx="3" fill="#5C6675"/>
+      <circle cx="192" cy="23" r="5" fill="#46A758"/>
+    </g>
+    <rect x="20" y="256" width="208" height="38" rx="8" fill="#F0A02C"/>
+    <rect x="86" y="270" width="76" height="10" rx="5" fill="#1A1206"/>
+  </g>
+</svg>
+
+<!-- ─────────── SCREENS ─────────── -->
+<h2><span class="n">03</span> Screens · onboarding &amp; connection</h2>
+<div class="screens">
+
+  <!-- Splash -->
+  <div class="screen">
+    <div class="cap"><b>S01</b> Splash</div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body" style="align-items:center;justify-content:center;gap:16px">
+        <svg width="62" height="42" viewBox="0 0 62 42">
+          <rect x="0" y="6" width="34" height="7" rx="3.5" fill="#3B4553"/>
+          <rect x="0" y="19" width="40" height="7" rx="3.5" fill="#F0A02C"/>
+          <rect x="0" y="32" width="25" height="7" rx="3.5" fill="#3B4553"/>
+          <circle cx="55" cy="9" r="5" fill="#F0A02C"/>
+        </svg>
+        <div style="font-family:var(--display);font-size:24px;font-weight:700;letter-spacing:-.03em">Kelola</div>
+        <div style="font-family:var(--mono);font-size:8.5px;color:var(--dim);letter-spacing:.2em">AGENTLESS · KEY-ONLY</div>
+        <div style="position:absolute;bottom:34px;width:44px;height:2px;background:var(--surface-3);border-radius:2px">
+          <div style="width:18px;height:2px;background:var(--amber);border-radius:2px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Onboarding -->
+  <div class="screen">
+    <div class="cap"><b>S02</b> Onboarding · 1 of 3</div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="hero">
+          <svg width="120" height="90" viewBox="0 0 120 90">
+            <rect x="8" y="14" width="46" height="62" rx="8" fill="#161A21" stroke="#2A323D"/>
+            <rect x="18" y="26" width="26" height="4" rx="2" fill="#3B4553"/>
+            <rect x="18" y="35" width="20" height="4" rx="2" fill="#3B4553"/>
+            <rect x="18" y="44" width="24" height="4" rx="2" fill="#F0A02C"/>
+            <path d="M60 45 H88" stroke="#F0A02C" stroke-width="2" stroke-dasharray="4 4"/>
+            <circle cx="103" cy="45" r="15" fill="#161A21" stroke="#2A323D"/>
+            <rect x="97" y="40" width="12" height="3" rx="1.5" fill="#46A758"/>
+            <rect x="97" y="46" width="8" height="3" rx="1.5" fill="#3B4553"/>
+          </svg>
+          <h3>Nothing to install</h3>
+          <p>If the machine runs SSH, Kelola can manage it. No agent, no open ports, no packages.</p>
+          <div class="dots"><i class="on"></i><i></i><i></i></div>
+        </div>
+        <div class="c" style="flex:none">
+          <div class="btn pri">Continue</div>
+          <div class="btn gst">Skip</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add host -->
+  <div class="screen">
+    <div class="cap"><b>S03</b> Add host <span style="color:var(--muted)">— ssh_config import</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Add host</div></div></div>
+        <div class="c">
+          <div class="field focus"><div class="lbl">Name</div><div class="val">nas-01</div></div>
+          <div class="field"><div class="lbl">Address</div><div class="val">192.168.1.24</div></div>
+          <div class="stats" style="gap:8px">
+            <div class="field"><div class="lbl">Port</div><div class="val">22</div></div>
+            <div class="field"><div class="lbl">User</div><div class="val">hendra</div></div>
+          </div>
+          <div class="field"><div class="lbl">Jump host — optional</div><div class="val ph">None</div></div>
+          <div class="field"><div class="lbl">Tunnel — optional</div><div class="val ph">None</div></div>
+          <div class="card band" style="margin-top:2px">
+            <div class="mt">Authentication</div>
+            <div class="nm" style="margin-top:2px">Hardware key · P-256</div>
+            <div class="mt" style="margin-top:2px">Generated in Secure Enclave</div>
+          </div>
+          <div class="btn gst">Import ssh_config instead</div>
+          <div class="btn pri">Next — add the key</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Key enrollment -->
+  <div class="screen">
+    <div class="cap"><b>S04</b> Key enrollment · QR</div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Add the key</div></div></div>
+        <div class="c">
+          <div class="note" style="font-size:11.5px;color:var(--muted);margin:0">Scan this on the server, or copy the line below into <code style="font-size:10px">~/.ssh/authorized_keys</code>. No network needed.</div>
+          <div class="qr">
+            <svg width="118" height="118" viewBox="0 0 29 29" shape-rendering="crispEdges">
+              <rect width="29" height="29" fill="#E4E8EE"/>
+              <g fill="#0E1116">
+                <path d="M1 1h7v7h-7zM2 2v5h5v-5z M3 3h3v3h-3z"/>
+                <path d="M21 1h7v7h-7zM22 2v5h5v-5z M23 3h3v3h-3z"/>
+                <path d="M1 21h7v7h-7zM2 22v5h5v-5z M3 23h3v3h-3z"/>
+                <path d="M10 1h1v1h-1zM12 1h1v1h-1zM14 1h1v1h-1zM11 2h1v1h-1zM13 2h1v1h-1zM10 3h1v1h-1zM14 3h1v1h-1zM12 4h1v1h-1zM10 5h1v1h-1zM13 5h1v1h-1zM11 6h1v1h-1zM14 6h1v1h-1zM10 7h1v1h-1zM12 7h1v1h-1z"/>
+                <path d="M1 10h1v1h-1zM3 10h1v1h-1zM5 10h1v1h-1zM7 10h1v1h-1zM2 11h1v1h-1zM4 11h1v1h-1zM6 11h1v1h-1zM1 12h1v1h-1zM5 12h1v1h-1zM3 13h1v1h-1zM7 13h1v1h-1zM2 14h1v1h-1zM6 14h1v1h-1zM1 15h1v1h-1zM4 15h1v1h-1zM7 15h1v1h-1zM3 16h1v1h-1zM5 16h1v1h-1zM2 17h1v1h-1zM6 17h1v1h-1z"/>
+                <path d="M10 10h1v1h-1zM12 10h1v1h-1zM15 10h1v1h-1zM17 10h1v1h-1zM19 10h1v1h-1zM11 11h1v1h-1zM14 11h1v1h-1zM16 11h1v1h-1zM18 11h1v1h-1zM10 12h1v1h-1zM13 12h1v1h-1zM15 12h1v1h-1zM19 12h1v1h-1zM12 13h1v1h-1zM14 13h1v1h-1zM17 13h1v1h-1zM11 14h1v1h-1zM13 14h1v1h-1zM16 14h1v1h-1zM18 14h1v1h-1zM10 15h1v1h-1zM15 15h1v1h-1zM19 15h1v1h-1zM12 16h1v1h-1zM14 16h1v1h-1zM17 16h1v1h-1zM11 17h1v1h-1zM13 17h1v1h-1zM16 17h1v1h-1zM19 17h1v1h-1z"/>
+                <path d="M21 10h1v1h-1zM23 10h1v1h-1zM26 10h1v1h-1zM22 11h1v1h-1zM25 11h1v1h-1zM27 11h1v1h-1zM21 12h1v1h-1zM24 12h1v1h-1zM26 12h1v1h-1zM23 13h1v1h-1zM27 13h1v1h-1zM22 14h1v1h-1zM25 14h1v1h-1zM21 15h1v1h-1zM24 15h1v1h-1zM27 15h1v1h-1zM23 16h1v1h-1zM26 16h1v1h-1zM22 17h1v1h-1zM25 17h1v1h-1z"/>
+                <path d="M10 20h1v1h-1zM13 20h1v1h-1zM16 20h1v1h-1zM19 20h1v1h-1zM22 20h1v1h-1zM25 20h1v1h-1zM11 21h1v1h-1zM14 21h1v1h-1zM18 21h1v1h-1zM21 21h1v1h-1zM24 21h1v1h-1zM27 21h1v1h-1zM10 22h1v1h-1zM12 22h1v1h-1zM15 22h1v1h-1zM17 22h1v1h-1zM20 22h1v1h-1zM23 22h1v1h-1zM26 22h1v1h-1zM11 23h1v1h-1zM13 23h1v1h-1zM16 23h1v1h-1zM19 23h1v1h-1zM22 23h1v1h-1zM25 23h1v1h-1zM10 24h1v1h-1zM14 24h1v1h-1zM17 24h1v1h-1zM21 24h1v1h-1zM24 24h1v1h-1zM27 24h1v1h-1zM12 25h1v1h-1zM15 25h1v1h-1zM18 25h1v1h-1zM20 25h1v1h-1zM23 25h1v1h-1zM26 25h1v1h-1zM11 26h1v1h-1zM13 26h1v1h-1zM16 26h1v1h-1zM19 26h1v1h-1zM22 26h1v1h-1zM25 26h1v1h-1zM10 27h1v1h-1zM14 27h1v1h-1zM17 27h1v1h-1zM21 27h1v1h-1zM24 27h1v1h-1zM27 27h1v1h-1z"/>
+              </g>
+            </svg>
+          </div>
+          <div class="card"><div class="mt" style="line-height:1.7;white-space:normal">ecdsa-sha2-nistp256 AAAAE2VjZHNh c2gtMm5pc3RwMjU2AAAACG5pc3Rw…</div></div>
+          <div class="btns"><div class="btn">Copy line</div><div class="btn pri">Test connection</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">04</span> Screens · hosts &amp; overview</h2>
+<div class="screens">
+
+  <!-- Host list -->
+  <div class="screen">
+    <div class="cap"><b>S05</b> Hosts — home <span style="color:var(--muted)">— resume last session</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><div><div class="ttl">Hosts</div><span class="sub">6 HOSTS · 1 NEEDS ATTENTION</span></div><div class="ico">⌕ +</div></div>
+        <div class="c">
+          <div class="card band warn">
+            <div class="row"><div class="grow"><div class="nm">Resume nas-01</div><div class="mt a">session still up · 18ms</div></div><span style="color:var(--muted)">›</span></div>
+          </div>
+          <div class="card band bad">
+            <div class="row"><span class="dot r"></span><div class="grow"><div class="nm">nas-01</div><div class="mt">192.168.1.24 · Debian 12</div></div><span class="pill r">2 failed</span></div>
+          </div>
+          <div class="card band warn">
+            <div class="row"><span class="dot a"></span><div class="grow"><div class="nm">web-prod</div><div class="mt">10.0.4.11 · Rocky 9 · via bastion</div></div><span class="pill a">disk 91%</span></div>
+          </div>
+          <div class="card band ok">
+            <div class="row"><span class="dot g"></span><div class="grow"><div class="nm">db-primary</div><div class="mt">10.0.4.12 · Rocky 9</div></div><span class="pill g">healthy</span></div>
+          </div>
+          <div class="card band ok">
+            <div class="row"><span class="dot g"></span><div class="grow"><div class="nm">vps-sg</div><div class="mt">203.0.113.9 · Ubuntu 24.04</div></div><span class="pill g">healthy</span></div>
+          </div>
+          <div class="card band ok">
+            <div class="row"><span class="dot g"></span><div class="grow"><div class="nm">pi-dns</div><div class="mt">192.168.1.9 · Alpine</div></div><span class="pill">read-only</span></div>
+          </div>
+          <div class="card band">
+            <div class="row"><span class="dot d"></span><div class="grow"><div class="nm">backup-01</div><div class="mt">unreachable · last seen 3d ago</div></div></div>
+          </div>
+        </div>
+        <div class="nav">
+          <div class="on"><span>▤</span>Hosts</div><div><span>◈</span>Fleet</div><div><span>⎘</span>Tunnels</div><div><span>◷</span>Audit</div><div><span>⚙</span>Settings</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Host dashboard -->
+  <div class="screen">
+    <div class="cap"><b>S06</b> Host dashboard <span style="color:var(--muted)">— note, pins, RTT</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">nas-01</div><span class="sub">DEBIAN 12 · UP 47D · 18MS</span></div><div class="ico">⋮</div></div>
+        <div class="c">
+          <div class="card band bad">
+            <div class="row"><span class="dot r"></span><div class="grow"><div class="nm">2 units failed</div><div class="mt r">nginx.service · borgmatic.service</div></div><span style="color:var(--muted)">›</span></div>
+          </div>
+          <div class="card" style="padding:8px 12px">
+            <div class="mt">Note</div>
+            <div style="font-size:12px;margin-top:3px">Living-room NAS — do not stop smbd.</div>
+          </div>
+          <div class="stats">
+            <div class="stat"><div class="k">Load 1m</div><div class="v">0.84</div><div class="meter"><i class="g" style="width:21%"></i></div></div>
+            <div class="stat"><div class="k">Memory</div><div class="v">61<small>%</small></div><div class="meter"><i class="g" style="width:61%"></i></div></div>
+            <div class="stat"><div class="k">Disk /</div><div class="v">78<small>%</small></div><div class="meter"><i style="width:78%"></i></div></div>
+            <div class="stat"><div class="k">Updates</div><div class="v">14<small>· 3 sec</small></div><div class="meter"><i style="width:40%"></i></div></div>
+          </div>
+          <div class="slab">Pinned</div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">nginx.service</div><div class="mt">unit · failed</div></div><span class="pill r">open</span></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">/etc/nginx/nginx.conf</div><div class="mt">file · edited today</div></div><span class="pill a">edit</span></div></div>
+          <div class="btns t">
+            <div class="btn">Services</div><div class="btn">Logs</div><div class="btn">Files</div>
+          </div>
+        </div>
+        <div class="nav">
+          <div class="on"><span>▤</span>Overview</div><div><span>⚙</span>Services</div><div><span>≡</span>Logs</div><div><span>▣</span>Containers</div><div><span>›_</span>Shell</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fleet -->
+  <div class="screen">
+    <div class="cap"><b>S07</b> Fleet view <span style="color:var(--muted)">— M12</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><div><div class="ttl">Fleet</div><span class="sub">20 HOSTS · REFRESHED 12S AGO</span></div><div class="ico">↻</div></div>
+        <div class="c tight">
+          <div class="slab">Needs attention</div>
+          <div class="fleet">
+            <div class="fnode b"><div class="nm">nas-01</div><div class="mt r">2 units failed</div></div>
+            <div class="fnode w"><div class="nm">web-prod</div><div class="mt a">disk 91%</div></div>
+            <div class="fnode w"><div class="nm">ci-runner-2</div><div class="mt a">load 8.2</div></div>
+            <div class="fnode o"><div class="nm">backup-01</div><div class="mt">timeout</div></div>
+          </div>
+          <div class="slab" style="margin-top:8px">Healthy · 16</div>
+          <div class="fleet">
+            <div class="fnode"><div class="nm">db-primary</div><div class="mt g">ok · 0.4</div></div>
+            <div class="fnode"><div class="nm">db-replica</div><div class="mt g">ok · 0.3</div></div>
+            <div class="fnode"><div class="nm">vps-sg</div><div class="mt g">ok · 0.1</div></div>
+            <div class="fnode"><div class="nm">pi-dns</div><div class="mt g">ok · 0.0</div></div>
+            <div class="fnode"><div class="nm">web-02</div><div class="mt g">ok · 0.6</div></div>
+            <div class="fnode"><div class="nm">cache-01</div><div class="mt g">ok · 0.2</div></div>
+          </div>
+          <div class="card" style="margin-top:6px;text-align:center"><div class="mt">Read-only probes only in fleet mode</div></div>
+        </div>
+        <div class="nav">
+          <div><span>▤</span>Hosts</div><div class="on"><span>◈</span>Fleet</div><div><span>⎘</span>Tunnels</div><div><span>◷</span>Audit</div><div><span>⚙</span>Settings</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">05</span> Screens · services, logs, processes</h2>
+<div class="screens">
+
+  <!-- Services -->
+  <div class="screen">
+    <div class="cap"><b>S08</b> Services · failed first</div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Services</div><span class="sub">142 UNITS · 2 FAILED</span></div><div class="ico">⌕</div></div>
+        <div class="c tight">
+          <div class="row" style="gap:5px;margin-bottom:4px">
+            <span class="pill f">Failed 2</span><span class="pill">Running</span><span class="pill">Enabled</span><span class="pill">All</span>
+          </div>
+          <div class="card band bad">
+            <div class="row"><span class="dot r"></span><div class="grow"><div class="nm">nginx.service</div><div class="mt r">failed · exit 1 · 09:12</div></div></div>
+          </div>
+          <div class="card band bad">
+            <div class="row"><span class="dot r"></span><div class="grow"><div class="nm">borgmatic.service</div><div class="mt r">failed · exit 2 · 03:00</div></div></div>
+          </div>
+          <div class="slab" style="margin:8px 0 3px">Running</div>
+          <div class="card band ok"><div class="row"><span class="dot g"></span><div class="grow"><div class="nm">sshd.service</div><div class="mt">active · 47d</div></div></div></div>
+          <div class="card band ok"><div class="row"><span class="dot g"></span><div class="grow"><div class="nm">docker.service</div><div class="mt">active · 47d</div></div></div></div>
+          <div class="card band ok"><div class="row"><span class="dot g"></span><div class="grow"><div class="nm">smbd.service</div><div class="mt">active · 12d</div></div></div></div>
+          <div class="card band ok"><div class="row"><span class="dot g"></span><div class="grow"><div class="nm">tailscaled.service</div><div class="mt">active · 47d</div></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Service detail -->
+  <div class="screen">
+    <div class="cap"><b>S09</b> Service detail · risk bands</div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">nginx.service</div><span class="sub">FAILED · EXIT 1</span></div></div>
+        <div class="c">
+          <div class="card band bad">
+            <div class="mt">Result</div>
+            <div style="font-family:var(--mono);font-size:10.5px;color:#F2A9AB;margin-top:5px;line-height:1.7">nginx: [emerg] bind() to<br>0.0.0.0:80 failed (98:<br>Address already in use)</div>
+          </div>
+          <div class="btn pri" style="display:flex;align-items:center;justify-content:center;gap:6px">✦ Explain this failure</div>
+          <div class="slab">Actions</div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">Restart</div><div class="mt a">mutate · one confirmation</div></div><span style="color:var(--muted)">›</span></div></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">Reload</div><div class="mt a">mutate · one confirmation</div></div><span style="color:var(--muted)">›</span></div></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">Disable</div><div class="mt a">mutate · won't start at boot</div></div><span style="color:var(--muted)">›</span></div></div>
+          <div class="card band dz"><div class="row"><div class="grow"><div class="nm">Stop</div><div class="mt r">destructive · serves this host</div></div><span style="color:var(--muted)">›</span></div></div>
+          <div class="slab" style="margin-top:4px">Recent log</div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="log err"><span class="ts">09:12:04</span> bind() failed</div>
+            <div class="log err"><span class="ts">09:12:04</span> still could not bind</div>
+            <div class="log wrn"><span class="ts">09:12:03</span> retry in 1s</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Destructive confirm -->
+  <div class="screen">
+    <div class="cap"><b>S10</b> Destructive confirmation</div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body" style="position:relative">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">sshd.service</div><span class="sub">ACTIVE · 47D</span></div></div>
+        <div class="c" style="opacity:.28">
+          <div class="card band ok"><div class="row"><div class="grow"><div class="nm">Restart</div><div class="mt">mutate</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Reload</div><div class="mt">mutate</div></div></div></div>
+        </div>
+        <div class="scrim">
+          <div class="sheet dz">
+            <h4>Stop sshd.service?</h4>
+            <p>This is the service Kelola uses to reach nas-01.</p>
+            <div class="warn">You will lose access immediately. Recovery needs physical or console access to the machine.</div>
+            <div class="field focus" style="margin-bottom:11px"><div class="lbl">Type the host name to confirm</div><div class="val ph">nas-01</div></div>
+            <div class="btns"><div class="btn gst">Cancel</div><div class="btn dgr">Stop anyway</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logs -->
+  <div class="screen">
+    <div class="cap"><b>S11</b> Logs · journald</div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Logs</div><span class="sub">NGINX.SERVICE · ERR+</span></div><div class="ico">⌕ ⇩</div></div>
+        <div class="c tight" style="padding:10px 10px 0">
+          <div class="row" style="gap:5px;margin-bottom:5px">
+            <span class="pill f">err+</span><span class="pill">warn+</span><span class="pill">all</span><span class="pill">1h</span><span class="pill" style="margin-left:auto">▶ live</span>
+          </div>
+        </div>
+        <div class="c p0" style="overflow:hidden">
+          <div class="log err"><span class="ts">09:12:04</span> nginx: [emerg] bind() to 0.0.0.0:80</div>
+          <div class="log err"><span class="ts">09:12:04</span> failed (98: Address in use)</div>
+          <div class="log err"><span class="ts">09:12:03</span> still could not bind()</div>
+          <div class="log wrn"><span class="ts">09:12:03</span> retrying in 1000ms</div>
+          <div class="log wrn"><span class="ts">09:12:02</span> retrying in 500ms</div>
+          <div class="log inf"><span class="ts">09:12:01</span> Starting nginx…</div>
+          <div class="log inf"><span class="ts">09:12:01</span> systemd[1]: nginx.service:</div>
+          <div class="log inf"><span class="ts">09:12:00</span> Scheduled restart job</div>
+          <div class="log err"><span class="ts">09:11:58</span> Failed with result exit-code</div>
+          <div class="log wrn"><span class="ts">09:11:58</span> Main process exited, code=1</div>
+          <div class="log inf"><span class="ts">09:11:57</span> nginx: configuration file ok</div>
+          <div class="log inf"><span class="ts">09:11:57</span> Starting nginx…</div>
+          <div class="log inf"><span class="ts">08:04:12</span> Reloaded configuration</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Processes -->
+  <div class="screen">
+    <div class="cap"><b>S12</b> Processes <span style="color:var(--muted)">— M10</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Processes</div><span class="sub">BY CPU · 218 TOTAL</span></div><div class="ico">⌕</div></div>
+        <div class="c tight">
+          <div class="row" style="gap:5px;margin-bottom:4px"><span class="pill f">CPU</span><span class="pill">Memory</span><span class="pill">Name</span></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">ffmpeg</div><div class="mt">pid 41203 · plex · 4h12m</div></div><div style="text-align:right"><div class="nm a" style="color:var(--amber)">187%</div><div class="mt">2.1 GB</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">mysqld</div><div class="mt">pid 1284 · mysql · 47d</div></div><div style="text-align:right"><div class="nm">21%</div><div class="mt">1.4 GB</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">dockerd</div><div class="mt">pid 902 · root · 47d</div></div><div style="text-align:right"><div class="nm">6%</div><div class="mt">412 MB</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">smbd</div><div class="mt">pid 3311 · root · 12d</div></div><div style="text-align:right"><div class="nm">3%</div><div class="mt">98 MB</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">sshd</div><div class="mt">pid 41988 · hendra · 2m</div></div><div style="text-align:right"><div class="nm">1%</div><div class="mt">12 MB</div></div></div></div>
+          <div class="card" style="margin-top:5px;text-align:center"><div class="mt">sshd and PID 1 can't be killed here</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metrics -->
+  <div class="screen">
+    <div class="cap"><b>S13</b> Live metrics <span style="color:var(--muted)">— M10</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Metrics</div><span class="sub">POLLING · 5S</span></div><div class="ico">⏸</div></div>
+        <div class="c">
+          <div class="row" style="gap:5px"><span class="pill">5m</span><span class="pill f">1h</span><span class="pill">24h</span></div>
+          <div class="card">
+            <div class="row"><div class="grow"><div class="mt">CPU</div><div class="nm" style="font-size:18px">34%</div></div><div class="mt">4 cores</div></div>
+            <svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,25 14,22 28,26 42,17 56,20 70,12 84,16 98,8 112,14 126,6 140,13 154,10 168,19 182,15 196,21 200,18" fill="none" stroke="#F0A02C" stroke-width="1.5"/></svg>
+          </div>
+          <div class="card">
+            <div class="row"><div class="grow"><div class="mt">Memory</div><div class="nm" style="font-size:18px">9.8 / 16 GB</div></div><div class="mt">61%</div></div>
+            <svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,16 20,16 40,15 60,15 80,14 100,14 120,13 140,13 160,12 180,12 200,11" fill="none" stroke="#46A758" stroke-width="1.5"/></svg>
+          </div>
+          <div class="card">
+            <div class="row"><div class="grow"><div class="mt">Network eth0</div><div class="nm" style="font-size:18px">↓ 14.2 MB/s</div></div><div class="mt">↑ 0.8</div></div>
+            <svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,30 14,28 28,12 42,9 56,24 70,26 84,7 98,5 112,20 126,29 140,11 154,8 168,25 182,27 196,14 200,16" fill="none" stroke="#5B8DEF" stroke-width="1.5"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">06</span> Screens · containers, files, packages, disk</h2>
+<div class="screens">
+
+  <!-- Containers -->
+  <div class="screen">
+    <div class="cap"><b>S14</b> Containers <span style="color:var(--muted)">— M4.5</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Containers</div><span class="sub">DOCKER · 11 RUNNING · 2 STOPPED</span></div><div class="ico">⌕</div></div>
+        <div class="c tight">
+          <div class="slab">Stack · media</div>
+          <div class="card band ok"><div class="row"><span class="dot g"></span><div class="grow"><div class="nm">plex</div><div class="mt">linuxserver/plex · 32787→32400</div></div><span class="pill g">12d</span></div></div>
+          <div class="card band ok"><div class="row"><span class="dot g"></span><div class="grow"><div class="nm">sonarr</div><div class="mt">linuxserver/sonarr · 8989</div></div><span class="pill g">12d</span></div></div>
+          <div class="card band warn"><div class="row"><span class="dot a"></span><div class="grow"><div class="nm">transmission</div><div class="mt a">restarting · 4 times in 5m</div></div><span class="pill a">unhealthy</span></div></div>
+          <div class="slab" style="margin-top:8px">Stack · infra</div>
+          <div class="card band ok"><div class="row"><span class="dot g"></span><div class="grow"><div class="nm">traefik</div><div class="mt">traefik:v3 · 80, 443</div></div><span class="pill g">47d</span></div></div>
+          <div class="card band ok"><div class="row"><span class="dot g"></span><div class="grow"><div class="nm">postgres</div><div class="mt">postgres:16 · 5432</div></div><span class="pill g">47d</span></div></div>
+          <div class="card band"><div class="row"><span class="dot d"></span><div class="grow"><div class="nm">watchtower</div><div class="mt">exited (0) · 3d ago</div></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Files -->
+  <div class="screen">
+    <div class="cap"><b>S15</b> Files · SFTP <span style="color:var(--muted)">— M4.6</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Files</div><span class="sub">/ETC/NGINX</span></div><div class="ico">⌕ ⋮</div></div>
+        <div class="c tight">
+          <div class="card band"><div class="row"><span style="color:var(--muted);font-size:12px">▸</span><div class="grow"><div class="nm">..</div></div></div></div>
+          <div class="card band"><div class="row"><span style="color:var(--amber);font-size:12px">▣</span><div class="grow"><div class="nm">sites-enabled</div><div class="mt">drwxr-xr-x root · 4 items</div></div></div></div>
+          <div class="card band"><div class="row"><span style="color:var(--amber);font-size:12px">▣</span><div class="grow"><div class="nm">conf.d</div><div class="mt">drwxr-xr-x root · 2 items</div></div></div></div>
+          <div class="card band warn"><div class="row"><span style="color:var(--muted);font-size:12px">▤</span><div class="grow"><div class="nm">nginx.conf</div><div class="mt">-rw-r--r-- root · 2.4 KB · today</div></div><span class="pill a">edit</span></div></div>
+          <div class="card band"><div class="row"><span style="color:var(--muted);font-size:12px">▤</span><div class="grow"><div class="nm">nginx.conf.bak</div><div class="mt">-rw-r--r-- root · 2.4 KB · today</div></div></div></div>
+          <div class="card band"><div class="row"><span style="color:var(--muted);font-size:12px">▤</span><div class="grow"><div class="nm">mime.types</div><div class="mt">-rw-r--r-- root · 5.3 KB</div></div></div></div>
+          <div class="card" style="margin-top:5px;text-align:center"><div class="mt">Originals are backed up as .bak before save</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Packages -->
+  <div class="screen">
+    <div class="cap"><b>S16</b> Packages <span style="color:var(--muted)">— M6</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Packages</div><span class="sub">APT · 14 UPDATES</span></div><div class="ico">↻</div></div>
+        <div class="c tight">
+          <div class="card band bad" style="margin-bottom:3px">
+            <div class="row"><div class="grow"><div class="nm">3 security updates</div><div class="mt r">openssl · libssl3 · curl</div></div></div>
+          </div>
+          <div class="row" style="gap:5px;margin:4px 0"><span class="pill f">Security 3</span><span class="pill">All 14</span></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">openssl</div><div class="mt">3.0.11-1 → 3.0.14-1</div></div><span class="pill r">CVE</span></div></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">libssl3</div><div class="mt">3.0.11-1 → 3.0.14-1</div></div><span class="pill r">CVE</span></div></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">curl</div><div class="mt">7.88.1-10 → 7.88.1-11</div></div><span class="pill r">CVE</span></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">tzdata</div><div class="mt">2024a-0 → 2024b-0</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">python3-pip</div><div class="mt">23.0.1 → 23.0.2</div></div></div></div>
+          <div class="card band dz" style="margin-top:6px"><div class="row"><div class="grow"><div class="nm">Apply 3 security updates</div><div class="mt r">destructive · may require reboot</div></div><span style="color:var(--muted)">›</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Disk -->
+  <div class="screen">
+    <div class="cap"><b>S17</b> Disk triage <span style="color:var(--muted)">— M6</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Disk</div><span class="sub">/ · 91% USED</span></div></div>
+        <div class="c">
+          <div class="card band bad">
+            <div class="row"><div class="grow"><div class="nm">/dev/sda2 mounted on /</div><div class="mt r">418 GB of 460 GB · 42 GB free</div></div></div>
+            <div class="meter" style="height:6px"><i class="r" style="width:91%"></i></div>
+          </div>
+          <div class="slab">Largest under /</div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">/var/lib/docker</div><div class="mt">overlay2 · images and volumes</div></div><div class="nm">184 GB</div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">/srv/media</div><div class="mt">user data</div></div><div class="nm">126 GB</div></div></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">/var/log/journal</div><div class="mt a">reclaimable</div></div><div class="nm a" style="color:var(--amber)">14 GB</div></div></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">/var/cache/apt</div><div class="mt a">reclaimable</div></div><div class="nm a" style="color:var(--amber)">3.1 GB</div></div></div>
+          <div class="btn pri" style="display:flex;align-items:center;justify-content:center;gap:6px">✦ What's safe to clear?</div>
+          <div class="card" style="text-align:center"><div class="mt">Kelola shows the command. You run it.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">07</span> Screens · network, terminal, assistant, audit</h2>
+<div class="screens">
+
+  <!-- Tunnels -->
+  <div class="screen">
+    <div class="cap"><b>S18</b> Tunnels &amp; port forwards <span style="color:var(--muted)">— M5/M8</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><div><div class="ttl">Tunnels</div><span class="sub">2 ACTIVE</span></div><div class="ico">+</div></div>
+        <div class="c">
+          <div class="slab">Port forwards</div>
+          <div class="card band ok">
+            <div class="row"><span class="dot g"></span><div class="grow"><div class="nm">Cockpit · nas-01</div><div class="mt">127.0.0.1:49512 → :9090</div></div></div>
+            <div class="btns" style="margin-top:9px"><div class="btn">Stop</div><div class="btn pri">Open</div></div>
+          </div>
+          <div class="card band ok">
+            <div class="row"><span class="dot g"></span><div class="grow"><div class="nm">Portainer · nas-01</div><div class="mt">127.0.0.1:49518 → :9443</div></div></div>
+            <div class="btns" style="margin-top:9px"><div class="btn">Stop</div><div class="btn pri">Open</div></div>
+          </div>
+          <div class="slab" style="margin-top:6px">WireGuard</div>
+          <div class="card band ok"><div class="row"><span class="dot g"></span><div class="grow"><div class="nm">homelab-wg</div><div class="mt">userspace · handshake 22s ago</div></div></div></div>
+          <div class="card"><div class="mt" style="white-space:normal;line-height:1.7">Tunnels bind to loopback only. Your system VPN is untouched.</div></div>
+        </div>
+        <div class="nav">
+          <div><span>▤</span>Hosts</div><div><span>◈</span>Fleet</div><div class="on"><span>⎘</span>Tunnels</div><div><span>◷</span>Audit</div><div><span>⚙</span>Settings</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal -->
+  <div class="screen">
+    <div class="cap"><b>S19</b> Terminal · escape hatch <span style="color:var(--muted)">— M9</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Shell</div><span class="sub">NAS-01 · PTY 1</span></div><div class="ico">＋</div></div>
+        <div class="term">
+          <div><span class="p">hendra@nas-01</span>:<span style="color:var(--blue)">~</span>$ <span class="c">ss -tulpn | grep :80</span></div>
+          <div style="color:var(--muted)">tcp LISTEN 0 511 *:80 *:*</div>
+          <div style="color:var(--muted)">users:(("apache2",pid=8812))</div>
+          <div style="margin-top:6px"><span class="p">hendra@nas-01</span>:<span style="color:var(--blue)">~</span>$ <span class="c">sudo systemctl stop apache2</span></div>
+          <div style="margin-top:6px"><span class="p">hendra@nas-01</span>:<span style="color:var(--blue)">~</span>$ <span class="c">sudo systemctl start nginx</span></div>
+          <div style="margin-top:6px"><span class="p">hendra@nas-01</span>:<span style="color:var(--blue)">~</span>$ <span style="background:var(--amber);color:#1A1206">&nbsp;</span></div>
+        </div>
+        <div class="card" style="margin:0 8px 7px;text-align:center;border-radius:var(--r-sm)"><div class="mt">Session start and end are audited</div></div>
+        <div class="keys"><span>esc</span><span>tab</span><span>ctrl</span><span>↑</span><span>↓</span><span>|</span><span>~</span><span>/</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LLM -->
+  <div class="screen">
+    <div class="cap"><b>S20</b> Assistant · proposes only <span style="color:var(--muted)">— M7</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Assistant</div><span class="sub">OLLAMA · LOCAL · LAN</span></div></div>
+        <div class="c">
+          <div class="card band"><div class="mt">You asked</div><div style="font-size:12px;margin-top:4px">Why did nginx fail?</div></div>
+          <div class="card band warn">
+            <div class="mt a">Reading · systemctl show, last 50 journal lines</div>
+            <div style="font-size:12px;margin-top:7px;line-height:1.65">Another process already holds port 80. The journal shows <code style="font-size:10px">apache2</code> listening there since boot. Both are configured to start automatically.</div>
+          </div>
+          <div class="slab">Proposed — not run</div>
+          <div class="card band warn">
+            <div class="mt">1 · confirm the conflict</div>
+            <div style="font-family:var(--mono);font-size:10px;margin-top:5px;color:var(--amber)">ss -tulpn | grep :80</div>
+          </div>
+          <div class="card band dz">
+            <div class="mt r">2 · destructive · stops a running service</div>
+            <div style="font-family:var(--mono);font-size:10px;margin-top:5px;color:#F2A9AB">sudo systemctl disable --now apache2</div>
+          </div>
+          <div class="btns"><div class="btn gst">Dismiss</div><div class="btn pri">Put in command box</div></div>
+          <div class="card" style="text-align:center"><div class="mt" style="white-space:normal">The assistant can't run anything. It fills the box; you press go.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit -->
+  <div class="screen">
+    <div class="cap"><b>S21</b> Audit log <span style="color:var(--muted)">— M4</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><div><div class="ttl">Audit</div><span class="sub">1,284 RECORDS · ALL HOSTS</span></div><div class="ico">⌕ ⇧</div></div>
+        <div class="c tight">
+          <div class="card band dz"><div class="row"><div class="grow"><div class="nm">systemctl stop apache2</div><div class="mt r">nas-01 · sudo · exit 0 · 340ms</div></div><div class="mt">09:14</div></div></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">systemctl restart nginx</div><div class="mt a">nas-01 · sudo · exit 1 · 1.2s</div></div><div class="mt">09:12</div></div></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">Shell session</div><div class="mt a">nas-01 · 4m 12s</div></div><div class="mt">09:08</div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">journalctl -u nginx -p err</div><div class="mt">nas-01 · exit 0 · 180ms</div></div><div class="mt">09:07</div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">systemctl list-units</div><div class="mt">nas-01 · exit 0 · 96ms</div></div><div class="mt">09:06</div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Host key verified</div><div class="mt">web-prod · pinned</div></div><div class="mt">08:41</div></div></div>
+          <div class="btn" style="margin-top:6px">Export · JSON or CSV</div>
+        </div>
+        <div class="nav">
+          <div><span>▤</span>Hosts</div><div><span>◈</span>Fleet</div><div><span>⎘</span>Tunnels</div><div class="on"><span>◷</span>Audit</div><div><span>⚙</span>Settings</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="screen">
+    <div class="cap"><b>S22</b> Settings</div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><div><div class="ttl">Settings</div></div></div>
+        <div class="c tight">
+          <div class="slab">Security</div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Biometric on every action</div><div class="mt g">On</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Session timeout</div><div class="mt">5 minutes</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Keys</div><div class="mt">6 · hardware-backed · non-exportable</div></div></div></div>
+          <div class="slab" style="margin-top:8px">Assistant</div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Provider</div><div class="mt">Ollama · 192.168.1.5:11434</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Redaction preview</div><div class="mt g">Always show</div></div></div></div>
+          <div class="slab" style="margin-top:8px">Data</div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Crash reports</div><div class="mt">Off</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Backup hosts and settings</div><div class="mt">Encrypted export</div></div></div></div>
+          <div class="card" style="margin-top:6px;text-align:center"><div class="mt" style="white-space:normal">Free, no accounts, no telemetry. Support on Ko-fi.</div></div>
+        </div>
+        <div class="nav">
+          <div><span>▤</span>Hosts</div><div><span>◈</span>Fleet</div><div><span>⎘</span>Tunnels</div><div><span>◷</span>Audit</div><div class="on"><span>⚙</span>Settings</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ─────────── OPERATOR VELOCITY ─────────── -->
+<h2><span class="n">08</span> Screens · operator velocity</h2>
+<p class="note">v0.1 specified every admin surface and then made the user walk them in sequence. These screens are the missing product: <strong>one tap from "something is wrong" to the safe next action</strong>, local search, personal snippets, a diff before a config save, and a widget that is explicitly <em>not</em> monitoring.</p>
+<div class="screens">
+
+  <!-- Global search -->
+  <div class="screen">
+    <div class="cap"><b>S23</b> Global search <span style="color:var(--muted)">— M1.5 / M4.7</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Search</div><span class="sub">LOCAL · AIRPLANE SAFE</span></div><div class="ico"><span class="kbd">Ctrl+K</span></div></div>
+        <div class="c">
+          <div class="field focus"><div class="lbl">Find</div><div class="val">nginx</div></div>
+          <div class="slab">Units</div>
+          <div class="card band bad"><div class="row"><span class="dot r"></span><div class="grow"><div class="nm">nginx.service</div><div class="mt r">nas-01 · failed · exit 1</div></div></div></div>
+          <div class="slab">Files</div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">nginx.conf</div><div class="mt">nas-01 · /etc/nginx · pinned</div></div></div></div>
+          <div class="slab">Snippets</div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">Restart unit</div><div class="mt a">mutate · {{unit}}</div></div></div></div>
+          <div class="card" style="text-align:center"><div class="mt">Search does not SSH until you open a result</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incident -->
+  <div class="screen">
+    <div class="cap"><b>S24</b> Incident sheet <span style="color:var(--muted)">— M4.7</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Incident</div><span class="sub">NAS-01 · 2 BROKEN</span></div><div class="ico">⇧</div></div>
+        <div class="c">
+          <div class="card band bad">
+            <div class="nm">nginx.service</div>
+            <div class="mt r" style="white-space:normal;line-height:1.6;margin-top:4px">bind() to 0.0.0.0:80 failed — address already in use</div>
+          </div>
+          <div class="card band bad">
+            <div class="nm">borgmatic.service</div>
+            <div class="mt r">failed · exit 2 · 03:00 · backup job</div>
+          </div>
+          <div class="slab">Related · from cache</div>
+          <div class="card band warn">
+            <div class="row"><div class="grow"><div class="nm">:80 → apache2</div><div class="mt a">pid 8812 · apache2.service</div></div><span style="color:var(--muted)">›</span></div>
+          </div>
+          <div class="slab">Last 20 · nginx · err+</div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="log err"><span class="ts">09:12:04</span> bind() failed</div>
+            <div class="log err"><span class="ts">09:12:04</span> still could not bind</div>
+            <div class="log wrn"><span class="ts">09:12:03</span> retry in 1s</div>
+          </div>
+          <div class="btns"><div class="btn">Explain</div><div class="btn pri">Restart nginx</div></div>
+          <div class="btn gst">Copy diagnostic pack</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snippets -->
+  <div class="screen">
+    <div class="cap"><b>S25</b> Snippets <span style="color:var(--muted)">— M4.7 · not Ansible</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Snippets</div><span class="sub">NAS-01 · 4 SAVED</span></div><div class="ico">+</div></div>
+        <div class="c">
+          <div class="card band warn">
+            <div class="nm">Restart unit</div>
+            <div class="mt a">mutate · one confirmation</div>
+            <div class="field focus" style="margin-top:8px"><div class="lbl">{{unit}}</div><div class="val">nginx.service</div></div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:8px">sudo systemctl restart nginx.service</div>
+            <div class="btns" style="margin-top:9px"><div class="btn gst">Edit</div><div class="btn pri">Run</div></div>
+          </div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Listen on port</div><div class="mt">read · {{port}}</div></div></div></div>
+          <div class="card band"><div class="row"><div class="grow"><div class="nm">Disk snapshot</div><div class="mt">read · df -PT</div></div></div></div>
+          <div class="card band dz"><div class="row"><div class="grow"><div class="nm">Vacuum journal</div><div class="mt r">destructive · proposed only</div></div></div></div>
+          <div class="card" style="text-align:center"><div class="mt" style="white-space:normal;line-height:1.7">A snippet is a Probe. It never runs across the fleet. It never runs itself.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Config diff -->
+  <div class="screen">
+    <div class="cap"><b>S26</b> Config diff before save <span style="color:var(--muted)">— M4.6</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">nginx.conf</div><span class="sub">/ETC/NGINX · MUTATE</span></div></div>
+        <div class="c p0" style="display:flex;flex-direction:column">
+          <div class="c tight" style="flex:none;padding-bottom:0">
+            <div class="card" style="margin:0"><div class="mt">Original kept as nginx.conf.bak</div></div>
+          </div>
+          <div style="flex:1;overflow:hidden;padding:6px 0 0">
+            <div class="diff ctx">@@ -18,7 +18,8 @@</div>
+            <div class="diff ctx">     worker_connections 768;</div>
+            <div class="diff del">-    listen 80 default_server;</div>
+            <div class="diff add">+    listen 8080 default_server;</div>
+            <div class="diff add">+    server_name nas-01;</div>
+            <div class="diff ctx">     root /var/www/html;</div>
+            <div class="diff ctx">     index index.html;</div>
+          </div>
+          <div class="c" style="flex:none">
+            <div class="btns"><div class="btn gst">Discard</div><div class="btn pri">Save</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Correlation -->
+  <div class="screen">
+    <div class="cap"><b>S27</b> Correlation · port to unit <span style="color:var(--muted)">— M4.7</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Port 80</div><span class="sub">NAS-01 · FROM CACHE</span></div></div>
+        <div class="c">
+          <div class="card band warn">
+            <div class="mt">Listening</div>
+            <div class="nm" style="margin-top:4px">0.0.0.0:80 tcp</div>
+            <div class="mt" style="margin-top:4px">ss -tulpn · cached 40s ago</div>
+          </div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);padding-left:8px">owns</div>
+          <div class="card band">
+            <div class="nm">apache2</div>
+            <div class="mt">pid 8812 · root · 47d</div>
+          </div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);padding-left:8px">unit</div>
+          <div class="card band ok">
+            <div class="row"><span class="dot g"></span><div class="grow"><div class="nm">apache2.service</div><div class="mt g">active · enabled</div></div></div>
+          </div>
+          <div class="card band dz">
+            <div class="row"><div class="grow"><div class="nm">Stop apache2.service</div><div class="mt r">destructive · lockout guard if this is sshd</div></div><span style="color:var(--muted)">›</span></div>
+          </div>
+          <div class="card" style="text-align:center"><div class="mt" style="white-space:normal">Not in cache — look up. Never a spinner on the incident sheet.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Undo + widget -->
+  <div class="screen">
+    <div class="cap"><b>S28</b> Undo snackbar <span style="color:var(--muted)">— M4.7</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body" style="position:relative">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">nginx.service</div><span class="sub">DISABLED</span></div></div>
+        <div class="c">
+          <div class="card band">
+            <div class="mt">Result</div>
+            <div class="nm" style="margin-top:4px">Disabled</div>
+            <div class="mt" style="margin-top:4px">Will not start at boot</div>
+          </div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">Enable</div><div class="mt a">mutate · one confirmation</div></div><span style="color:var(--muted)">›</span></div></div>
+          <div class="card band warn"><div class="row"><div class="grow"><div class="nm">Start</div><div class="mt a">mutate · one confirmation</div></div><span style="color:var(--muted)">›</span></div></div>
+        </div>
+        <div class="toast">
+          <div class="msg">nginx.service disabled</div>
+          <div class="act">Undo</div>
+        </div>
+        <div class="nav">
+          <div class="on"><span>▤</span>Overview</div><div><span>⚙</span>Services</div><div><span>≡</span>Logs</div><div><span>▣</span>Containers</div><div><span>›_</span>Shell</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Widget -->
+  <div class="screen">
+    <div class="cap"><b>S29</b> Home widget <span style="color:var(--muted)">— cached, off by default</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body" style="background:linear-gradient(180deg,#1A2230 0%,#0E1116 40%)">
+        <div style="padding:28px 16px 12px">
+          <div class="mt" style="margin-bottom:10px">HOME SCREEN · NOT MONITORING</div>
+          <div class="widg">
+            <div class="mt">Kelola · updated 12m ago</div>
+            <div class="nm" style="font-size:18px;margin-top:6px">nas-01 needs you</div>
+            <div class="mt r" style="margin-top:4px">2 failed units · disk 78%</div>
+            <div class="mt" style="margin-top:10px">Tap opens the incident sheet. No SSH while the app is stopped.</div>
+          </div>
+          <div class="card" style="margin-top:12px;text-align:center"><div class="mt" style="white-space:normal;line-height:1.7">Off by default. Stale age is always visible. This is last-known state, not an alert.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Diagnostic pack -->
+  <div class="screen">
+    <div class="cap"><b>S30</b> Diagnostic pack <span style="color:var(--muted)">— redacted share</span></div>
+    <div class="phone">
+      <div class="sb"><span>9:41</span><span>▮▮▮ ▮</span></div>
+      <div class="body">
+        <div class="abar"><span class="back">←</span><div><div class="ttl">Share pack</div><span class="sub">REDACTED · NAS-01</span></div></div>
+        <div class="c">
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="log inf">os: debian 12 · amd64</div>
+            <div class="log inf">init: systemd 252</div>
+            <div class="log err">failed: nginx.service exit 1</div>
+            <div class="log err">failed: borgmatic.service exit 2</div>
+            <div class="log inf">disk /: 78% of 460G</div>
+            <div class="log wrn">09:12 nginx bind() :80 in use</div>
+            <div class="log inf">host: &lt;HOST_1&gt; user: &lt;USER_1&gt;</div>
+          </div>
+          <div class="card band"><div class="mt" style="white-space:normal;line-height:1.7">Same redaction table as the assistant. No keys, no sudo prompts, no snippet secrets.</div></div>
+          <div class="btns"><div class="btn">Copy</div><div class="btn pri">Share</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── COPY ─────────── -->
+<h2><span class="n">09</span> Interface copy rules</h2>
+<table>
+  <tr><th>Situation</th><th>Say</th><th>Not</th></tr>
+  <tr><td>Restart button</td><td><code>Restart</code> → toast <code>Restarted</code></td><td><code>Submit</code>, <code>Execute</code></td></tr>
+  <tr><td>Empty host list</td><td>Add your first server. You'll need SSH access and a minute.</td><td>No hosts found.</td></tr>
+  <tr><td>Connection refused</td><td>nas-01 refused the connection on port 22. Check sshd is running.</td><td>Error: connection failed</td></tr>
+  <tr><td>Host key changed</td><td>The key for nas-01 has changed. This can mean the server was rebuilt — or that something is intercepting.</td><td>Security warning!</td></tr>
+  <tr><td>Read-only block</td><td>nas-01 is read-only. Turn it off in host settings to make changes.</td><td>Permission denied</td></tr>
+  <tr><td>Assistant output</td><td>Proposed — not run</td><td>Here's the fix!</td></tr>
+  <tr><td>Incident sheet</td><td>2 things need you on nas-01</td><td>Dashboard · Alerts</td></tr>
+  <tr><td>Snippet</td><td>Run — then the same confirmation as any Probe</td><td>Playbook, Apply to fleet</td></tr>
+  <tr><td>Cache miss</td><td>Not in cache — look up</td><td>Loading…</td></tr>
+  <tr><td>Undo</td><td>nginx.service disabled · Undo</td><td>Success!</td></tr>
+  <tr><td>Widget</td><td>updated 12m ago</td><td>Live · Monitoring</td></tr>
+  <tr><td>ssh_config import</td><td>Identity files are ignored. Kelola uses the key on this phone.</td><td>Imported your private keys</td></tr>
+</table>
+<p class="note" style="margin-top:20px">Errors state what happened and what to do. They never apologise and never say "oops". Empty states invite the next action rather than reporting absence. Any string the server produced is monospaced; any string Kelola wrote is not.</p>
+
+<h2><span class="n">10</span> Flutter implementation notes</h2>
+<table>
+  <tr><th>Design element</th><th>Flutter</th></tr>
+  <tr><td>Risk band</td><td><code>Container</code> with left <code>BoxDecoration</code> border; destructive uses a <code>CustomPainter</code> for the hazard stripe</td></tr>
+  <tr><td>Colours</td><td><code>ThemeExtension&lt;KelolaColors&gt;</code> — never hardcode; risk colours resolve from the <code>RiskLevel</code> enum</td></tr>
+  <tr><td>Type</td><td><code>google_fonts</code> or bundled TTF. Bundle for offline and air-gap.</td></tr>
+  <tr><td>Sparklines</td><td><code>CustomPainter</code> over the ring buffer — no chart package needed for a polyline</td></tr>
+  <tr><td>Log list</td><td><code>ListView.builder</code> with <code>itemExtent</code> set — fixed row height keeps 10k lines smooth</td></tr>
+  <tr><td>Destructive sheet</td><td><code>showModalBottomSheet</code>, <code>isDismissible: false</code>, confirm enabled only on exact hostname match</td></tr>
+  <tr><td>Incident sheet</td><td>Same modal component as destructive, but <code>isScrollControlled: true</code>; primary action is the most likely mutate, not "View all"</td></tr>
+  <tr><td>Global search</td><td><code>SearchAnchor</code> / custom delegate over Drift. Hardware intent: <code>Shortcuts</code> widget mapping <code>Control+KeyK</code></td></tr>
+  <tr><td>Undo</td><td><code>ScaffoldMessenger</code> snackbar, 8s, action calls <code>execute(undoProbe)</code> — never a local-only UI revert</td></tr>
+  <tr><td>Diff</td><td>Fixed-extent <code>ListView</code> of hunks; do not pull in a full editor/diff package for v1</td></tr>
+  <tr><td>Widget</td><td><code>home_widget</code> or platform channels; payload is last Drift snapshot only. App launch from widget goes to incident route</td></tr>
+  <tr><td>Keep-awake</td><td><code>WakelockPlus</code> scoped to follow / transfer / tunnel / terminal routes; released in <code>dispose</code></td></tr>
+  <tr><td>Dark only in v1</td><td>Light theme is deferred. Ops work happens at night; do one theme properly first.</td></tr>
+</table>
+
+</div>
+</body>
+</html>
