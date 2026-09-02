@@ -105,7 +105,7 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 32),
           children: [
-            if (hosts.isNotEmpty) ...[
+            if (hosts.isNotEmpty && widget.hostId == null) ...[
               Wrap(
                 spacing: 5,
                 runSpacing: 5,

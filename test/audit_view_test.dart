@@ -137,6 +137,29 @@ void main() {
     expect(auditRisk('read'), RiskLevel.read);
   });
 
+  test('insight kind is empty, changes-only amber, or alert for failed/destructive', () {
+    expect(
+      auditInsightKind(const AuditWeekSummary(changes: 0, destructive: 0, failed: 0)),
+      AuditInsightKind.empty,
+    );
+    expect(
+      auditInsightKind(const AuditWeekSummary(changes: 2, destructive: 0, failed: 0)),
+      AuditInsightKind.changes,
+    );
+    expect(
+      auditInsightKind(const AuditWeekSummary(changes: 2, destructive: 1, failed: 0)),
+      AuditInsightKind.alert,
+    );
+    expect(
+      auditInsightKind(const AuditWeekSummary(changes: 0, destructive: 0, failed: 36)),
+      AuditInsightKind.alert,
+    );
+    expect(
+      formatAuditInsight(const AuditWeekSummary(changes: 2, destructive: 1, failed: 36)),
+      '7 days · 2 changes · 1 destructive · 36 failed',
+    );
+  });
+
   test('display title never uses LC_ALL=C, even for legacy rows', () {
     expect(
       auditDisplayTitle(ev(title: 'Restarted nginx.service', command: 'LC_ALL=C')),

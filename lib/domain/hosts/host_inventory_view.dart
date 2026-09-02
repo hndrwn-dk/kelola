@@ -67,6 +67,32 @@ class HostInventoryView {
   }
 }
 
+const inventoryCollapseAfter = 8;
+
+bool collapseInventoryGroup(HostInventoryBucket bucket, int count) {
+  if (bucket == HostInventoryBucket.needsAttention) {
+    return false;
+  }
+  return count > inventoryCollapseAfter;
+}
+
+String collapsedInventoryLabel(HostInventoryBucket bucket, int count) {
+  final name = switch (bucket) {
+    HostInventoryBucket.needsAttention => 'NEEDS ATTENTION',
+    HostInventoryBucket.healthy => 'HEALTHY',
+    HostInventoryBucket.notChecked => 'NOT CHECKED',
+  };
+  return '$name · $count';
+}
+
+String inventoryGroupLabel(HostInventoryBucket bucket) {
+  return switch (bucket) {
+    HostInventoryBucket.needsAttention => 'Needs attention',
+    HostInventoryBucket.healthy => 'Healthy',
+    HostInventoryBucket.notChecked => 'Not checked',
+  };
+}
+
 HostInventoryBucket inventoryBucket(Host host, {DateTime? now}) {
   if (host.attentionAt == null) {
     if (host.attention == HostAttention.unreachable) {

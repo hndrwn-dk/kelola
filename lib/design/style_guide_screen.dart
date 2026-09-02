@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:kelola/app_version.dart';
 import 'kelola_components.dart';
 import 'kelola_theme.dart';
+import 'package:kelola/domain/audit/audit_view.dart';
 import 'package:kelola/domain/hosts/os_icon_kind.dart';
 
 /// Isolated gallery of every widget in [kelola_components.dart].
@@ -325,38 +327,62 @@ class StyleGuideScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
+            'HOSTSCHROMEACCENT',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 180,
+            child: ColoredBox(
+              color: c.ink,
+              child: const HostsChromeAccent(),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
             'SECTIONSLAB',
             style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
           ),
           const SizedBox(height: 4),
-          const SectionSlab('Needs attention'),
-          ServiceRow(
-            risk: RiskLevel.read,
-            status: HealthStatus.failed,
-            leading: OsIcon.forOsId('debian'),
-            name: 'nas-01',
-            meta: '192.168.1.24 · Debian 12',
-            detail: '2 failed · disk 91% · checked 4m ago',
-            compact: true,
+          HostGroupTray(
+            label: 'Needs attention',
+            child: ServiceRow(
+              risk: RiskLevel.read,
+              status: HealthStatus.failed,
+              leading: OsIcon.forOsId('debian'),
+              name: 'nas-01',
+              meta: '192.168.1.24 · Debian 12',
+              detail: '2 failed · disk 91% · checked 4m ago',
+              compact: true,
+            ),
           ),
-          const SectionSlab('Healthy'),
-          ServiceRow(
-            risk: RiskLevel.read,
-            status: HealthStatus.healthy,
-            leading: OsIcon.forOsId('ubuntu'),
-            name: 'vps-sg',
-            meta: '203.0.113.9 · Ubuntu 24.04',
-            detail: 'disk 40% · checked 2m ago',
-            compact: true,
+          HostGroupTray(
+            label: 'Healthy',
+            child: ServiceRow(
+              risk: RiskLevel.read,
+              status: HealthStatus.healthy,
+              leading: OsIcon.forOsId('ubuntu'),
+              name: 'vps-sg',
+              meta: '203.0.113.9 · Ubuntu 24.04',
+              detail: 'disk 40% · checked 2m ago',
+              compact: true,
+            ),
           ),
-          const SectionSlab('Not checked'),
-          ServiceRow(
-            risk: RiskLevel.read,
-            status: HealthStatus.unknown,
-            leading: OsIcon.forOsId(null),
-            name: 'ub',
-            meta: '127.0.0.1',
-            compact: true,
+          HostGroupTray(
+            label: 'Not checked',
+            child: ServiceRow(
+              risk: RiskLevel.read,
+              status: HealthStatus.unknown,
+              leading: OsIcon.forOsId(null),
+              name: 'ub',
+              meta: '127.0.0.1',
+              compact: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          CollapsedHostGroup(
+            label: 'HEALTHY · 184',
+            onTap: () {},
           ),
           const SizedBox(height: 18),
           Text(
@@ -381,6 +407,71 @@ class StyleGuideScreen extends StatelessWidget {
               OsIcon(kind: OsIconKind.linux),
             ],
           ),
+          const SizedBox(height: 18),
+          Text(
+            'KELOLABRANDMARK',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const KelolaBrandMark(size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Kelola',
+                style: KelolaType.display(color: c.text, size: 18),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'HOSTHEROCARD',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          const HostHeroCard(
+            alias: 'nas-01',
+            endpoint: '192.168.1.24',
+            os: 'Debian 12',
+            connectionStatus: 'Connected',
+            health: HealthStatus.healthy,
+            osId: 'debian',
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'FACTGROUP',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const FactGroup(
+            heading: 'System',
+            entries: [
+              FactEntry(label: 'OS', value: 'Debian 12'),
+              FactEntry(label: 'Init', value: 'systemd'),
+              FactEntry(label: 'Arch', value: 'x86_64'),
+              FactEntry(label: 'Cores', value: '4'),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'AUDITINSIGHTROW',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          AuditInsightRow(
+            summary: const AuditWeekSummary(
+              changes: 2,
+              destructive: 1,
+              failed: 36,
+            ),
+            onTap: () {},
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'HOSTSCOLOPHON',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          const HostsColophon(version: kelolaAppVersion),
           const SizedBox(height: 18),
           Text(
             'DESTRUCTIVECONFIRMSHEET',

@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kelola/app_version.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/design/style_guide_screen.dart';
+import 'package:kelola/domain/audit/audit_view.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_inventory_view.dart';
@@ -26,152 +28,223 @@ class HostsScreen extends ConsumerStatefulWidget {
 }
 
 class _HostsScreenState extends ConsumerState<HostsScreen> {
+  AuditWeekSummary _audit = const AuditWeekSummary(
+    changes: 0,
+    destructive: 0,
+    failed: 0,
+  );
+  final Set<HostInventoryBucket> _forceExpanded = {};
+  final Set<HostInventoryBucket> _forceCollapsed = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAudit();
+  }
+
+  Future<void> _loadAudit() async {
+    final rows = await ref.read(hostRepositoryProvider).listAudit();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _audit = summarizeAudit(rows, now: DateTime.now().toUtc());
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
     final hosts = ref.watch(hostsProvider);
     final lastHostId = ref.watch(lastHostIdProvider).valueOrNull;
     final pool = ref.watch(sessionPoolProvider);
+    final summary = hosts.maybeWhen(
+      data: (list) =>
+          list.isEmpty ? null : HostInventoryView.build(list).summary,
+      orElse: () => null,
+    );
 
     return Scaffold(
       backgroundColor: c.ink,
-      appBar: AppBar(
-        backgroundColor: c.ink,
-        foregroundColor: c.text,
-        elevation: 0,
-        title: hosts.maybeWhen(
-          data: (list) {
-            if (list.isEmpty) {
-              return Text(
-                'Hosts',
-                style: KelolaType.display(color: c.text, size: 16),
-              );
-            }
-            final view = HostInventoryView.build(list);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Hosts',
-                  style: KelolaType.display(color: c.text, size: 16),
-                ),
-                Text(
-                  view.summary,
-                  style: KelolaType.body(color: c.dim, size: 12),
-                ),
-              ],
-            );
-          },
-          orElse: () => Text(
-            'Hosts',
-            style: KelolaType.display(color: c.text, size: 16),
-          ),
-        ),
-        actions: [
-          if (kDebugMode)
-            IconButton(
-              tooltip: 'Style guide',
-              icon: const Icon(Icons.palette_outlined),
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const StyleGuideScreen(),
-                  ),
-                );
-              },
-            ),
-          IconButton(
-            tooltip: 'Audit',
-            icon: const Icon(Icons.receipt_long_rounded),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AuditScreen(),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            tooltip: 'Search',
-            icon: const Icon(Icons.search_rounded),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const SearchScreen(),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            tooltip: 'Add host',
-            icon: Icon(Icons.add_rounded, color: c.amber),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AddHostScreen(),
-                ),
-              );
-              _invalidate();
-            },
-          ),
-        ],
-      ),
-      body: hosts.when(
-        data: (list) {
-          if (list.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Kelola',
-                      style: KelolaType.display(color: c.text, size: 22),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Add your first server. You'll need SSH access and a minute.",
-                      textAlign: TextAlign.center,
-                      style: KelolaType.body(color: c.muted, size: 14),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton(
+      body: Stack(
+        children: [
+          const Positioned.fill(child: HostsChromeAccent()),
+          Column(
+            children: [
+              HostsRootBar(
+                summary: summary,
+                actions: [
+                  if (kDebugMode)
+                    IconButton(
+                      tooltip: 'Style guide',
+                      icon: const Icon(Icons.palette_outlined),
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
-                            builder: (_) => const AddHostScreen(),
+                            builder: (_) => const StyleGuideScreen(),
                           ),
                         );
                       },
-                      style: FilledButton.styleFrom(backgroundColor: c.amber),
-                      child: Text(
-                        'Add host',
-                        style: KelolaType.display(color: c.ink, size: 13),
-                      ),
                     ),
-                  ],
+                  IconButton(
+                    tooltip: 'Search',
+                    icon: const Icon(Icons.search_rounded),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SearchScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  IconButton(
+                    tooltip: 'Add host',
+                    icon: Icon(Icons.add_rounded, color: c.amber),
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AddHostScreen(),
+                        ),
+                      );
+                      _invalidate();
+                    },
+                  ),
+                ],
+              ),
+              Expanded(
+                child: hosts.when(
+                  data: (list) {
+                    if (list.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Kelola',
+                                style: KelolaType.display(
+                                  color: c.text,
+                                  size: 22,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                "Add your first server. You'll need SSH access and a minute.",
+                                textAlign: TextAlign.center,
+                                style: KelolaType.body(color: c.muted, size: 14),
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const AddHostScreen(),
+                                    ),
+                                  );
+                                },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: c.amber,
+                                ),
+                                child: Text(
+                                  'Add host',
+                                  style: KelolaType.display(
+                                    color: c.ink,
+                                    size: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    final view = HostInventoryView.build(list);
+                    Host? resume;
+                    if (lastHostId != null && pool.hasLiveSession(lastHostId)) {
+                      for (final h in list) {
+                        if (h.id == lastHostId) {
+                          resume = h;
+                          break;
+                        }
+                      }
+                    }
+                    return _inventory(c, list, view, resume);
+                  },
+                  loading: () => Center(
+                    child: CircularProgressIndicator(color: c.amber),
+                  ),
+                  error: (e, _) => Center(
+                    child: Text(
+                      '$e',
+                      style: KelolaType.body(color: c.red, size: 13),
+                    ),
+                  ),
                 ),
               ),
-            );
-          }
-          final view = HostInventoryView.build(list);
-          Host? resume;
-          if (lastHostId != null && pool.hasLiveSession(lastHostId)) {
-            for (final h in list) {
-              if (h.id == lastHostId) {
-                resume = h;
-                break;
-              }
-            }
-          }
-          return RefreshIndicator(
-            color: c.amber,
-            onRefresh: () => _refresh(list),
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 32),
-              children: [
+              const SafeArea(
+                top: false,
+                child: HostsColophon(version: kelolaAppVersion),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _groupExpanded(HostInventoryBucket bucket, int count) {
+    if (_forceExpanded.contains(bucket)) {
+      return true;
+    }
+    if (_forceCollapsed.contains(bucket)) {
+      return false;
+    }
+    return !collapseInventoryGroup(bucket, count);
+  }
+
+  void _toggleGroup(HostInventoryBucket bucket, int count) {
+    setState(() {
+      if (_groupExpanded(bucket, count)) {
+        _forceExpanded.remove(bucket);
+        _forceCollapsed.add(bucket);
+      } else {
+        _forceCollapsed.remove(bucket);
+        _forceExpanded.add(bucket);
+      }
+    });
+  }
+
+  Widget _inventory(
+    KelolaColors c,
+    List<Host> list,
+    HostInventoryView view,
+    Host? resume,
+  ) {
+    return RefreshIndicator(
+      color: c.amber,
+      onRefresh: () => _refresh(list),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                if (auditInsightKind(_audit) != AuditInsightKind.empty) ...[
+                  AuditInsightRow(
+                    summary: _audit,
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AuditScreen(),
+                        ),
+                      );
+                      await _loadAudit();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 if (resume != null) ...[
                   ServiceRow(
                     risk: RiskLevel.read,
@@ -185,93 +258,136 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   ),
                   const SizedBox(height: 8),
                 ],
-                if (view.needsAttention.isNotEmpty) ...[
-                  const SectionSlab('Needs attention'),
-                  for (final host in view.needsAttention) _hostRow(c, host),
-                ],
-                if (view.healthy.isNotEmpty) ...[
-                  const SectionSlab('Healthy'),
-                  for (final host in view.healthy) _hostRow(c, host),
-                ],
-                if (view.notChecked.isNotEmpty) ...[
-                  const SectionSlab('Not checked'),
-                  for (final host in view.notChecked) _hostRow(c, host),
-                ],
-              ],
+                ..._groupBlock(
+                  c,
+                  HostInventoryBucket.needsAttention,
+                  view.needsAttention,
+                ),
+                ..._groupBlock(
+                  c,
+                  HostInventoryBucket.healthy,
+                  view.healthy,
+                ),
+                ..._groupBlock(
+                  c,
+                  HostInventoryBucket.notChecked,
+                  view.notChecked,
+                ),
+              ]),
             ),
-          );
-        },
-        loading: () => Center(
-          child: CircularProgressIndicator(color: c.amber),
-        ),
-        error: (e, _) => Center(
-          child: Text('$e', style: KelolaType.body(color: c.red, size: 13)),
-        ),
+          ),
+        ],
       ),
     );
   }
 
+  List<Widget> _groupBlock(
+    KelolaColors c,
+    HostInventoryBucket bucket,
+    List<Host> hosts,
+  ) {
+    if (hosts.isEmpty) {
+      return const [];
+    }
+    final expanded = _groupExpanded(bucket, hosts.length);
+    if (!expanded) {
+      return [
+        CollapsedHostGroup(
+          label: collapsedInventoryLabel(bucket, hosts.length),
+          onTap: () => _toggleGroup(bucket, hosts.length),
+        ),
+        const SizedBox(height: 8),
+      ];
+    }
+    final rows = hosts.length > inventoryCollapseAfter
+        ? ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: hosts.length,
+            itemBuilder: (context, i) {
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: i == hosts.length - 1 ? 0 : 8,
+                ),
+                child: _hostRow(c, hosts[i]),
+              );
+            },
+          )
+        : Column(
+            children: [
+              for (var i = 0; i < hosts.length; i++) ...[
+                if (i > 0) const SizedBox(height: 8),
+                _hostRow(c, hosts[i]),
+              ],
+            ],
+          );
+    return [
+      HostGroupTray(
+        label: inventoryGroupLabel(bucket),
+        child: rows,
+      ),
+      const SizedBox(height: 8),
+    ];
+  }
+
   Widget _hostRow(KelolaColors c, Host host) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Dismissible(
-        key: ValueKey(host.id),
-        direction: DismissDirection.horizontal,
-        background: Container(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.only(left: 16),
-          decoration: BoxDecoration(
-            color: c.amber.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(KelolaRadii.md),
-          ),
-          child: Text(
-            'EDIT',
-            style: KelolaType.mono(
-              color: c.amber,
-              size: 11,
-              weight: FontWeight.w500,
-            ),
+    return Dismissible(
+      key: ValueKey(host.id),
+      direction: DismissDirection.horizontal,
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 16),
+        decoration: BoxDecoration(
+          color: c.amber.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(KelolaRadii.md),
+        ),
+        child: Text(
+          'EDIT',
+          style: KelolaType.mono(
+            color: c.amber,
+            size: 11,
+            weight: FontWeight.w500,
           ),
         ),
-        secondaryBackground: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 16),
-          decoration: BoxDecoration(
-            color: c.red.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(KelolaRadii.md),
-          ),
-          child: Text(
-            'REMOVE',
-            style: KelolaType.mono(
-              color: c.red,
-              size: 11,
-              weight: FontWeight.w500,
-            ),
+      ),
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16),
+        decoration: BoxDecoration(
+          color: c.red.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(KelolaRadii.md),
+        ),
+        child: Text(
+          'REMOVE',
+          style: KelolaType.mono(
+            color: c.red,
+            size: 11,
+            weight: FontWeight.w500,
           ),
         ),
-        confirmDismiss: (dir) async {
-          if (dir == DismissDirection.startToEnd) {
-            await _editHost(host);
-          } else {
-            await _deleteHost(host);
-          }
-          return false;
-        },
-        dismissThresholds: const {
-          DismissDirection.startToEnd: 0.25,
-          DismissDirection.endToStart: 0.25,
-        },
-        child: ServiceRow(
-          risk: RiskLevel.read,
-          status: _health(host),
-          leading: OsIcon.forOsId(host.osId),
-          name: host.alias,
-          meta: host.subtitle,
-          detail: hostInventoryDetail(host),
-          compact: true,
-          onTap: () => _openHost(host),
-          onLongPress: () => _hostActions(host),
-        ),
+      ),
+      confirmDismiss: (dir) async {
+        if (dir == DismissDirection.startToEnd) {
+          await _editHost(host);
+        } else {
+          await _deleteHost(host);
+        }
+        return false;
+      },
+      dismissThresholds: const {
+        DismissDirection.startToEnd: 0.25,
+        DismissDirection.endToStart: 0.25,
+      },
+      child: ServiceRow(
+        risk: RiskLevel.read,
+        status: _health(host),
+        leading: OsIcon.forOsId(host.osId),
+        name: host.alias,
+        meta: host.subtitle,
+        detail: hostInventoryDetail(host),
+        compact: true,
+        onTap: () => _openHost(host),
+        onLongPress: () => _hostActions(host),
       ),
     );
   }
@@ -293,6 +409,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     ref.invalidate(hostsProvider);
     ref.invalidate(recentsProvider);
     ref.invalidate(lastHostIdProvider);
+    _loadAudit();
   }
 
   Future<void> _refresh(List<Host> hosts) async {

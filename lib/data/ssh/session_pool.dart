@@ -9,6 +9,7 @@ import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/kelola_algorithms.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/domain/audit/audit_view.dart';
+import 'package:kelola/domain/audit/probe_audit_policy.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -34,6 +35,7 @@ class SshSessionPool {
   final int maxPerHost;
 
   final Map<String, List<SSHClient>> _pool = {};
+  final ProbeAuditPolicy _auditPolicy = ProbeAuditPolicy();
 
   bool hasLiveSession(String hostId) {
     final list = _pool[hostId];
@@ -66,15 +68,19 @@ class SshSessionPool {
     }
     final command = draft.command;
     final started = DateTime.now();
-    final auditId = await _repository.beginAudit(
-      hostId: host.id,
-      hostAlias: host.alias,
-      remoteUser: host.username,
-      title: draft.title,
-      command: draft.command,
-      risk: draft.risk,
-      usedSudo: draft.usedSudo,
-    );
+    final skipProbeAudit = _auditPolicy.alreadyLost(host.id);
+    String? auditId;
+    if (!skipProbeAudit) {
+      auditId = await _repository.beginAudit(
+        hostId: host.id,
+        hostAlias: host.alias,
+        remoteUser: host.username,
+        title: draft.title,
+        command: draft.command,
+        risk: draft.risk,
+        usedSudo: draft.usedSudo,
+      );
+    }
     try {
       final client = await _acquire(host, onUnknownHostKey: onUnknownHostKey);
       final result = await client.runWithResult(command).timeout(probe.timeout);
@@ -83,21 +89,60 @@ class SshSessionPool {
         utf8.decode(result.stderr),
         result.exitCode ?? -1,
       );
-      await _repository.finishAudit(
-        auditId,
-        exitCode: result.exitCode,
-        durationMs: DateTime.now().difference(started).inMilliseconds,
-      );
+      _auditPolicy.onSuccess(host.id);
+      final durationMs = DateTime.now().difference(started).inMilliseconds;
+      if (auditId != null) {
+        await _repository.finishAudit(
+          auditId,
+          exitCode: result.exitCode,
+          durationMs: durationMs,
+        );
+      } else {
+        await _repository.recordAudit(
+          hostId: host.id,
+          hostAlias: host.alias,
+          remoteUser: host.username,
+          title: draft.title,
+          command: draft.command,
+          risk: draft.risk,
+          usedSudo: draft.usedSudo,
+          exitCode: result.exitCode,
+          durationMs: durationMs,
+        );
+      }
       if (draft.usedSudo) {
         await _repository.setSudoNeedsPassword(host.id, false);
       }
       return parsed;
     } catch (e) {
-      await _repository.finishAudit(
-        auditId,
-        durationMs: DateTime.now().difference(started).inMilliseconds,
-        errorSummary: e.runtimeType.toString(),
+      final durationMs = DateTime.now().difference(started).inMilliseconds;
+      final title = _auditPolicy.titleOnFailure(
+        hostId: host.id,
+        probeTitle: draft.title,
+        error: e,
       );
+      if (title != null) {
+        if (auditId != null) {
+          await _repository.finishAudit(
+            auditId,
+            durationMs: durationMs,
+            errorSummary: e.runtimeType.toString(),
+            title: title == connectionLostTitle ? connectionLostTitle : title,
+          );
+        } else {
+          await _repository.recordAudit(
+            hostId: host.id,
+            hostAlias: host.alias,
+            remoteUser: host.username,
+            title: title,
+            command: draft.command,
+            risk: draft.risk,
+            usedSudo: draft.usedSudo,
+            durationMs: durationMs,
+            errorSummary: e.runtimeType.toString(),
+          );
+        }
+      }
       if (e is SudoRequiredException) {
         await _repository.setSudoNeedsPassword(host.id, true);
       }

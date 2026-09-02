@@ -93,4 +93,45 @@ void main() {
     expect(find.byType(OsIcon), findsWidgets);
     expect(find.byType(SectionSlab), findsNWidgets(3));
   });
+
+  testWidgets('healthy group over 8 hosts collapses until the header is tapped',
+      (tester) async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    final repo = HostRepository(db);
+    final now = DateTime.now().toUtc();
+    for (var i = 1; i <= 9; i++) {
+      final host = await repo.insert(
+        alias: 'ok-$i',
+        address: '10.0.0.$i',
+        port: 22,
+        username: 'hendra',
+      );
+      await repo.updateAttention(
+        id: host.id,
+        attention: HostAttention.healthy,
+        failedUnitCount: 0,
+        diskRootPercent: 20,
+        attentionAt: now.subtract(const Duration(minutes: 1)),
+      );
+    }
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(db)],
+        child: const KelolaApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('HEALTHY · 9'), findsOneWidget);
+    expect(find.text('ok-1'), findsNothing);
+    expect(find.text('ok-9'), findsNothing);
+
+    await tester.tap(find.text('HEALTHY · 9'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ok-1'), findsOneWidget);
+    expect(find.text('ok-9'), findsOneWidget);
+  });
 }

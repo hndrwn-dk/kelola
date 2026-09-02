@@ -49,6 +49,18 @@ class KelolaColors extends ThemeExtension<KelolaColors> {
     required this.blue,
   });
 
+  /// Radial amber wash at the top of Hosts chrome (canvas: 18%).
+  static const chromeWashOpacity = 0.18;
+
+  /// 1px concentric arcs over the wash (canvas: 24–28%).
+  static const chromeArcOpacity = 0.28;
+
+  /// Group tray fill over chrome so ink + arcs read in padding and gutters.
+  static const chromeTrayOpacity = 0.52;
+
+  /// Footer hairline vs ink. `line` on `ink` vanishes on OLED.
+  static const colophonHairlineOpacity = 0.28;
+
   static const dark = KelolaColors(
     ink: Color(0xFF0E1116),
     surface: Color(0xFF161A21),

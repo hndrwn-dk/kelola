@@ -71,6 +71,15 @@ void main() {
     expect(src, isNot(contains("value: 'ro'")));
   });
 
+  test('cpu poll uses backoff and surfaces disconnect instead of swallowing',
+      () {
+    final src = File('lib/presentation/screens/host_dashboard_screen.dart')
+        .readAsStringSync();
+    expect(src, contains('PollBackoff'));
+    expect(src, contains('DISCONNECTED'));
+    expect(src, isNot(contains('} catch (_) {}')));
+  });
+
   test('dashboard footer is a status line, not a HostFacts chip dump', () {
     final src = File('lib/presentation/screens/host_dashboard_screen.dart')
         .readAsStringSync();
