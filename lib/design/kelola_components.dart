@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:kelola/domain/audit/audit_view.dart';
 import 'package:kelola/domain/hosts/dashboard_status.dart';
 import 'package:kelola/domain/hosts/os_icon_kind.dart';
 import 'package:kelola/domain/sudo_hint.dart';
@@ -233,12 +234,14 @@ class ToolTile extends StatelessWidget {
 }
 
 /// A single row inside a RiskBand: optional status dot from HealthStatus
-/// (object rows only — action rows omit [status] and get no dot), name
-/// (display font), meta line (mono — it came from the server),
-/// optional trailing pill colored by the action's RiskLevel.
+/// (object rows only — action rows omit [status] and get no dot), optional
+/// kicker (human label, display font, muted), name (display font), meta
+/// line (mono — it came from the server), optional trailing pill colored
+/// by the action's RiskLevel.
 class ServiceRow extends StatelessWidget {
   final RiskLevel risk;
   final HealthStatus? status;
+  final String? kicker;
   final String name;
   final String meta;
   final String? pillText;
@@ -255,6 +258,7 @@ class ServiceRow extends StatelessWidget {
     super.key,
     required this.risk,
     this.status,
+    this.kicker,
     required this.name,
     required this.meta,
     this.pillText,
@@ -300,6 +304,19 @@ class ServiceRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (kicker != null) ...[
+                    Text(
+                      kicker!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: KelolaType.display(
+                        color: c.dim,
+                        size: 10.5,
+                        weight: FontWeight.w400,
+                      ).copyWith(letterSpacing: 0.9, height: 1.2),
+                    ),
+                    const SizedBox(height: 1),
+                  ],
                   Text(name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1323,3 +1340,585 @@ class _OsIconPainter extends CustomPainter {
   bool shouldRepaint(covariant _OsIconPainter oldDelegate) =>
       oldDelegate.kind != kind || oldDelegate.color != color;
 }
+
+/// App mark: three bars and a dot on a light plate so the black
+/// bars read on dark chrome. Matches assets/icon; do not invert.
+class KelolaBrandMark extends StatelessWidget {
+  const KelolaBrandMark({super.key, this.size = 22, this.plateSize = 32});
+
+  final double size;
+  final double plateSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    final h = size * 0.14;
+    return Container(
+      width: plateSize,
+      height: plateSize,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: c.text,
+        borderRadius: BorderRadius.circular(KelolaRadii.sm),
+      ),
+      child: SizedBox(
+        width: size,
+        height: size * 0.72,
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              top: size * 0.08,
+              child: _brandBar(c.ink, size * 0.62, h),
+            ),
+            Positioned(
+              left: 0,
+              top: size * 0.32,
+              child: _brandBar(c.amber, size * 0.78, h),
+            ),
+            Positioned(
+              left: 0,
+              top: size * 0.56,
+              child: _brandBar(c.ink, size * 0.48, h),
+            ),
+            Positioned(
+              right: 0,
+              top: 0,
+              child: Container(
+                width: size * 0.14,
+                height: size * 0.14,
+                decoration: BoxDecoration(
+                  color: c.amber,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _brandBar(Color color, double w, double h) {
+    return Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(h),
+      ),
+    );
+  }
+}
+
+/// Hosts root AppBar: brand row, then Hosts + summary. Search/add live in [actions].
+class HostsRootBar extends StatelessWidget implements PreferredSizeWidget {
+  const HostsRootBar({
+    super.key,
+    this.summary,
+    required this.actions,
+  });
+
+  final String? summary;
+  final List<Widget> actions;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(108);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    final line = summary?.trim();
+    return Material(
+      type: MaterialType.transparency,
+      child: IconTheme(
+        data: IconThemeData(color: c.text),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: c.line)),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: 40,
+                    child: Row(
+                      children: [
+                        const KelolaBrandMark(size: 22, plateSize: 32),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Kelola',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: KelolaType.display(color: c.text, size: 18),
+                          ),
+                        ),
+                        ...actions,
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Hosts',
+                    style: KelolaType.display(color: c.text, size: 16),
+                  ),
+                  if (line != null && line.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(line, style: KelolaType.body(color: c.dim, size: 12)),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class FactEntry {
+  const FactEntry({
+    required this.label,
+    required this.value,
+    this.mono = true,
+    this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final bool mono;
+  final VoidCallback? onTap;
+}
+
+/// Grouped definition list: section header + one card of label/value rows.
+class FactGroup extends StatelessWidget {
+  const FactGroup({
+    super.key,
+    required this.heading,
+    required this.entries,
+  });
+
+  final String heading;
+  final List<FactEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionSlab(heading),
+        Container(
+          decoration: BoxDecoration(
+            color: c.surface,
+            border: Border.all(color: c.line),
+            borderRadius: BorderRadius.circular(KelolaRadii.md),
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < entries.length; i++) ...[
+                if (i > 0)
+                  Divider(height: 1, thickness: 1, color: c.line),
+                _FactRow(entry: entries[i]),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FactRow extends StatelessWidget {
+  const _FactRow({required this.entry});
+
+  final FactEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    final row = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              entry.label,
+              style: KelolaType.body(color: c.muted, size: 13),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              entry.value,
+              textAlign: TextAlign.right,
+              style: entry.mono
+                  ? KelolaType.mono(color: c.text, size: 12)
+                  : KelolaType.body(color: c.text, size: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (entry.onTap == null) {
+      return row;
+    }
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: entry.onTap,
+      child: row,
+    );
+  }
+}
+
+/// Top card on Host details: alias, address, OS, connection.
+class HostHeroCard extends StatelessWidget {
+  const HostHeroCard({
+    super.key,
+    required this.alias,
+    required this.endpoint,
+    required this.os,
+    required this.connectionStatus,
+    required this.health,
+    this.osId,
+  });
+
+  final String alias;
+  final String endpoint;
+  final String os;
+  final String connectionStatus;
+  final HealthStatus health;
+  final String? osId;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.line),
+        borderRadius: BorderRadius.circular(KelolaRadii.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (osId != null && osId!.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: OsIcon.forOsId(osId, size: 22),
+                ),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: Text(
+                  alias,
+                  style: KelolaType.display(color: c.text, size: 22),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(endpoint, style: KelolaType.mono(color: c.muted, size: 12)),
+          if (os.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(os, style: KelolaType.body(color: c.muted, size: 13)),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            connectionStatus,
+            style: KelolaType.body(color: c.forHealth(health), size: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class KelolaPrimaryButton extends StatelessWidget {
+  const KelolaPrimaryButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton(
+        onPressed: onTap,
+        style: FilledButton.styleFrom(backgroundColor: c.amber),
+        child: Text(
+          label,
+          style: KelolaType.display(color: c.ink, size: 13),
+        ),
+      ),
+    );
+  }
+}
+
+/// Cross-host 7-day audit teaser. Hidden when the week is empty.
+/// Label is a [SectionSlab] above the row, not a kicker inside it.
+class AuditInsightRow extends StatelessWidget {
+  const AuditInsightRow({
+    super.key,
+    required this.summary,
+    required this.onTap,
+  });
+
+  final AuditWeekSummary summary;
+  final VoidCallback onTap;
+
+  AuditInsightKind get kind => auditInsightKind(summary);
+
+  @override
+  Widget build(BuildContext context) {
+    if (kind == AuditInsightKind.empty) {
+      return const SizedBox.shrink();
+    }
+    final status = kind == AuditInsightKind.alert
+        ? HealthStatus.failed
+        : HealthStatus.warning;
+    return HostGroupTray(
+      label: 'Insights Audit',
+      child: ServiceRow(
+        risk: RiskLevel.read,
+        status: status,
+        name: formatAuditInsight(summary),
+        meta: 'all hosts',
+        compact: true,
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+/// Cast-technique atmosphere for Hosts chrome only: amber wash + three
+/// 1px concentric arcs from outside the top-right corner. Clipped,
+/// not hit-tested, sits behind trays and rows.
+class HostsChromeAccent extends StatelessWidget {
+  const HostsChromeAccent({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return IgnorePointer(
+      child: ClipRect(
+        child: CustomPaint(
+          painter: HostsChromeAccentPainter(
+            amber: c.amber,
+            washOpacity: KelolaColors.chromeWashOpacity,
+            arcOpacity: KelolaColors.chromeArcOpacity,
+          ),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+  }
+}
+
+class HostsChromeAccentPainter extends CustomPainter {
+  HostsChromeAccentPainter({
+    required this.amber,
+    required this.washOpacity,
+    required this.arcOpacity,
+  });
+
+  final Color amber;
+  final double washOpacity;
+  final double arcOpacity;
+
+  static const _rings = [160.0, 232.0, 312.0];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) {
+      return;
+    }
+    final washRect = Rect.fromCenter(
+      center: Offset(size.width / 2, 0),
+      width: size.width * 1.32,
+      height: size.height * 0.54,
+    );
+    final wash = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          amber.withValues(alpha: washOpacity),
+          amber.withValues(alpha: 0),
+        ],
+        stops: const [0, 0.72],
+      ).createShader(washRect);
+    canvas.drawRect(Offset.zero & size, wash);
+
+    final scale = size.width / 360;
+    final origin = Offset(size.width + 32 * scale, -22 * scale);
+    final arc = Paint()
+      ..color = amber.withValues(alpha: arcOpacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (final r in _rings) {
+      canvas.drawCircle(origin, r * scale, arc);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant HostsChromeAccentPainter oldDelegate) =>
+      oldDelegate.amber != amber ||
+      oldDelegate.washOpacity != washOpacity ||
+      oldDelegate.arcOpacity != arcOpacity;
+}
+
+/// Inventory group: slab label outside, translucent [KelolaColors.surface2]
+/// tray so chrome arcs remain visible in padding and gutters.
+class HostGroupTray extends StatelessWidget {
+  const HostGroupTray({
+    super.key,
+    required this.label,
+    required this.child,
+  });
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SectionSlab(label),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: c.surface2.withValues(alpha: KelolaColors.chromeTrayOpacity),
+            border: Border.all(color: c.line),
+            borderRadius: BorderRadius.circular(KelolaRadii.md),
+          ),
+          child: child,
+        ),
+      ],
+    );
+  }
+}
+
+/// Collapsed HEALTHY / NOT CHECKED header. Tap expands in place.
+class CollapsedHostGroup extends StatelessWidget {
+  const CollapsedHostGroup({
+    super.key,
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Material(
+      color: c.surface2.withValues(alpha: KelolaColors.chromeTrayOpacity),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(KelolaRadii.md),
+        side: BorderSide(color: c.line),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(KelolaRadii.md),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: KelolaType.mono(
+                    color: c.dim,
+                    size: 8.5,
+                    letterSpacing: 0.9,
+                  ),
+                ),
+              ),
+              Transform.rotate(
+                angle: math.pi / 2,
+                child: Icon(Icons.chevron_right, size: 16, color: c.muted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pinned Hosts colophon: version and keys on one adjacent row. No app name.
+class HostsColophon extends StatelessWidget {
+  const HostsColophon({super.key, required this.version});
+
+  static const hairlineKey = Key('hosts-colophon-hairline');
+
+  final String version;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            key: hairlineKey,
+            width: double.infinity,
+            height: 1,
+            child: ColoredBox(
+              color: c.muted.withValues(
+                alpha: KelolaColors.colophonHairlineOpacity,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  'v$version',
+                  style: KelolaType.mono(color: c.muted, size: 11),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Keys stay on this device',
+                  style: KelolaType.body(color: c.muted, size: 11).copyWith(
+                    fontStyle: FontStyle.italic,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

@@ -477,12 +477,14 @@ class HostRepository {
     int? exitCode,
     int durationMs = 0,
     String? errorSummary,
+    String? title,
   }) {
     return (_db.update(_db.auditRecords)..where((t) => t.id.equals(id))).write(
       AuditRecordsCompanion(
         exitCode: Value(exitCode),
         durationMs: Value(durationMs),
         errorSummary: Value(errorSummary),
+        title: title == null ? const Value.absent() : Value(title),
       ),
     );
   }

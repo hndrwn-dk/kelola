@@ -121,6 +121,25 @@ String formatAuditWeekSummary(AuditWeekSummary summary) {
       '${summary.destructive} destructive · ${summary.failed} failed';
 }
 
+enum AuditInsightKind { empty, changes, alert }
+
+AuditInsightKind auditInsightKind(AuditWeekSummary summary) {
+  if (summary.changes == 0 &&
+      summary.destructive == 0 &&
+      summary.failed == 0) {
+    return AuditInsightKind.empty;
+  }
+  if (summary.failed > 0 || summary.destructive > 0) {
+    return AuditInsightKind.alert;
+  }
+  return AuditInsightKind.changes;
+}
+
+String formatAuditInsight(AuditWeekSummary summary) {
+  return '7 days · ${summary.changes} changes · '
+      '${summary.destructive} destructive · ${summary.failed} failed';
+}
+
 List<AuditDayGroup> groupAuditByDay(
   List<AuditEvent> rows, {
   required DateTime now,

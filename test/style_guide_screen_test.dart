@@ -11,7 +11,7 @@ import 'package:kelola/design/style_guide_screen.dart';
 
 void main() {
   testWidgets('style guide shows every design-system component', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(390, 3600));
+    await tester.binding.setSurfaceSize(const Size(390, 5000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await _loadKelolaFonts();
@@ -30,9 +30,9 @@ void main() {
 
     expect(find.byType(RiskBand), findsWidgets);
     expect(find.byType(StatCard), findsNWidgets(4));
-    expect(find.byType(ServiceRow), findsNWidgets(7));
-    expect(find.byType(SectionSlab), findsNWidgets(3));
-    expect(find.byType(OsIcon), findsNWidgets(10));
+    expect(find.byType(ServiceRow), findsNWidgets(8));
+    expect(find.byType(SectionSlab), findsNWidgets(5));
+    expect(find.byType(OsIcon), findsNWidgets(11));
     expect(find.byType(ToolTile), findsNWidgets(2));
     expect(find.byType(FilterPill), findsNWidgets(5));
     expect(find.byType(KelolaInput), findsNWidgets(2));
@@ -43,6 +43,14 @@ void main() {
     expect(find.byType(KickerLine), findsNWidgets(2));
     expect(find.byType(ActionableError), findsOneWidget);
     expect(find.byType(DashboardStatusLine), findsNWidgets(4));
+    expect(find.byType(KelolaBrandMark), findsOneWidget);
+    expect(find.byType(HostHeroCard), findsOneWidget);
+    expect(find.byType(FactGroup), findsOneWidget);
+    expect(find.byType(AuditInsightRow), findsOneWidget);
+    expect(find.byType(HostsChromeAccent), findsOneWidget);
+    expect(find.byType(HostGroupTray), findsWidgets);
+    expect(find.byType(CollapsedHostGroup), findsOneWidget);
+    expect(find.byType(HostsColophon), findsOneWidget);
     expect(find.text('READ-ONLY'), findsOneWidget);
 
     expect(find.text('sshd.service'), findsOneWidget);

@@ -86,6 +86,45 @@ void main() {
     expect(find.text('NAS-01'), findsOneWidget);
   });
 
+  testWidgets('per-host audit hides All hosts and other-host chips',
+      (tester) async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    final repo = HostRepository(db);
+    final east = await repo.insert(
+      alias: 'east-worker-uat',
+      address: '10.0.0.8',
+      port: 22,
+      username: 'hendra',
+    );
+    await repo.insert(
+      alias: 'nas-01',
+      address: '192.168.1.24',
+      port: 22,
+      username: 'hendra',
+    );
+    await repo.recordAudit(
+      hostId: east.id,
+      hostAlias: east.alias,
+      remoteUser: 'hendra',
+      title: 'Restarted nginx.service',
+      command: 'sudo -n systemctl restart nginx.service',
+      risk: 'mutate',
+      usedSudo: true,
+      exitCode: 0,
+    );
+
+    await pumpAudit(tester, db, hostId: east.id);
+
+    expect(find.text('Audit · east-worker-uat'), findsOneWidget);
+    expect(find.text('ALL HOSTS'), findsNothing);
+    expect(find.text('EAST-WORKER-UAT'), findsNothing);
+    expect(find.text('NAS-01'), findsNothing);
+    expect(find.text('UB'), findsNothing);
+    expect(find.text('WSL'), findsNothing);
+    expect(find.text('Restarted nginx.service'), findsOneWidget);
+  });
+
   testWidgets('host filter changes audit scope without leaving the screen',
       (tester) async {
     final db = KelolaDatabase.memory();
@@ -124,7 +163,15 @@ void main() {
       exitCode: 0,
     );
 
-    await pumpAudit(tester, db, hostId: east.id);
+    await pumpAudit(tester, db);
+
+    expect(find.text('Audit · All hosts'), findsOneWidget);
+    expect(find.text('Restarted nginx.service'), findsOneWidget);
+    expect(find.text('Rebooted host'), findsOneWidget);
+
+    await tester.tap(find.text('EAST-WORKER-UAT'));
+    await tester.pump();
+    await tester.pump();
 
     expect(find.text('Audit · east-worker-uat'), findsOneWidget);
     expect(find.text('Restarted nginx.service'), findsOneWidget);

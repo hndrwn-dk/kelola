@@ -7,7 +7,9 @@ import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/dashboard_snapshot.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/facts/serial_mask.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/poll_backoff.dart';
 import 'package:kelola/domain/probes/dashboard_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/metrics_probe.dart';
@@ -75,6 +77,8 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   bool _loading = true;
   final _cpu = <double>[];
   Timer? _cpuTimer;
+  final _cpuBackoff = PollBackoff();
+  bool _cpuBusy = false;
 
   @override
   void initState() {
@@ -177,16 +181,25 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   }
 
   void _armCpu() {
+    _cpuBackoff.success();
+    _scheduleCpu(_cpuBackoff.base);
+  }
+
+  void _scheduleCpu(Duration delay) {
     _cpuTimer?.cancel();
-    _cpuTimer = Timer.periodic(const Duration(seconds: 5), (_) => _tickCpu());
+    if (_cpuBackoff.stopped) {
+      return;
+    }
+    _cpuTimer = Timer(delay, _tickCpu);
   }
 
   Future<void> _tickCpu() async {
     final host = _host;
     final facts = _facts;
-    if (host == null || !mounted) {
+    if (host == null || !mounted || _cpuBusy) {
       return;
     }
+    _cpuBusy = true;
     try {
       final cpu = await runHostProbe(
         ref: ref,
@@ -198,13 +211,33 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       if (!mounted) {
         return;
       }
+      _cpuBackoff.success();
       setState(() {
+        _error = null;
         _cpu.add(cpu);
         if (_cpu.length > 40) {
           _cpu.removeAt(0);
         }
       });
-    } catch (_) {}
+      _scheduleCpu(_cpuBackoff.base);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = describeSshError(e));
+      }
+      await ref.read(hostRepositoryProvider).updateAttention(
+            id: widget.hostId,
+            attention: HostAttention.unreachable,
+          );
+      final delay = _cpuBackoff.failure();
+      if (mounted) {
+        setState(() {});
+      }
+      if (delay != null) {
+        _scheduleCpu(delay);
+      }
+    } finally {
+      _cpuBusy = false;
+    }
   }
 
   @override
@@ -217,6 +250,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     final spark = normalizeSparkPercents(_cpu);
 
     final machine = [
+      if (_cpuBackoff.disconnected) 'DISCONNECTED',
       if (facts != null) facts.label,
       if (dash != null) 'up ${_formatUp(dash.uptime)}',
       if (host != null &&
@@ -226,7 +260,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         keyBackendLabel(ref.watch(enrollmentProvider).backendLabel),
     ].join(' · ').toUpperCase();
     final readOnly = host?.readOnly == true;
-    final showKicker = machine.isNotEmpty || readOnly;
+    final showKicker = machine.isNotEmpty || readOnly || _cpuBackoff.disconnected;
 
     return KelolaPage(
       title: host?.alias ?? 'Host',
@@ -630,14 +664,38 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     if (host == null) {
       return;
     }
+    final pinned =
+        await ref.read(hostRepositoryProvider).pinnedKey(host.id);
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => HostDetailsScreen(
           host: host,
           facts: _facts ?? HostFacts.undiscovered,
+          pinnedKey: pinned,
+          connected: ref.read(sessionPoolProvider).hasLiveSession(host.id),
+          onEdit: _openEdit,
+          onRevealSerial: () {
+            return ref.read(hostRepositoryProvider).recordAudit(
+              hostId: host.id,
+              hostAlias: host.alias,
+              remoteUser: host.username,
+              title: revealedSerialAuditTitle,
+              command: revealedSerialAuditCommand,
+              risk: RiskLevel.read.name,
+              usedSudo: false,
+            );
+          },
         ),
       ),
     );
+    final updated = await ref.read(hostRepositoryProvider).get(host.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _host = updated ?? host);
   }
 
   Future<void> _openUnits({required bool failedOnly}) async {

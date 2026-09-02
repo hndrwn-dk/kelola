@@ -133,6 +133,17 @@ void main() {
     expect(hostInventoryDetail(_host(alias: 'ub'), now: now), isNull);
   });
 
+  test('collapses healthy and not-checked groups only when they exceed 8', () {
+    expect(collapseInventoryGroup(HostInventoryBucket.healthy, 8), isFalse);
+    expect(collapseInventoryGroup(HostInventoryBucket.healthy, 9), isTrue);
+    expect(collapseInventoryGroup(HostInventoryBucket.notChecked, 8), isFalse);
+    expect(collapseInventoryGroup(HostInventoryBucket.notChecked, 9), isTrue);
+    expect(
+      collapseInventoryGroup(HostInventoryBucket.needsAttention, 20),
+      isFalse,
+    );
+  });
+
   test('os icon kind maps distro ids and falls back to generic linux', () {
     expect(osIconKind('ubuntu'), OsIconKind.ubuntu);
     expect(osIconKind('debian'), OsIconKind.debian);

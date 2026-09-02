@@ -11,6 +11,9 @@ void main() {
     expect(src, contains('draft.command'));
     expect(src, isNot(contains("split('\\n').first")));
     expect(src, contains("errorSummary: 'ReadOnlyViolation'"));
+    expect(src, contains('ProbeAuditPolicy'));
+    expect(src, contains('connectionLostTitle'));
+    expect(src, contains('titleOnFailure'));
   });
 
   test('host key policy records a human title', () {

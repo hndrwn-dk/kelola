@@ -1,5 +1,33 @@
 import 'package:kelola/domain/facts/enums.dart';
 
+enum SerialStatus { missing, available, requiresRoot }
+
+class HostNic {
+  const HostNic({
+    required this.name,
+    this.mac,
+    this.ipv4,
+    this.ipv6,
+  });
+
+  final String name;
+  final String? mac;
+  final String? ipv4;
+  final String? ipv6;
+}
+
+class HostGpu {
+  const HostGpu({
+    this.model,
+    this.vram,
+    this.driver,
+  });
+
+  final String? model;
+  final String? vram;
+  final String? driver;
+}
+
 class HostFacts {
   const HostFacts({
     required this.osId,
@@ -14,6 +42,15 @@ class HostFacts {
     this.prettyName,
     this.runtimes = const [],
     this.nprocCores,
+    this.model,
+    this.virt,
+    this.biosVendor,
+    this.biosVersion,
+    this.biosDate,
+    this.serial,
+    this.serialStatus = SerialStatus.missing,
+    this.nics = const [],
+    this.gpu,
   });
 
   final String osId;
@@ -28,6 +65,15 @@ class HostFacts {
   final String? prettyName;
   final List<String> runtimes;
   final int? nprocCores;
+  final String? model;
+  final String? virt;
+  final String? biosVendor;
+  final String? biosVersion;
+  final String? biosDate;
+  final String? serial;
+  final SerialStatus serialStatus;
+  final List<HostNic> nics;
+  final HostGpu? gpu;
 
   static const undiscovered = HostFacts(
     osId: '',

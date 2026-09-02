@@ -7,6 +7,7 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/processes/process_list_view.dart';
+import 'package:kelola/domain/hosts/poll_backoff.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/metrics_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
@@ -39,21 +40,32 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
   Duration? _poll = const Duration(seconds: 5);
   Timer? _timer;
   late MetricsFocus _focus;
+  final _backoff = PollBackoff();
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _focus = widget.focus;
     _tick();
-    _arm();
   }
 
   void _arm() {
     _timer?.cancel();
-    if (_poll == null) {
+    if (_poll == null || _backoff.stopped) {
       return;
     }
-    _timer = Timer.periodic(_poll!, (_) => _tick());
+    _timer = Timer(_poll!, _tick);
+  }
+
+  void _setPoll(Duration? poll) {
+    setState(() {
+      _poll = poll;
+      if (poll != null) {
+        _backoff.success();
+      }
+    });
+    _arm();
   }
 
   @override
@@ -63,6 +75,10 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
   }
 
   Future<void> _tick() async {
+    if (_busy) {
+      return;
+    }
+    _busy = true;
     try {
       final host = await ref.read(hostRepositoryProvider).get(widget.hostId);
       if (host == null) {
@@ -90,6 +106,7 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
         probe: const MetricsProbe(),
         facts: facts,
       );
+      _backoff.success();
       setState(() {
         _snap = snap;
         _facts = facts;
@@ -104,6 +121,7 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
           _mem.removeAt(0);
         }
       });
+      _scheduleNext(_poll ?? const Duration(seconds: 5));
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -111,14 +129,30 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
           _loading = false;
         });
       }
+      final delay = _backoff.failure();
+      if (delay != null) {
+        _scheduleNext(delay);
+      } else if (mounted) {
+        setState(() {});
+      }
+    } finally {
+      _busy = false;
     }
   }
 
-  String get _kicker {
-    if (_poll == null) {
-      return 'PAUSED';
+  void _scheduleNext(Duration delay) {
+    _timer?.cancel();
+    if (_poll == null || _backoff.stopped) {
+      return;
     }
-    return 'POLLING · ${_poll!.inSeconds}S';
+    _timer = Timer(delay, _tick);
+  }
+
+  String get _kicker {
+    return metricsPollKicker(
+      poll: _poll,
+      disconnected: _backoff.disconnected,
+    );
   }
 
   HealthStatus _pctHealth(int percent) {
@@ -175,34 +209,22 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
                 FilterPill(
                   label: '2s',
                   selected: _poll?.inSeconds == 2,
-                  onTap: () {
-                    setState(() => _poll = const Duration(seconds: 2));
-                    _arm();
-                  },
+                  onTap: () => _setPoll(const Duration(seconds: 2)),
                 ),
                 FilterPill(
                   label: '5s',
                   selected: _poll?.inSeconds == 5,
-                  onTap: () {
-                    setState(() => _poll = const Duration(seconds: 5));
-                    _arm();
-                  },
+                  onTap: () => _setPoll(const Duration(seconds: 5)),
                 ),
                 FilterPill(
                   label: '30s',
                   selected: _poll?.inSeconds == 30,
-                  onTap: () {
-                    setState(() => _poll = const Duration(seconds: 30));
-                    _arm();
-                  },
+                  onTap: () => _setPoll(const Duration(seconds: 30)),
                 ),
                 FilterPill(
                   label: 'pause',
                   selected: _poll == null,
-                  onTap: () {
-                    setState(() => _poll = null);
-                    _arm();
-                  },
+                  onTap: () => _setPoll(null),
                 ),
               ],
             ),
