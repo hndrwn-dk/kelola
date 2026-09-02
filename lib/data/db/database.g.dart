@@ -139,6 +139,39 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
     requiredDuringInsert: false,
     defaultValue: const Constant('unknown'),
   );
+  static const VerificationMeta _failedUnitCountMeta = const VerificationMeta(
+    'failedUnitCount',
+  );
+  @override
+  late final GeneratedColumn<int> failedUnitCount = GeneratedColumn<int>(
+    'failed_unit_count',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _diskRootPercentMeta = const VerificationMeta(
+    'diskRootPercent',
+  );
+  @override
+  late final GeneratedColumn<int> diskRootPercent = GeneratedColumn<int>(
+    'disk_root_percent',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _attentionAtMeta = const VerificationMeta(
+    'attentionAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> attentionAt = GeneratedColumn<DateTime>(
+    'attention_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _lastSeenAtMeta = const VerificationMeta(
     'lastSeenAt',
   );
@@ -161,6 +194,21 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _sudoNeedsPasswordMeta = const VerificationMeta(
+    'sudoNeedsPassword',
+  );
+  @override
+  late final GeneratedColumn<bool> sudoNeedsPassword = GeneratedColumn<bool>(
+    'sudo_needs_password',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sudo_needs_password" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -175,8 +223,12 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
     note,
     lastRttMs,
     attention,
+    failedUnitCount,
+    diskRootPercent,
+    attentionAt,
     lastSeenAt,
     createdAt,
+    sudoNeedsPassword,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -272,6 +324,33 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
         attention.isAcceptableOrUnknown(data['attention']!, _attentionMeta),
       );
     }
+    if (data.containsKey('failed_unit_count')) {
+      context.handle(
+        _failedUnitCountMeta,
+        failedUnitCount.isAcceptableOrUnknown(
+          data['failed_unit_count']!,
+          _failedUnitCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('disk_root_percent')) {
+      context.handle(
+        _diskRootPercentMeta,
+        diskRootPercent.isAcceptableOrUnknown(
+          data['disk_root_percent']!,
+          _diskRootPercentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('attention_at')) {
+      context.handle(
+        _attentionAtMeta,
+        attentionAt.isAcceptableOrUnknown(
+          data['attention_at']!,
+          _attentionAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('last_seen_at')) {
       context.handle(
         _lastSeenAtMeta,
@@ -288,6 +367,15 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
       );
     } else if (isInserting) {
       context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('sudo_needs_password')) {
+      context.handle(
+        _sudoNeedsPasswordMeta,
+        sudoNeedsPassword.isAcceptableOrUnknown(
+          data['sudo_needs_password']!,
+          _sudoNeedsPasswordMeta,
+        ),
+      );
     }
     return context;
   }
@@ -346,6 +434,18 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
         DriftSqlType.string,
         data['${effectivePrefix}attention'],
       )!,
+      failedUnitCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}failed_unit_count'],
+      ),
+      diskRootPercent: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}disk_root_percent'],
+      ),
+      attentionAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}attention_at'],
+      ),
       lastSeenAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_seen_at'],
@@ -353,6 +453,10 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
+      )!,
+      sudoNeedsPassword: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sudo_needs_password'],
       )!,
     );
   }
@@ -376,8 +480,12 @@ class HostRow extends DataClass implements Insertable<HostRow> {
   final String? note;
   final int? lastRttMs;
   final String attention;
+  final int? failedUnitCount;
+  final int? diskRootPercent;
+  final DateTime? attentionAt;
   final DateTime? lastSeenAt;
   final DateTime createdAt;
+  final bool sudoNeedsPassword;
   const HostRow({
     required this.id,
     required this.alias,
@@ -391,8 +499,12 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     this.note,
     this.lastRttMs,
     required this.attention,
+    this.failedUnitCount,
+    this.diskRootPercent,
+    this.attentionAt,
     this.lastSeenAt,
     required this.createdAt,
+    required this.sudoNeedsPassword,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -415,10 +527,20 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       map['last_rtt_ms'] = Variable<int>(lastRttMs);
     }
     map['attention'] = Variable<String>(attention);
+    if (!nullToAbsent || failedUnitCount != null) {
+      map['failed_unit_count'] = Variable<int>(failedUnitCount);
+    }
+    if (!nullToAbsent || diskRootPercent != null) {
+      map['disk_root_percent'] = Variable<int>(diskRootPercent);
+    }
+    if (!nullToAbsent || attentionAt != null) {
+      map['attention_at'] = Variable<DateTime>(attentionAt);
+    }
     if (!nullToAbsent || lastSeenAt != null) {
       map['last_seen_at'] = Variable<DateTime>(lastSeenAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['sudo_needs_password'] = Variable<bool>(sudoNeedsPassword);
     return map;
   }
 
@@ -440,10 +562,20 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           ? const Value.absent()
           : Value(lastRttMs),
       attention: Value(attention),
+      failedUnitCount: failedUnitCount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(failedUnitCount),
+      diskRootPercent: diskRootPercent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(diskRootPercent),
+      attentionAt: attentionAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(attentionAt),
       lastSeenAt: lastSeenAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastSeenAt),
       createdAt: Value(createdAt),
+      sudoNeedsPassword: Value(sudoNeedsPassword),
     );
   }
 
@@ -465,8 +597,12 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       note: serializer.fromJson<String?>(json['note']),
       lastRttMs: serializer.fromJson<int?>(json['lastRttMs']),
       attention: serializer.fromJson<String>(json['attention']),
+      failedUnitCount: serializer.fromJson<int?>(json['failedUnitCount']),
+      diskRootPercent: serializer.fromJson<int?>(json['diskRootPercent']),
+      attentionAt: serializer.fromJson<DateTime?>(json['attentionAt']),
       lastSeenAt: serializer.fromJson<DateTime?>(json['lastSeenAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      sudoNeedsPassword: serializer.fromJson<bool>(json['sudoNeedsPassword']),
     );
   }
   @override
@@ -485,8 +621,12 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       'note': serializer.toJson<String?>(note),
       'lastRttMs': serializer.toJson<int?>(lastRttMs),
       'attention': serializer.toJson<String>(attention),
+      'failedUnitCount': serializer.toJson<int?>(failedUnitCount),
+      'diskRootPercent': serializer.toJson<int?>(diskRootPercent),
+      'attentionAt': serializer.toJson<DateTime?>(attentionAt),
       'lastSeenAt': serializer.toJson<DateTime?>(lastSeenAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'sudoNeedsPassword': serializer.toJson<bool>(sudoNeedsPassword),
     };
   }
 
@@ -503,8 +643,12 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     Value<String?> note = const Value.absent(),
     Value<int?> lastRttMs = const Value.absent(),
     String? attention,
+    Value<int?> failedUnitCount = const Value.absent(),
+    Value<int?> diskRootPercent = const Value.absent(),
+    Value<DateTime?> attentionAt = const Value.absent(),
     Value<DateTime?> lastSeenAt = const Value.absent(),
     DateTime? createdAt,
+    bool? sudoNeedsPassword,
   }) => HostRow(
     id: id ?? this.id,
     alias: alias ?? this.alias,
@@ -518,8 +662,16 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     note: note.present ? note.value : this.note,
     lastRttMs: lastRttMs.present ? lastRttMs.value : this.lastRttMs,
     attention: attention ?? this.attention,
+    failedUnitCount: failedUnitCount.present
+        ? failedUnitCount.value
+        : this.failedUnitCount,
+    diskRootPercent: diskRootPercent.present
+        ? diskRootPercent.value
+        : this.diskRootPercent,
+    attentionAt: attentionAt.present ? attentionAt.value : this.attentionAt,
     lastSeenAt: lastSeenAt.present ? lastSeenAt.value : this.lastSeenAt,
     createdAt: createdAt ?? this.createdAt,
+    sudoNeedsPassword: sudoNeedsPassword ?? this.sudoNeedsPassword,
   );
   HostRow copyWithCompanion(HostsCompanion data) {
     return HostRow(
@@ -537,10 +689,22 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       note: data.note.present ? data.note.value : this.note,
       lastRttMs: data.lastRttMs.present ? data.lastRttMs.value : this.lastRttMs,
       attention: data.attention.present ? data.attention.value : this.attention,
+      failedUnitCount: data.failedUnitCount.present
+          ? data.failedUnitCount.value
+          : this.failedUnitCount,
+      diskRootPercent: data.diskRootPercent.present
+          ? data.diskRootPercent.value
+          : this.diskRootPercent,
+      attentionAt: data.attentionAt.present
+          ? data.attentionAt.value
+          : this.attentionAt,
       lastSeenAt: data.lastSeenAt.present
           ? data.lastSeenAt.value
           : this.lastSeenAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      sudoNeedsPassword: data.sudoNeedsPassword.present
+          ? data.sudoNeedsPassword.value
+          : this.sudoNeedsPassword,
     );
   }
 
@@ -559,8 +723,12 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           ..write('note: $note, ')
           ..write('lastRttMs: $lastRttMs, ')
           ..write('attention: $attention, ')
+          ..write('failedUnitCount: $failedUnitCount, ')
+          ..write('diskRootPercent: $diskRootPercent, ')
+          ..write('attentionAt: $attentionAt, ')
           ..write('lastSeenAt: $lastSeenAt, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('sudoNeedsPassword: $sudoNeedsPassword')
           ..write(')'))
         .toString();
   }
@@ -579,8 +747,12 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     note,
     lastRttMs,
     attention,
+    failedUnitCount,
+    diskRootPercent,
+    attentionAt,
     lastSeenAt,
     createdAt,
+    sudoNeedsPassword,
   );
   @override
   bool operator ==(Object other) =>
@@ -598,8 +770,12 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           other.note == this.note &&
           other.lastRttMs == this.lastRttMs &&
           other.attention == this.attention &&
+          other.failedUnitCount == this.failedUnitCount &&
+          other.diskRootPercent == this.diskRootPercent &&
+          other.attentionAt == this.attentionAt &&
           other.lastSeenAt == this.lastSeenAt &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.sudoNeedsPassword == this.sudoNeedsPassword);
 }
 
 class HostsCompanion extends UpdateCompanion<HostRow> {
@@ -615,8 +791,12 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
   final Value<String?> note;
   final Value<int?> lastRttMs;
   final Value<String> attention;
+  final Value<int?> failedUnitCount;
+  final Value<int?> diskRootPercent;
+  final Value<DateTime?> attentionAt;
   final Value<DateTime?> lastSeenAt;
   final Value<DateTime> createdAt;
+  final Value<bool> sudoNeedsPassword;
   final Value<int> rowid;
   const HostsCompanion({
     this.id = const Value.absent(),
@@ -631,8 +811,12 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     this.note = const Value.absent(),
     this.lastRttMs = const Value.absent(),
     this.attention = const Value.absent(),
+    this.failedUnitCount = const Value.absent(),
+    this.diskRootPercent = const Value.absent(),
+    this.attentionAt = const Value.absent(),
     this.lastSeenAt = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.sudoNeedsPassword = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HostsCompanion.insert({
@@ -648,8 +832,12 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     this.note = const Value.absent(),
     this.lastRttMs = const Value.absent(),
     this.attention = const Value.absent(),
+    this.failedUnitCount = const Value.absent(),
+    this.diskRootPercent = const Value.absent(),
+    this.attentionAt = const Value.absent(),
     this.lastSeenAt = const Value.absent(),
     required DateTime createdAt,
+    this.sudoNeedsPassword = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        alias = Value(alias),
@@ -670,8 +858,12 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     Expression<String>? note,
     Expression<int>? lastRttMs,
     Expression<String>? attention,
+    Expression<int>? failedUnitCount,
+    Expression<int>? diskRootPercent,
+    Expression<DateTime>? attentionAt,
     Expression<DateTime>? lastSeenAt,
     Expression<DateTime>? createdAt,
+    Expression<bool>? sudoNeedsPassword,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -687,8 +879,12 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
       if (note != null) 'note': note,
       if (lastRttMs != null) 'last_rtt_ms': lastRttMs,
       if (attention != null) 'attention': attention,
+      if (failedUnitCount != null) 'failed_unit_count': failedUnitCount,
+      if (diskRootPercent != null) 'disk_root_percent': diskRootPercent,
+      if (attentionAt != null) 'attention_at': attentionAt,
       if (lastSeenAt != null) 'last_seen_at': lastSeenAt,
       if (createdAt != null) 'created_at': createdAt,
+      if (sudoNeedsPassword != null) 'sudo_needs_password': sudoNeedsPassword,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -706,8 +902,12 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     Value<String?>? note,
     Value<int?>? lastRttMs,
     Value<String>? attention,
+    Value<int?>? failedUnitCount,
+    Value<int?>? diskRootPercent,
+    Value<DateTime?>? attentionAt,
     Value<DateTime?>? lastSeenAt,
     Value<DateTime>? createdAt,
+    Value<bool>? sudoNeedsPassword,
     Value<int>? rowid,
   }) {
     return HostsCompanion(
@@ -723,8 +923,12 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
       note: note ?? this.note,
       lastRttMs: lastRttMs ?? this.lastRttMs,
       attention: attention ?? this.attention,
+      failedUnitCount: failedUnitCount ?? this.failedUnitCount,
+      diskRootPercent: diskRootPercent ?? this.diskRootPercent,
+      attentionAt: attentionAt ?? this.attentionAt,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       createdAt: createdAt ?? this.createdAt,
+      sudoNeedsPassword: sudoNeedsPassword ?? this.sudoNeedsPassword,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -768,11 +972,23 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     if (attention.present) {
       map['attention'] = Variable<String>(attention.value);
     }
+    if (failedUnitCount.present) {
+      map['failed_unit_count'] = Variable<int>(failedUnitCount.value);
+    }
+    if (diskRootPercent.present) {
+      map['disk_root_percent'] = Variable<int>(diskRootPercent.value);
+    }
+    if (attentionAt.present) {
+      map['attention_at'] = Variable<DateTime>(attentionAt.value);
+    }
     if (lastSeenAt.present) {
       map['last_seen_at'] = Variable<DateTime>(lastSeenAt.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (sudoNeedsPassword.present) {
+      map['sudo_needs_password'] = Variable<bool>(sudoNeedsPassword.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -795,8 +1011,12 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
           ..write('note: $note, ')
           ..write('lastRttMs: $lastRttMs, ')
           ..write('attention: $attention, ')
+          ..write('failedUnitCount: $failedUnitCount, ')
+          ..write('diskRootPercent: $diskRootPercent, ')
+          ..write('attentionAt: $attentionAt, ')
           ..write('lastSeenAt: $lastSeenAt, ')
           ..write('createdAt: $createdAt, ')
+          ..write('sudoNeedsPassword: $sudoNeedsPassword, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2647,6 +2867,16 @@ class $AuditRecordsTable extends AuditRecords
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _commandMeta = const VerificationMeta(
     'command',
   );
@@ -2733,6 +2963,7 @@ class $AuditRecordsTable extends AuditRecords
     hostId,
     hostAlias,
     remoteUser,
+    title,
     command,
     risk,
     usedSudo,
@@ -2792,6 +3023,12 @@ class $AuditRecordsTable extends AuditRecords
       );
     } else if (isInserting) {
       context.missing(_remoteUserMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
     }
     if (data.containsKey('command')) {
       context.handle(
@@ -2875,6 +3112,10 @@ class $AuditRecordsTable extends AuditRecords
         DriftSqlType.string,
         data['${effectivePrefix}remote_user'],
       )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
       command: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}command'],
@@ -2918,6 +3159,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
   final String hostId;
   final String hostAlias;
   final String remoteUser;
+  final String title;
   final String command;
   final String risk;
   final bool usedSudo;
@@ -2931,6 +3173,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
     required this.hostId,
     required this.hostAlias,
     required this.remoteUser,
+    required this.title,
     required this.command,
     required this.risk,
     required this.usedSudo,
@@ -2947,6 +3190,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
     map['host_id'] = Variable<String>(hostId);
     map['host_alias'] = Variable<String>(hostAlias);
     map['remote_user'] = Variable<String>(remoteUser);
+    map['title'] = Variable<String>(title);
     map['command'] = Variable<String>(command);
     map['risk'] = Variable<String>(risk);
     map['used_sudo'] = Variable<bool>(usedSudo);
@@ -2968,6 +3212,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
       hostId: Value(hostId),
       hostAlias: Value(hostAlias),
       remoteUser: Value(remoteUser),
+      title: Value(title),
       command: Value(command),
       risk: Value(risk),
       usedSudo: Value(usedSudo),
@@ -2993,6 +3238,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
       hostId: serializer.fromJson<String>(json['hostId']),
       hostAlias: serializer.fromJson<String>(json['hostAlias']),
       remoteUser: serializer.fromJson<String>(json['remoteUser']),
+      title: serializer.fromJson<String>(json['title']),
       command: serializer.fromJson<String>(json['command']),
       risk: serializer.fromJson<String>(json['risk']),
       usedSudo: serializer.fromJson<bool>(json['usedSudo']),
@@ -3011,6 +3257,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
       'hostId': serializer.toJson<String>(hostId),
       'hostAlias': serializer.toJson<String>(hostAlias),
       'remoteUser': serializer.toJson<String>(remoteUser),
+      'title': serializer.toJson<String>(title),
       'command': serializer.toJson<String>(command),
       'risk': serializer.toJson<String>(risk),
       'usedSudo': serializer.toJson<bool>(usedSudo),
@@ -3027,6 +3274,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
     String? hostId,
     String? hostAlias,
     String? remoteUser,
+    String? title,
     String? command,
     String? risk,
     bool? usedSudo,
@@ -3040,6 +3288,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
     hostId: hostId ?? this.hostId,
     hostAlias: hostAlias ?? this.hostAlias,
     remoteUser: remoteUser ?? this.remoteUser,
+    title: title ?? this.title,
     command: command ?? this.command,
     risk: risk ?? this.risk,
     usedSudo: usedSudo ?? this.usedSudo,
@@ -3059,6 +3308,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
       remoteUser: data.remoteUser.present
           ? data.remoteUser.value
           : this.remoteUser,
+      title: data.title.present ? data.title.value : this.title,
       command: data.command.present ? data.command.value : this.command,
       risk: data.risk.present ? data.risk.value : this.risk,
       usedSudo: data.usedSudo.present ? data.usedSudo.value : this.usedSudo,
@@ -3083,6 +3333,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
           ..write('hostId: $hostId, ')
           ..write('hostAlias: $hostAlias, ')
           ..write('remoteUser: $remoteUser, ')
+          ..write('title: $title, ')
           ..write('command: $command, ')
           ..write('risk: $risk, ')
           ..write('usedSudo: $usedSudo, ')
@@ -3101,6 +3352,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
     hostId,
     hostAlias,
     remoteUser,
+    title,
     command,
     risk,
     usedSudo,
@@ -3118,6 +3370,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
           other.hostId == this.hostId &&
           other.hostAlias == this.hostAlias &&
           other.remoteUser == this.remoteUser &&
+          other.title == this.title &&
           other.command == this.command &&
           other.risk == this.risk &&
           other.usedSudo == this.usedSudo &&
@@ -3133,6 +3386,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
   final Value<String> hostId;
   final Value<String> hostAlias;
   final Value<String> remoteUser;
+  final Value<String> title;
   final Value<String> command;
   final Value<String> risk;
   final Value<bool> usedSudo;
@@ -3147,6 +3401,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
     this.hostId = const Value.absent(),
     this.hostAlias = const Value.absent(),
     this.remoteUser = const Value.absent(),
+    this.title = const Value.absent(),
     this.command = const Value.absent(),
     this.risk = const Value.absent(),
     this.usedSudo = const Value.absent(),
@@ -3162,6 +3417,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
     required String hostId,
     required String hostAlias,
     required String remoteUser,
+    this.title = const Value.absent(),
     required String command,
     required String risk,
     required bool usedSudo,
@@ -3185,6 +3441,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
     Expression<String>? hostId,
     Expression<String>? hostAlias,
     Expression<String>? remoteUser,
+    Expression<String>? title,
     Expression<String>? command,
     Expression<String>? risk,
     Expression<bool>? usedSudo,
@@ -3200,6 +3457,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
       if (hostId != null) 'host_id': hostId,
       if (hostAlias != null) 'host_alias': hostAlias,
       if (remoteUser != null) 'remote_user': remoteUser,
+      if (title != null) 'title': title,
       if (command != null) 'command': command,
       if (risk != null) 'risk': risk,
       if (usedSudo != null) 'used_sudo': usedSudo,
@@ -3217,6 +3475,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
     Value<String>? hostId,
     Value<String>? hostAlias,
     Value<String>? remoteUser,
+    Value<String>? title,
     Value<String>? command,
     Value<String>? risk,
     Value<bool>? usedSudo,
@@ -3232,6 +3491,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
       hostId: hostId ?? this.hostId,
       hostAlias: hostAlias ?? this.hostAlias,
       remoteUser: remoteUser ?? this.remoteUser,
+      title: title ?? this.title,
       command: command ?? this.command,
       risk: risk ?? this.risk,
       usedSudo: usedSudo ?? this.usedSudo,
@@ -3260,6 +3520,9 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
     }
     if (remoteUser.present) {
       map['remote_user'] = Variable<String>(remoteUser.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
     }
     if (command.present) {
       map['command'] = Variable<String>(command.value);
@@ -3296,6 +3559,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
           ..write('hostId: $hostId, ')
           ..write('hostAlias: $hostAlias, ')
           ..write('remoteUser: $remoteUser, ')
+          ..write('title: $title, ')
           ..write('command: $command, ')
           ..write('risk: $risk, ')
           ..write('usedSudo: $usedSudo, ')
@@ -3667,8 +3931,12 @@ typedef $$HostsTableCreateCompanionBuilder =
       Value<String?> note,
       Value<int?> lastRttMs,
       Value<String> attention,
+      Value<int?> failedUnitCount,
+      Value<int?> diskRootPercent,
+      Value<DateTime?> attentionAt,
       Value<DateTime?> lastSeenAt,
       required DateTime createdAt,
+      Value<bool> sudoNeedsPassword,
       Value<int> rowid,
     });
 typedef $$HostsTableUpdateCompanionBuilder =
@@ -3685,8 +3953,12 @@ typedef $$HostsTableUpdateCompanionBuilder =
       Value<String?> note,
       Value<int?> lastRttMs,
       Value<String> attention,
+      Value<int?> failedUnitCount,
+      Value<int?> diskRootPercent,
+      Value<DateTime?> attentionAt,
       Value<DateTime?> lastSeenAt,
       Value<DateTime> createdAt,
+      Value<bool> sudoNeedsPassword,
       Value<int> rowid,
     });
 
@@ -3759,6 +4031,21 @@ class $$HostsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get failedUnitCount => $composableBuilder(
+    column: $table.failedUnitCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get diskRootPercent => $composableBuilder(
+    column: $table.diskRootPercent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get attentionAt => $composableBuilder(
+    column: $table.attentionAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get lastSeenAt => $composableBuilder(
     column: $table.lastSeenAt,
     builder: (column) => ColumnFilters(column),
@@ -3766,6 +4053,11 @@ class $$HostsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get sudoNeedsPassword => $composableBuilder(
+    column: $table.sudoNeedsPassword,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3839,6 +4131,21 @@ class $$HostsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get failedUnitCount => $composableBuilder(
+    column: $table.failedUnitCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get diskRootPercent => $composableBuilder(
+    column: $table.diskRootPercent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get attentionAt => $composableBuilder(
+    column: $table.attentionAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get lastSeenAt => $composableBuilder(
     column: $table.lastSeenAt,
     builder: (column) => ColumnOrderings(column),
@@ -3846,6 +4153,11 @@ class $$HostsTableOrderingComposer
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get sudoNeedsPassword => $composableBuilder(
+    column: $table.sudoNeedsPassword,
     builder: (column) => ColumnOrderings(column),
   );
 }
@@ -3897,6 +4209,21 @@ class $$HostsTableAnnotationComposer
   GeneratedColumn<String> get attention =>
       $composableBuilder(column: $table.attention, builder: (column) => column);
 
+  GeneratedColumn<int> get failedUnitCount => $composableBuilder(
+    column: $table.failedUnitCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get diskRootPercent => $composableBuilder(
+    column: $table.diskRootPercent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get attentionAt => $composableBuilder(
+    column: $table.attentionAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get lastSeenAt => $composableBuilder(
     column: $table.lastSeenAt,
     builder: (column) => column,
@@ -3904,6 +4231,11 @@ class $$HostsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get sudoNeedsPassword => $composableBuilder(
+    column: $table.sudoNeedsPassword,
+    builder: (column) => column,
+  );
 }
 
 class $$HostsTableTableManager
@@ -3946,8 +4278,12 @@ class $$HostsTableTableManager
                 Value<String?> note = const Value.absent(),
                 Value<int?> lastRttMs = const Value.absent(),
                 Value<String> attention = const Value.absent(),
+                Value<int?> failedUnitCount = const Value.absent(),
+                Value<int?> diskRootPercent = const Value.absent(),
+                Value<DateTime?> attentionAt = const Value.absent(),
                 Value<DateTime?> lastSeenAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<bool> sudoNeedsPassword = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HostsCompanion(
                 id: id,
@@ -3962,8 +4298,12 @@ class $$HostsTableTableManager
                 note: note,
                 lastRttMs: lastRttMs,
                 attention: attention,
+                failedUnitCount: failedUnitCount,
+                diskRootPercent: diskRootPercent,
+                attentionAt: attentionAt,
                 lastSeenAt: lastSeenAt,
                 createdAt: createdAt,
+                sudoNeedsPassword: sudoNeedsPassword,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3980,8 +4320,12 @@ class $$HostsTableTableManager
                 Value<String?> note = const Value.absent(),
                 Value<int?> lastRttMs = const Value.absent(),
                 Value<String> attention = const Value.absent(),
+                Value<int?> failedUnitCount = const Value.absent(),
+                Value<int?> diskRootPercent = const Value.absent(),
+                Value<DateTime?> attentionAt = const Value.absent(),
                 Value<DateTime?> lastSeenAt = const Value.absent(),
                 required DateTime createdAt,
+                Value<bool> sudoNeedsPassword = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HostsCompanion.insert(
                 id: id,
@@ -3996,8 +4340,12 @@ class $$HostsTableTableManager
                 note: note,
                 lastRttMs: lastRttMs,
                 attention: attention,
+                failedUnitCount: failedUnitCount,
+                diskRootPercent: diskRootPercent,
+                attentionAt: attentionAt,
                 lastSeenAt: lastSeenAt,
                 createdAt: createdAt,
+                sudoNeedsPassword: sudoNeedsPassword,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -4956,6 +5304,7 @@ typedef $$AuditRecordsTableCreateCompanionBuilder =
       required String hostId,
       required String hostAlias,
       required String remoteUser,
+      Value<String> title,
       required String command,
       required String risk,
       required bool usedSudo,
@@ -4972,6 +5321,7 @@ typedef $$AuditRecordsTableUpdateCompanionBuilder =
       Value<String> hostId,
       Value<String> hostAlias,
       Value<String> remoteUser,
+      Value<String> title,
       Value<String> command,
       Value<String> risk,
       Value<bool> usedSudo,
@@ -5013,6 +5363,11 @@ class $$AuditRecordsTableFilterComposer
 
   ColumnFilters<String> get remoteUser => $composableBuilder(
     column: $table.remoteUser,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5086,6 +5441,11 @@ class $$AuditRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get command => $composableBuilder(
     column: $table.command,
     builder: (column) => ColumnOrderings(column),
@@ -5149,6 +5509,9 @@ class $$AuditRecordsTableAnnotationComposer
     column: $table.remoteUser,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
 
   GeneratedColumn<String> get command =>
       $composableBuilder(column: $table.command, builder: (column) => column);
@@ -5214,6 +5577,7 @@ class $$AuditRecordsTableTableManager
                 Value<String> hostId = const Value.absent(),
                 Value<String> hostAlias = const Value.absent(),
                 Value<String> remoteUser = const Value.absent(),
+                Value<String> title = const Value.absent(),
                 Value<String> command = const Value.absent(),
                 Value<String> risk = const Value.absent(),
                 Value<bool> usedSudo = const Value.absent(),
@@ -5228,6 +5592,7 @@ class $$AuditRecordsTableTableManager
                 hostId: hostId,
                 hostAlias: hostAlias,
                 remoteUser: remoteUser,
+                title: title,
                 command: command,
                 risk: risk,
                 usedSudo: usedSudo,
@@ -5244,6 +5609,7 @@ class $$AuditRecordsTableTableManager
                 required String hostId,
                 required String hostAlias,
                 required String remoteUser,
+                Value<String> title = const Value.absent(),
                 required String command,
                 required String risk,
                 required bool usedSudo,
@@ -5258,6 +5624,7 @@ class $$AuditRecordsTableTableManager
                 hostId: hostId,
                 hostAlias: hostAlias,
                 remoteUser: remoteUser,
+                title: title,
                 command: command,
                 risk: risk,
                 usedSudo: usedSudo,

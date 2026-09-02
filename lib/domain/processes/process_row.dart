@@ -6,6 +6,7 @@ class ProcessRow {
     required this.cpu,
     required this.mem,
     required this.rssKb,
+    this.etime = '',
     required this.stat,
     required this.command,
   });
@@ -16,6 +17,7 @@ class ProcessRow {
   final double cpu;
   final double mem;
   final int rssKb;
+  final String etime;
   final String stat;
   final String command;
 }
@@ -25,11 +27,18 @@ class ProcessListParser {
 
   List<ProcessRow> parse(String stdout) {
     final out = <ProcessRow>[];
-    final re = RegExp(
+    final withEtime = RegExp(
+      r'^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(.*)$',
+    );
+    final withoutEtime = RegExp(
       r'^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\S+)\s+(.*)$',
     );
     for (final line in stdout.split('\n')) {
-      final m = re.firstMatch(line);
+      final wide = withEtime.firstMatch(line);
+      final etimeToken = wide?.group(7);
+      final hasEtime = etimeToken != null &&
+          (etimeToken.contains(':') || etimeToken.contains('-'));
+      final m = hasEtime ? wide : withoutEtime.firstMatch(line);
       if (m == null) {
         continue;
       }
@@ -45,8 +54,9 @@ class ProcessListParser {
           cpu: double.tryParse(m.group(4)!) ?? 0,
           mem: double.tryParse(m.group(5)!) ?? 0,
           rssKb: int.tryParse(m.group(6)!) ?? 0,
-          stat: m.group(7)!,
-          command: m.group(8)!.trim(),
+          etime: hasEtime ? m.group(7)! : '',
+          stat: hasEtime ? m.group(8)! : m.group(7)!,
+          command: (hasEtime ? m.group(9)! : m.group(8)!).trim(),
         ),
       );
     }

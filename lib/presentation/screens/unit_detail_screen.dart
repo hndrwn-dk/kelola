@@ -1,19 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
+import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/unit_action_probe.dart';
 import 'package:kelola/domain/probes/unit_detail_probe.dart';
-import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/units/service_unit.dart';
+import 'package:kelola/domain/units/unit_detail_view.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/screens/journal_screen.dart';
-import 'package:kelola/presentation/theme/kelola_theme.dart';
 import 'package:kelola/presentation/widgets/confirm_unit_action.dart';
-import 'package:kelola/presentation/widgets/risk_band.dart';
 import 'package:kelola/providers.dart';
+
+const _actionOrder = [
+  UnitVerb.restart,
+  UnitVerb.reload,
+  UnitVerb.disable,
+  UnitVerb.stop,
+  UnitVerb.start,
+  UnitVerb.enable,
+];
 
 class UnitDetailScreen extends ConsumerStatefulWidget {
   const UnitDetailScreen({
@@ -97,6 +106,11 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
               ? '${verb.name} exited ${result.exitCode}'
               : result.stderr;
         });
+      } else if (result.mismatch) {
+        setState(() {
+          _error =
+              '${verb.name} returned 0, but ${widget.unitName} is still ${result.activeState} (${result.subState}). A k3s/nginx pod can keep serving after the systemd unit stops.';
+        });
       }
       await _load();
     } on ReadOnlyViolation {
@@ -112,116 +126,161 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<KelolaColors>()!;
+    final c = context.kc;
     final detail = _detail;
+    final kicker = detail == null ? null : unitDetailKicker(detail);
     final journalTip = widget.facts.hasJournald && !widget.facts.journalReadable;
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.unitName)),
-      body: ListView(
-        padding: const EdgeInsets.all(14),
-        children: [
-          if (_busy) const LinearProgressIndicator(),
-          if (_error != null) ...[
-            Text(_error!, style: TextStyle(color: colors.red)),
-            const SizedBox(height: 12),
+      backgroundColor: c.ink,
+      appBar: AppBar(
+        backgroundColor: c.ink,
+        foregroundColor: c.text,
+        elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.unitName,
+              style: KelolaType.display(color: c.text, size: 16),
+            ),
+            if (kicker != null)
+              Text(
+                kicker,
+                style: KelolaType.mono(
+                  color: c.dim,
+                  size: 8.5,
+                  letterSpacing: 0.9,
+                ),
+              ),
           ],
-          if (detail != null) ...[
-            RiskBand(
-              level: detail.activeState == 'failed'
-                  ? RiskLevel.destructive
-                  : RiskLevel.read,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+      ),
+      body: Column(
+        children: [
+          if (_busy)
+            LinearProgressIndicator(
+              minHeight: 1.5,
+              backgroundColor: c.surface,
+              color: c.amber,
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
                 children: [
-                  Text(
-                    detail.description.isEmpty
-                        ? widget.unitName
-                        : detail.description,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    [
-                      detail.activeState,
-                      detail.subState,
-                      if (detail.unitFileState.isNotEmpty) detail.unitFileState,
-                      if (detail.mainPid.isNotEmpty && detail.mainPid != '0')
-                        'pid ${detail.mainPid}',
-                    ].join(' · '),
-                    style: TextStyle(color: colors.dim, fontSize: 12),
-                  ),
-                  if (detail.fragmentPath.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      detail.fragmentPath,
-                      style: TextStyle(color: colors.dim, fontSize: 11),
+                  if (_error != null) ...[
+                    KelolaError(
+                      message: _error!,
+                      sudoUser: widget.host.username,
                     ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (detail != null) ...[
+                    if (detail.activeState == 'failed') ...[
+                      RiskBand(
+                        risk: RiskLevel.read,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Result',
+                              style: KelolaType.mono(
+                                color: c.dim,
+                                size: 8.5,
+                                letterSpacing: 0.9,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              unitResultBody(detail),
+                              style: KelolaType.mono(
+                                color: c.forHealth(HealthStatus.failed),
+                                size: 10.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    _slab(c, 'Actions'),
+                    const SizedBox(height: 6),
+                    for (final verb in _actionOrder)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: ServiceRow(
+                          risk: unitActionRisk(verb, widget.unitName),
+                          name: '${verb.name[0].toUpperCase()}${verb.name.substring(1)}',
+                          meta: unitActionMeta(verb, widget.unitName),
+                          onTap: _busy ? null : () => _act(verb),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    _slab(c, 'Recent log'),
+                    const SizedBox(height: 6),
+                    RiskBand(
+                      risk: RiskLevel.read,
+                      child: SelectableText(
+                        detail.logs.isEmpty
+                            ? '(no journal output)'
+                            : detail.logs,
+                        style: KelolaType.mono(
+                          color: c.muted,
+                          size: 10.5,
+                        ),
+                      ),
+                    ),
+                    if (journalTip) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Journal is not readable for this user.',
+                        style: KelolaType.body(color: c.muted, size: 12),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    ServiceRow(
+                      risk: RiskLevel.read,
+                      name: 'Journal',
+                      meta: 'read · full unit log',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => JournalScreen(
+                              hostId: widget.host.id,
+                              unit: widget.unitName,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    if (detail.dependencies.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _slab(c, 'Dependencies'),
+                      const SizedBox(height: 6),
+                      RiskBand(
+                        risk: RiskLevel.read,
+                        child: SelectableText(
+                          detail.dependencies,
+                          style: KelolaType.mono(color: c.muted, size: 10.5),
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => JournalScreen(
-                          hostId: widget.host.id,
-                          unit: widget.unitName,
-                        ),
-                      ),
-                    );
-                  },
-                  child: const Text('journal'),
-                ),
-                for (final verb in UnitVerb.values)
-                  OutlinedButton(
-                    onPressed: _busy ? null : () => _act(verb),
-                    child: Text(verb.name),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text('Logs', style: TextStyle(color: colors.dim, fontSize: 11)),
-            const SizedBox(height: 6),
-            SelectableText(
-              detail.logs.isEmpty ? '(no journal output)' : detail.logs,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 11,
-                color: colors.muted,
-              ),
-            ),
-            if (journalTip) ...[
-              const SizedBox(height: 8),
-              Text(
-                'sudo usermod -aG systemd-journal ${widget.host.username}',
-                style: TextStyle(color: colors.dim, fontSize: 12),
-              ),
-            ],
-            if (detail.dependencies.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Dependencies',
-                style: TextStyle(color: colors.dim, fontSize: 11),
-              ),
-              const SizedBox(height: 6),
-              SelectableText(
-                detail.dependencies,
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 11,
-                  color: colors.muted,
-                ),
-              ),
-            ],
-          ],
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _slab(KelolaColors c, String label) {
+    return Text(
+      label.toUpperCase(),
+      style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
     );
   }
 }

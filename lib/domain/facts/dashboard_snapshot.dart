@@ -2,6 +2,7 @@ class DashboardSnapshot {
   const DashboardSnapshot({
     required this.uptime,
     required this.load1,
+    required this.cpuPercent,
     required this.memUsedPercent,
     required this.diskRootPercent,
     required this.failedUnitCount,
@@ -10,6 +11,7 @@ class DashboardSnapshot {
 
   final Duration uptime;
   final double load1;
+  final double cpuPercent;
   final int memUsedPercent;
   final int diskRootPercent;
   final int failedUnitCount;

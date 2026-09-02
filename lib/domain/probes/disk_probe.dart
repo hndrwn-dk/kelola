@@ -8,6 +8,9 @@ class DiskProbe extends Probe<List<DiskMount>> {
   const DiskProbe();
 
   @override
+  String get auditTitle => 'Listed disks';
+
+  @override
   String command(HostFacts facts) => 'LC_ALL=C df -PT';
 
   @override
@@ -26,6 +29,9 @@ class DuProbe extends Probe<List<DuEntry>> {
   const DuProbe(this.path);
 
   final String path;
+
+  @override
+  String get auditTitle => 'Measured disk usage';
 
   @override
   String command(HostFacts facts) {

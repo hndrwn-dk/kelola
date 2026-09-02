@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
+import 'package:kelola/design/kelola_components.dart' show KelolaError;
 import 'package:kelola/domain/disk/disk_snapshot.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -8,7 +9,9 @@ import 'package:kelola/domain/probes/disk_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/theme/kelola_fonts.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/presentation/widgets/risk_band.dart';
 import 'package:kelola/providers.dart';
 
@@ -29,6 +32,7 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
   String? _duPath;
   String? _error;
   bool _loading = true;
+  bool _showEphemeral = false;
 
   @override
   void initState() {
@@ -119,57 +123,120 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<KelolaColors>()!;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Disk')),
+    return KelolaPage(
+      title: 'Disk',
+      kicker: 'DF THEN DU',
+      busy: _loading,
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
-            if (_loading) const LinearProgressIndicator(),
             if (_error != null)
-              Text(_error!, style: TextStyle(color: colors.red)),
-            for (final m in _mounts)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: InkWell(
-                  onTap: () => _duInto(m),
-                  child: RiskBand(
-                    level: m.usedPercent >= 90
-                        ? RiskLevel.destructive
-                        : m.usedPercent >= 80
-                            ? RiskLevel.mutate
-                            : RiskLevel.read,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${m.mounted}  ${m.usedPercent}%'),
-                        Text(
-                          '${m.device} · ${m.fsType} · ${(m.kibUsed / 1024 / 1024).toStringAsFixed(1)} / ${(m.kibTotal / 1024 / 1024).toStringAsFixed(1)} GiB',
-                          style: TextStyle(color: colors.dim, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              KelolaError(
+                message: _error!,
+                sudoUser: _host?.username,
               ),
+            if (!_loading && _mounts.isEmpty && _error == null)
+              const KelolaEmpty(body: 'No mounts reported by df.'),
+            ..._diskTiles(colors),
             if (_du != null) ...[
               const SizedBox(height: 8),
-              Text(
-                'du ${_duPath ?? ''}',
-                style: TextStyle(color: colors.dim, fontSize: 11),
-              ),
-              const SizedBox(height: 6),
+              KelolaSection('du ${_duPath ?? ''}'),
+              const SizedBox(height: 8),
               for (final e in _du!)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    '${(e.kib / 1024).toStringAsFixed(1)} MiB  ${e.path}',
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                KelolaWorkRow(
+                  title: e.path,
+                  trailing: Text(
+                    '${(e.kib / 1024).toStringAsFixed(1)} MiB',
+                    style: KelolaFonts.machine(size: 12, color: colors.amber),
                   ),
                 ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _diskTiles(KelolaColors colors) {
+    final groups = groupDiskMounts(_mounts);
+    return [
+      for (final m in groups.primary) _mountCard(colors, m, prominent: true),
+      if (groups.ephemeral.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            'Virtual filesystems',
+            style: KelolaFonts.title(size: 14),
+          ),
+          subtitle: Text(
+            '${groups.ephemeral.length} tmpfs / run / dev',
+            style: KelolaFonts.machine(color: colors.dim, size: 11),
+          ),
+          trailing: Icon(
+            _showEphemeral
+                ? Icons.expand_less_rounded
+                : Icons.expand_more_rounded,
+            color: colors.muted,
+          ),
+          onTap: () => setState(() => _showEphemeral = !_showEphemeral),
+        ),
+        if (_showEphemeral)
+          for (final m in groups.ephemeral)
+            _mountCard(colors, m, prominent: false),
+      ],
+    ];
+  }
+
+  Widget _mountCard(
+    KelolaColors colors,
+    DiskMount m, {
+    required bool prominent,
+  }) {
+    final fill = m.usedPercent >= 90
+        ? colors.red
+        : m.usedPercent >= 80
+            ? colors.amber
+            : colors.green;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: () => _duInto(m),
+        borderRadius: BorderRadius.circular(12),
+        child: RiskBand(
+          level: m.usedPercent >= 90
+              ? RiskLevel.destructive
+              : m.usedPercent >= 80
+                  ? RiskLevel.mutate
+                  : RiskLevel.read,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${m.mounted}  ${m.usedPercent}%',
+                style: KelolaFonts.title(size: prominent ? 16 : 14),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${m.device} · ${m.fsType} · ${(m.kibUsed / 1024 / 1024).toStringAsFixed(1)} / ${(m.kibTotal / 1024 / 1024).toStringAsFixed(1)} GiB',
+                style: KelolaFonts.machine(color: colors.dim, size: 11),
+              ),
+              if (prominent) ...[
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: (m.usedPercent / 100).clamp(0, 1),
+                    minHeight: 4,
+                    color: fill,
+                    backgroundColor: colors.surface3,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

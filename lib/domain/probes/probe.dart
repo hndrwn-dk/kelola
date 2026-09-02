@@ -14,6 +14,9 @@ abstract class Probe<T> {
   RiskLevel get risk;
 
   Duration get timeout => const Duration(seconds: 20);
+
+  /// Human title for the audit log. Never the first shell token.
+  String get auditTitle => runtimeType.toString();
 }
 
 class ProbeExecResult {

@@ -1,11 +1,12 @@
 import 'package:kelola/domain/facts/dashboard_snapshot.dart';
+import 'package:kelola/domain/probes/metrics_probe.dart';
 
 class DashboardParser {
   const DashboardParser();
 
   DashboardSnapshot parse(String stdout) {
     final sections = <String, String>{};
-    final re = RegExp(r'^---([A-Z_]+)---\s*$', multiLine: true);
+    final re = RegExp(r'^---([A-Z0-9_]+)---\s*$', multiLine: true);
     final matches = re.allMatches(stdout).toList();
     for (var i = 0; i < matches.length; i++) {
       final name = matches[i].group(1)!;
@@ -30,6 +31,10 @@ class DashboardParser {
     return DashboardSnapshot(
       uptime: uptime,
       load1: load1,
+      cpuPercent: MetricsParser.cpuFromStat(
+        sections['STAT1'] ?? '',
+        sections['STAT2'] ?? '',
+      ),
       memUsedPercent: mem,
       diskRootPercent: disk,
       failedUnitCount: failedCount,

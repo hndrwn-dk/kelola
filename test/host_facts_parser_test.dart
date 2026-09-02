@@ -20,6 +20,7 @@ void main() {
     expect(facts.fw, FirewallBackend.ufw);
     expect(facts.journalReadable, isTrue);
     expect(facts.arch, 'x86_64');
+    expect(facts.nprocCores, 4);
   });
 
   test('Debian 12 without systemd-journal group', () {
@@ -47,5 +48,6 @@ void main() {
     expect(facts.pkg, PackageManager.apk);
     expect(facts.hasJournald, isFalse);
     expect(facts.arch, 'aarch64');
+    expect(facts.nprocCores, isNull);
   });
 }

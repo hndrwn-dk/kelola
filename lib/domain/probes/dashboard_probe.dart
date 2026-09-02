@@ -28,6 +28,11 @@ echo "---UPTIME---"
 cat /proc/uptime
 echo "---LOAD---"
 cat /proc/loadavg
+echo "---STAT1---"
+head -1 /proc/stat
+sleep 0.35
+echo "---STAT2---"
+head -1 /proc/stat
 echo "---MEM---"
 cat /proc/meminfo
 echo "---DISK---"
@@ -46,6 +51,9 @@ $failed
 
   @override
   RiskLevel get risk => RiskLevel.read;
+
+  @override
+  String get auditTitle => 'Polled dashboard';
 
   @override
   Duration get timeout => const Duration(seconds: 15);

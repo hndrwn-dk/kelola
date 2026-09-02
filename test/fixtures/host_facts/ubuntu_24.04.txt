@@ -16,3 +16,5 @@ systemd 255 (255.4-1ubuntu8)
 hendra adm sudo systemd-journal
 ---ARCH---
 x86_64
+---NPROC---
+4

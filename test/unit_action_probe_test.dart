@@ -21,6 +21,22 @@ void main() {
     );
   });
 
+  test('sudo interactive authentication required becomes SudoRequiredException',
+      () {
+    const probe = UnitActionProbe(
+      unitName: 'cron.service',
+      verb: UnitVerb.restart,
+    );
+    expect(
+      () => probe.parse(
+        '',
+        'sudo: interactive authentication is required',
+        1,
+      ),
+      throwsA(isA<SudoRequiredException>()),
+    );
+  });
+
   test('systemd action uses non-interactive sudo', () {
     const facts = HostFacts(
       osId: 'ubuntu',
@@ -38,6 +54,35 @@ void main() {
       verb: UnitVerb.restart,
     );
     expect(probe.command(facts), contains("sudo -n systemctl restart"));
+    expect(probe.command(facts), contains("---VERIFY---"));
     expect(probe.command(facts), contains("'app'\\''s.service'"));
+  });
+
+  test('parses verified ActiveState after the action', () {
+    const probe = UnitActionProbe(
+      unitName: 'nginx.service',
+      verb: UnitVerb.stop,
+    );
+    final result = probe.parse(
+      '---VERIFY---\nActiveState=inactive\nSubState=dead\nMainPID=0\nResult=success\n',
+      '',
+      0,
+    );
+    expect(result.ok, isTrue);
+    expect(result.activeState, 'inactive');
+    expect(result.mismatch, isFalse);
+  });
+
+  test('stop that leaves the unit active is a mismatch', () {
+    const probe = UnitActionProbe(
+      unitName: 'nginx.service',
+      verb: UnitVerb.stop,
+    );
+    final result = probe.parse(
+      '---VERIFY---\nActiveState=active\nSubState=running\nMainPID=441\nResult=success\n',
+      '',
+      0,
+    );
+    expect(result.mismatch, isTrue);
   });
 }

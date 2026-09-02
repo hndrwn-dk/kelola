@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -9,6 +8,7 @@ import 'package:kelola/data/ssh/hardware_identity.dart';
 import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/kelola_algorithms.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
+import 'package:kelola/domain/audit/audit_view.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -49,18 +49,31 @@ class SshSessionPool {
     if (host.username == 'root') {
       throw RootLoginRejectedException();
     }
+    final resolvedFacts = facts ?? HostFacts.undiscovered;
+    final draft = AuditDraft.fromProbe(probe, resolvedFacts);
     if (host.readOnly && probe.risk != RiskLevel.read) {
+      await _repository.recordAudit(
+        hostId: host.id,
+        hostAlias: host.alias,
+        remoteUser: host.username,
+        title: draft.title,
+        command: draft.command,
+        risk: draft.risk,
+        usedSudo: draft.usedSudo,
+        errorSummary: 'ReadOnlyViolation',
+      );
       throw ReadOnlyViolation(probe);
     }
-    final command = probe.command(facts ?? HostFacts.undiscovered);
+    final command = draft.command;
     final started = DateTime.now();
     final auditId = await _repository.beginAudit(
       hostId: host.id,
       hostAlias: host.alias,
       remoteUser: host.username,
-      command: command.trim().split('\n').first,
-      risk: probe.risk.name,
-      usedSudo: probe.needsSudo,
+      title: draft.title,
+      command: draft.command,
+      risk: draft.risk,
+      usedSudo: draft.usedSudo,
     );
     try {
       final client = await _acquire(host, onUnknownHostKey: onUnknownHostKey);
@@ -75,6 +88,9 @@ class SshSessionPool {
         exitCode: result.exitCode,
         durationMs: DateTime.now().difference(started).inMilliseconds,
       );
+      if (draft.usedSudo) {
+        await _repository.setSudoNeedsPassword(host.id, false);
+      }
       return parsed;
     } catch (e) {
       await _repository.finishAudit(
@@ -82,6 +98,9 @@ class SshSessionPool {
         durationMs: DateTime.now().difference(started).inMilliseconds,
         errorSummary: e.runtimeType.toString(),
       );
+      if (e is SudoRequiredException) {
+        await _repository.setSudoNeedsPassword(host.id, true);
+      }
       if (e is HostKeyMismatchException) {
         rethrow;
       }

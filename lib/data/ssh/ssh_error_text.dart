@@ -1,8 +1,12 @@
 import 'dart:async';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:kelola/domain/exceptions.dart';
 
 String describeSshError(Object error) {
+  if (error is SudoRequiredException) {
+    return error.message;
+  }
   if (error is TimeoutException) {
     return 'Timed out waiting for SSH login. Pin the host key promptly, and check that the phone can reach the host address.';
   }

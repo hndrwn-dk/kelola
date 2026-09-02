@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
+import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/screens/host_key_mismatch_screen.dart';
 import 'package:kelola/presentation/ssh_host_key_flow.dart';
+import 'package:kelola/presentation/theme/kelola_fonts.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -78,26 +80,12 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
   }
 
   Future<void> _regenerate() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Replace this phone\'s key?'),
-          content: const Text(
-            'Kelola keeps one hardware key per phone and reuses it for every host. Regenerating makes the current line invalid; you must update authorized_keys on every server.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Replace key'),
-            ),
-          ],
-        );
-      },
+    final confirmed = await showMutateConfirm(
+      context,
+      title: 'Replace this phone\'s key?',
+      body:
+          'Kelola keeps one hardware key per phone and reuses it for every host. Regenerating makes the current line invalid; you must update authorized_keys on every server.',
+      confirmLabel: 'Replace key',
     );
     if (confirmed != true) {
       return;
@@ -123,21 +111,26 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
     final enrollment = ref.watch(enrollmentProvider);
     final line = enrollment.authorizedKeysLine ?? 'generating…';
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Add the key')),
+    return KelolaPage(
+      title: 'Add the key',
+      kicker: 'ONE KEY PER PHONE',
+      busy: _busy,
       body: ListView(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         children: [
           Text(
             'Scan this on the server, or copy the line into ~/.ssh/authorized_keys. No network needed.',
-            style: TextStyle(color: colors.muted),
+            style: TextStyle(color: colors.muted, height: 1.5),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           if (enrollment.publicBlob != null)
             Center(
               child: Container(
-                color: colors.text,
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: colors.text,
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 child: QrImageView(
                   data: line,
                   size: 180,
@@ -146,37 +139,11 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
               ),
             ),
           const SizedBox(height: 16),
-          SelectableText(
-            line,
-            style: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 12,
-              color: colors.muted,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: enrollment.authorizedKeysLine == null
-                      ? null
-                      : () {
-                          Clipboard.setData(
-                            ClipboardData(text: enrollment.authorizedKeysLine!),
-                          );
-                        },
-                  child: const Text('Copy line'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _busy ? null : _test,
-                  child: Text(_busy ? 'Testing…' : 'Test connection'),
-                ),
-              ),
-            ],
+          KelolaCommand(command: line),
+          const SizedBox(height: 14),
+          FilledButton(
+            onPressed: _busy ? null : _test,
+            child: Text(_busy ? 'Testing…' : 'Test connection'),
           ),
           const SizedBox(height: 8),
           Align(
@@ -189,18 +156,18 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
           if (enrollment.backendLabel != null) ...[
             const SizedBox(height: 8),
             Text(
-              'Backend: ${enrollment.backendLabel}',
-              style: TextStyle(color: colors.dim, fontSize: 12),
+              'Backend: ${keyBackendLabel(enrollment.backendLabel)}',
+              style: KelolaFonts.machine(color: colors.dim, size: 12),
             ),
           ],
           const SizedBox(height: 8),
           Text(
             'This phone has one hardware key, reused for every host. A new VM does not create a new key.',
-            style: TextStyle(color: colors.dim, fontSize: 12),
+            style: TextStyle(color: colors.dim, fontSize: 12, height: 1.45),
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!, style: TextStyle(color: colors.red)),
+            KelolaError(message: _error!),
           ],
         ],
       ),

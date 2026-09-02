@@ -13,6 +13,7 @@ class HostFactsParser {
     final fw = sections['FW'] ?? '';
     final journal = sections['JOURNAL'] ?? '';
     final arch = (sections['ARCH'] ?? '').trim();
+    final runtime = sections['RUNTIME'] ?? '';
 
     final osId = _osField(os, 'ID') ?? '';
     final osVersionId = _osField(os, 'VERSION_ID') ?? '';
@@ -31,8 +32,11 @@ class HostFactsParser {
       pkg: _packageManager(pkg),
       fw: _firewall(fw),
       hasJournald: initSystem == InitSystem.systemd,
-      journalReadable: groups.contains('systemd-journal'),
+      journalReadable: groups.contains('systemd-journal') ||
+          groups.contains('adm'),
       arch: arch,
+      runtimes: _runtimes(runtime),
+      nprocCores: _nproc(sections['NPROC'] ?? ''),
     );
   }
 
@@ -121,5 +125,25 @@ class HostFactsParser {
       return FirewallBackend.iptables;
     }
     return FirewallBackend.none;
+  }
+
+  static List<String> _runtimes(String raw) {
+    final names = <String>{};
+    for (final line in raw.split(RegExp(r'\s+'))) {
+      final base = line.split('/').last.trim();
+      if (base.isEmpty) {
+        continue;
+      }
+      names.add(base);
+    }
+    return names.toList();
+  }
+
+  static int? _nproc(String raw) {
+    final n = int.tryParse(raw.trim().split(RegExp(r'\s+')).first);
+    if (n == null || n <= 0) {
+      return null;
+    }
+    return n;
   }
 }

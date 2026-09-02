@@ -20,4 +20,10 @@ void main() {
     );
     expect(page.permissionDenied, isTrue);
   });
+
+  test('empty json has a hint', () {
+    final page = const JournalParser().parse('not json\n', '');
+    expect(page.entries, isEmpty);
+    expect(page.emptyHint, isNotNull);
+  });
 }

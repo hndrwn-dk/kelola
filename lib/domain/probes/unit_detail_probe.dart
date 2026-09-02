@@ -12,6 +12,9 @@ class UnitDetailProbe extends Probe<UnitDetail> {
   final String unitName;
 
   @override
+  String get auditTitle => 'Inspected $unitName';
+
+  @override
   String command(HostFacts facts) {
     final q = shellSingleQuote(unitName);
     switch (facts.init) {

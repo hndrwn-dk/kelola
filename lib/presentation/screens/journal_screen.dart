@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
+import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
+import 'package:kelola/domain/journal/journal_view.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/journal_probe.dart';
 import 'package:kelola/presentation/host_session.dart';
-import 'package:kelola/presentation/theme/kelola_theme.dart';
 import 'package:kelola/providers.dart';
 
 class JournalScreen extends ConsumerStatefulWidget {
@@ -27,17 +29,39 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
   Host? _host;
   final _entries = <JournalEntry>[];
   String? _error;
+  String? _emptyHint;
   bool _loading = true;
   bool _permissionDenied = false;
   bool _hasJournald = true;
-  int? _priority;
-  String _grep = '';
+  late int? _priority;
+  String _q = '';
+  bool _searching = false;
+  bool _lastHour = false;
   String? _older;
+  final _scroll = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _priority = widget.unit != null ? 3 : null;
     _load(reset: true);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  String? get _sinceUsec {
+    if (!_lastHour) {
+      return null;
+    }
+    return DateTime.now()
+        .toUtc()
+        .subtract(const Duration(hours: 1))
+        .microsecondsSinceEpoch
+        .toString();
   }
 
   Future<void> _load({required bool reset}) async {
@@ -77,8 +101,9 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
         probe: JournalProbe(
           unit: widget.unit,
           priority: _priority,
-          grep: _grep,
+          grep: _q,
           untilUsec: reset ? null : _older,
+          sinceUsec: _sinceUsec,
         ),
         facts: facts,
       );
@@ -86,6 +111,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
         _host = host;
         _hasJournald = page.hasJournald;
         _permissionDenied = page.permissionDenied;
+        _emptyHint = page.emptyHint;
         if (reset) {
           _entries.addAll(page.entries);
         } else {
@@ -105,76 +131,143 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
     }
   }
 
+  JournalLineKind _kind(JournalEntry e) {
+    if (e.isError) {
+      return JournalLineKind.error;
+    }
+    if (e.isWarning) {
+      return JournalLineKind.warning;
+    }
+    return JournalLineKind.info;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<KelolaColors>()!;
+    final c = context.kc;
+    final kicker = journalKicker(unit: widget.unit, priority: _priority);
+
     return Scaffold(
+      backgroundColor: c.ink,
       appBar: AppBar(
-        title: Text(widget.unit ?? _host?.alias ?? 'Logs'),
+        backgroundColor: c.ink,
+        foregroundColor: c.text,
+        elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Logs', style: KelolaType.display(color: c.text, size: 16)),
+            Text(
+              kicker,
+              style: KelolaType.mono(
+                color: c.dim,
+                size: 8.5,
+                letterSpacing: 0.9,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Filter message',
+            icon: Icon(
+              _searching ? Icons.search_off_rounded : Icons.search_rounded,
+            ),
+            onPressed: () => setState(() => _searching = !_searching),
+          ),
+        ],
       ),
       body: Column(
         children: [
+          if (_loading)
+            LinearProgressIndicator(
+              minHeight: 1.5,
+              backgroundColor: c.surface,
+              color: c.amber,
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
-                  decoration: const InputDecoration(
-                    hintText: 'grep',
-                    isDense: true,
-                  ),
-                  onSubmitted: (v) {
-                    _grep = v;
-                    _load(reset: true);
-                  },
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('All'),
-                      selected: _priority == null,
-                      onSelected: (_) {
-                        setState(() => _priority = null);
-                        _load(reset: true);
-                      },
+                if (_searching) ...[
+                  TextField(
+                    autofocus: true,
+                    style: KelolaType.mono(color: c.text, size: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Filter message',
+                      hintStyle: KelolaType.mono(color: c.dim, size: 13),
+                      isDense: true,
                     ),
-                    ChoiceChip(
-                      label: const Text('err'),
+                    onSubmitted: (v) {
+                      _q = v;
+                      _load(reset: true);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                Wrap(
+                  spacing: 5,
+                  runSpacing: 5,
+                  children: [
+                    FilterPill(
+                      label: 'err+',
                       selected: _priority == 3,
-                      onSelected: (_) {
+                      onTap: () {
                         setState(() => _priority = 3);
                         _load(reset: true);
                       },
                     ),
-                    ChoiceChip(
-                      label: const Text('warn'),
+                    FilterPill(
+                      label: 'warn+',
                       selected: _priority == 4,
-                      onSelected: (_) {
+                      onTap: () {
                         setState(() => _priority = 4);
                         _load(reset: true);
                       },
+                    ),
+                    FilterPill(
+                      label: 'all',
+                      selected: _priority == null,
+                      onTap: () {
+                        setState(() => _priority = null);
+                        _load(reset: true);
+                      },
+                    ),
+                    FilterPill(
+                      label: '1h',
+                      selected: _lastHour,
+                      onTap: () {
+                        setState(() => _lastHour = !_lastHour);
+                        _load(reset: true);
+                      },
+                    ),
+                    FilterPill(
+                      label: 'live',
+                      selected: false,
+                      enabled: false,
+                      onTap: () {},
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          if (_loading) const LinearProgressIndicator(),
-          Expanded(child: _body(colors)),
+          Expanded(child: _body(c)),
         ],
       ),
     );
   }
 
-  Widget _body(KelolaColors colors) {
+  Widget _body(KelolaColors c) {
     if (_error != null) {
       return ListView(
         children: [
           Padding(
             padding: const EdgeInsets.all(14),
-            child: Text(_error!, style: TextStyle(color: colors.red)),
+            child: KelolaError(
+              message: _error!,
+              sudoUser: _host?.username,
+            ),
           ),
         ],
       );
@@ -183,78 +276,78 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
       return ListView(
         children: [
           Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'This host has no journald.',
-              style: TextStyle(color: colors.muted),
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              children: [
+                Text(
+                  'No journald',
+                  textAlign: TextAlign.center,
+                  style: KelolaType.display(color: c.text, size: 18),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This host has no systemd journal.',
+                  textAlign: TextAlign.center,
+                  style: KelolaType.body(color: c.muted, size: 14),
+                ),
+              ],
             ),
           ),
         ],
       );
     }
     if (_permissionDenied) {
+      final cmd =
+          'sudo usermod -aG systemd-journal ${_host?.username ?? 'USER'}';
       return ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'Journal is not readable. On the host: sudo usermod -aG systemd-journal ${_host?.username ?? 'USER'}',
-              style: TextStyle(color: colors.muted),
-            ),
+          Text(
+            'Journal is not readable over this SSH user.',
+            style: KelolaType.display(color: c.text, size: 16),
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Kelola tried journalctl, then sudo -n journalctl. Both returned nothing. Grant the group, then open a new SSH session (disconnect in the app and reconnect).',
+            style: KelolaType.body(color: c.muted, size: 13),
+          ),
+          const SizedBox(height: 12),
+          SelectableText(cmd, style: KelolaType.mono(color: c.text, size: 12)),
         ],
       );
     }
     return RefreshIndicator(
       onRefresh: () => _load(reset: true),
       child: ListView.builder(
-        padding: const EdgeInsets.all(14),
+        controller: _scroll,
+        padding: const EdgeInsets.fromLTRB(0, 10, 0, 24),
         itemCount: _entries.length + 1,
         itemBuilder: (context, i) {
           if (i == _entries.length) {
             if (_entries.isEmpty) {
               return Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 14),
                 child: Text(
-                  'No log lines.',
-                  style: TextStyle(color: colors.muted),
+                  _emptyHint ??
+                      'No log lines for this filter. Pull to refresh, or switch err+ / warn+ / all.',
+                  style: KelolaType.body(color: c.muted, size: 13),
                 ),
               );
             }
             return TextButton(
               onPressed: _loading ? null : () => _load(reset: false),
-              child: const Text('Older'),
+              child: Text(
+                'Older',
+                style: KelolaType.display(color: c.amber, size: 13),
+              ),
             );
           }
           final e = _entries[i];
-          final color = e.isError
-              ? colors.red
-              : e.isWarning
-                  ? colors.amber
-                  : colors.muted;
           final ts = e.timestamp;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  [
-                    if (ts != null) ts.toIso8601String().substring(11, 19),
-                    e.unit ?? e.syslogIdentifier ?? '',
-                  ].where((s) => s.isNotEmpty).join(' · '),
-                  style: TextStyle(color: colors.dim, fontSize: 11),
-                ),
-                SelectableText(
-                  e.message,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 13,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
+          return JournalLogLine(
+            timestamp: ts == null ? '' : journalClock(ts),
+            message: e.message,
+            kind: _kind(e),
           );
         },
       ),

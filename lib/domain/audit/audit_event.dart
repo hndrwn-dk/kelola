@@ -10,6 +10,7 @@ class AuditEvent {
     required this.usedSudo,
     required this.durationMs,
     required this.appVersion,
+    this.title = '',
     this.exitCode,
     this.errorSummary,
   });
@@ -19,6 +20,7 @@ class AuditEvent {
   final String hostId;
   final String hostAlias;
   final String remoteUser;
+  final String title;
   final String command;
   final String risk;
   final bool usedSudo;

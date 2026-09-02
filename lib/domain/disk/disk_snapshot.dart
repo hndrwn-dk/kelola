@@ -16,6 +16,79 @@ class DiskMount {
   final String mounted;
 }
 
+bool isEphemeralMount(DiskMount m) {
+  const types = {
+    'tmpfs',
+    'devtmpfs',
+    'ramfs',
+    'overlay',
+    'squashfs',
+    'proc',
+    'sysfs',
+    'cgroup',
+    'cgroup2',
+    'devpts',
+    'securityfs',
+    'pstore',
+    'bpf',
+    'tracefs',
+    'debugfs',
+    'configfs',
+    'fusectl',
+    'mqueue',
+    'hugetlbfs',
+    'autofs',
+    'efivarfs',
+  };
+  if (types.contains(m.fsType.toLowerCase())) {
+    return true;
+  }
+  final p = m.mounted;
+  return p.startsWith('/run/') ||
+      p.startsWith('/dev/') ||
+      p.startsWith('/sys/') ||
+      p.startsWith('/proc/') ||
+      p == '/dev' ||
+      p == '/run' ||
+      p == '/sys' ||
+      p == '/proc';
+}
+
+class DiskGroups {
+  const DiskGroups({required this.primary, required this.ephemeral});
+
+  final List<DiskMount> primary;
+  final List<DiskMount> ephemeral;
+}
+
+DiskGroups groupDiskMounts(List<DiskMount> mounts) {
+  final primary = <DiskMount>[];
+  final ephemeral = <DiskMount>[];
+  for (final m in mounts) {
+    if (isEphemeralMount(m)) {
+      ephemeral.add(m);
+    } else {
+      primary.add(m);
+    }
+  }
+  int rank(DiskMount m) {
+    if (m.mounted == '/') {
+      return 0;
+    }
+    return 1;
+  }
+
+  primary.sort((a, b) {
+    final r = rank(a).compareTo(rank(b));
+    if (r != 0) {
+      return r;
+    }
+    return b.usedPercent.compareTo(a.usedPercent);
+  });
+  ephemeral.sort((a, b) => b.usedPercent.compareTo(a.usedPercent));
+  return DiskGroups(primary: primary, ephemeral: ephemeral);
+}
+
 class DuEntry {
   const DuEntry({required this.kib, required this.path});
 

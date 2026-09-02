@@ -12,6 +12,8 @@ class HostFacts {
     required this.journalReadable,
     required this.arch,
     this.prettyName,
+    this.runtimes = const [],
+    this.nprocCores,
   });
 
   final String osId;
@@ -24,6 +26,8 @@ class HostFacts {
   final bool journalReadable;
   final String arch;
   final String? prettyName;
+  final List<String> runtimes;
+  final int? nprocCores;
 
   static const undiscovered = HostFacts(
     osId: '',
@@ -46,4 +50,14 @@ class HostFacts {
     }
     return osVersionId.isEmpty ? osId : '$osId $osVersionId';
   }
+
+  bool get hasK8s =>
+      runtimes.contains('k3s') || runtimes.contains('kubectl');
+
+  bool get hasContainers =>
+      hasK8s ||
+      runtimes.contains('docker') ||
+      runtimes.contains('podman') ||
+      runtimes.contains('crictl') ||
+      runtimes.contains('nerdctl');
 }

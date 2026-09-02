@@ -16,5 +16,25 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 4;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (Migrator m) async {
+          await m.createAll();
+        },
+        onUpgrade: (Migrator m, int from, int to) async {
+          if (from < 2) {
+            await m.addColumn(hosts, hosts.failedUnitCount);
+            await m.addColumn(hosts, hosts.diskRootPercent);
+            await m.addColumn(hosts, hosts.attentionAt);
+          }
+          if (from < 3) {
+            await m.addColumn(auditRecords, auditRecords.title);
+          }
+          if (from < 4) {
+            await m.addColumn(hosts, hosts.sudoNeedsPassword);
+          }
+        },
+      );
 }
