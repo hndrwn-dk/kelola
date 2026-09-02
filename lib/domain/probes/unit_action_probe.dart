@@ -18,13 +18,24 @@ class UnitActionProbe extends Probe<UnitActionResult> {
     final q = shellSingleQuote(unitName);
     switch (facts.init) {
       case InitSystem.systemd:
-        return 'sudo -n systemctl ${verb.name} $q';
+        return '''
+sudo -n systemctl ${verb.name} $q
+ec=\$?
+echo "---VERIFY---"
+systemctl show $q -p ActiveState -p SubState -p MainPID -p Result --no-pager 2>/dev/null || true
+exit \$ec
+''';
       case InitSystem.openrc:
-        return switch (verb) {
+        final action = switch (verb) {
           UnitVerb.enable => 'sudo -n rc-update add $q default',
           UnitVerb.disable => 'sudo -n rc-update del $q default',
           _ => 'sudo -n rc-service $q ${verb.name}',
         };
+        return '''
+$action
+echo "---VERIFY---"
+rc-service $q status 2>/dev/null || true
+''';
       case InitSystem.sysvinit:
       case InitSystem.unknown:
         return 'echo unsupported; exit 1';
@@ -37,12 +48,44 @@ class UnitActionProbe extends Probe<UnitActionResult> {
         looksLikeSudoPasswordPrompt(stdout)) {
       throw SudoRequiredException();
     }
+    final verify = _section(stdout, 'VERIFY');
     return UnitActionResult(
       verb: verb,
       unit: unitName,
       exitCode: exitCode,
       stderr: stderr.trim(),
+      activeState: _prop(verify, 'ActiveState'),
+      subState: _prop(verify, 'SubState'),
+      mainPid: _prop(verify, 'MainPID'),
+      result: _prop(verify, 'Result'),
     );
+  }
+
+  static String _section(String stdout, String name) {
+    final marker = '---$name---';
+    final i = stdout.indexOf(marker);
+    if (i < 0) {
+      return '';
+    }
+    return stdout.substring(i + marker.length);
+  }
+
+  static String _prop(String block, String key) {
+    final re = RegExp('^$key=(.*)\$', multiLine: true);
+    return re.firstMatch(block)?.group(1)?.trim() ?? '';
+  }
+
+  @override
+  String get auditTitle {
+    final past = switch (verb) {
+      UnitVerb.start => 'Started',
+      UnitVerb.stop => 'Stopped',
+      UnitVerb.restart => 'Restarted',
+      UnitVerb.reload => 'Reloaded',
+      UnitVerb.enable => 'Enabled',
+      UnitVerb.disable => 'Disabled',
+    };
+    return '$past $unitName';
   }
 
   @override

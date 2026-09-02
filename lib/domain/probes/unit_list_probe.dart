@@ -9,6 +9,9 @@ class UnitListProbe extends Probe<UnitListResult> {
   const UnitListProbe();
 
   @override
+  String get auditTitle => 'Listed units';
+
+  @override
   String command(HostFacts facts) {
     switch (facts.init) {
       case InitSystem.systemd:

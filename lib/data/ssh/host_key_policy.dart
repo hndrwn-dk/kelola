@@ -50,6 +50,7 @@ class HostKeyPolicy {
         hostId: hostId,
         hostAlias: hostId,
         remoteUser: '',
+        title: 'Host key mismatch',
         command: 'host-key-verify',
         risk: 'read',
         usedSudo: false,

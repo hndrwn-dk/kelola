@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/domain/units/lockout.dart';
 import 'package:kelola/domain/units/service_unit.dart';
-import 'package:kelola/presentation/theme/kelola_theme.dart';
 
 Future<bool> confirmUnitAction(
   BuildContext context, {
@@ -10,69 +9,40 @@ Future<bool> confirmUnitAction(
   required String unit,
   required UnitVerb verb,
 }) async {
-  final destructive = isDestructiveUnitAction(verb, unit);
-  final risk = destructive ? RiskLevel.destructive : RiskLevel.mutate;
-  final typed = TextEditingController();
-  try {
-    final ok = await showDialog<bool>(
+  final title =
+      '${verb.name[0].toUpperCase()}${verb.name.substring(1)} $unit?';
+  if (isDestructiveUnitAction(verb, unit)) {
+    var confirmed = false;
+    await showModalBottomSheet<void>(
       context: context,
+      isDismissible: false,
+      enableDrag: false,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (ctx) {
-        final colors = Theme.of(ctx).extension<KelolaColors>()!;
-        return AlertDialog(
-          title: Text('${verb.name} $unit?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (destructive)
-                Text(
-                  'This can drop SSH or networking on $hostAlias and lock you out.',
-                  style: TextStyle(color: colors.red),
-                )
-              else
-                Text(
-                  'This changes state on $hostAlias.',
-                  style: TextStyle(color: colors.muted),
-                ),
-              if (destructive) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Type $hostAlias to confirm.',
-                  style: TextStyle(color: colors.dim, fontSize: 12),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: typed,
-                  autofocus: true,
-                  decoration: InputDecoration(hintText: hostAlias),
-                ),
-              ],
-            ],
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (destructive && typed.text.trim() != hostAlias) {
-                  return;
-                }
-                Navigator.of(ctx).pop(true);
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: colors.risk(risk),
-                foregroundColor: const Color(0xFF1A1206),
-              ),
-              child: Text(verb.name),
-            ),
-          ],
+          child: DestructiveConfirmSheet(
+            title: title,
+            consequence:
+                'This will end your session and may make $hostAlias unreachable.',
+            warning:
+                'You will lose access immediately. Recovery needs physical or console access to the machine.',
+            confirmToken: hostAlias,
+            onConfirmed: () => confirmed = true,
+          ),
         );
       },
     );
-    return ok == true;
-  } finally {
-    typed.dispose();
+    return confirmed;
   }
+
+  return showMutateConfirm(
+    context,
+    title: title,
+    body: 'This changes state on $hostAlias.',
+    confirmLabel: verb.name,
+  );
 }

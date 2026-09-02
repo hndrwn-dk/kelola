@@ -22,6 +22,10 @@ echo "---JOURNAL---"
 id -nG
 echo "---ARCH---"
 uname -m
+echo "---RUNTIME---"
+command -v k3s kubectl docker podman crictl nerdctl 2>/dev/null
+echo "---NPROC---"
+nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0
 ''';
 
   @override
@@ -37,6 +41,9 @@ uname -m
 
   @override
   RiskLevel get risk => RiskLevel.read;
+
+  @override
+  String get auditTitle => 'Discovered host';
 
   @override
   Duration get timeout => const Duration(seconds: 15);

@@ -43,6 +43,9 @@ class JournalParser {
     return JournalPage(
       entries: entries,
       permissionDenied: permission && entries.isEmpty,
+      emptyHint: entries.isEmpty && !permission
+          ? 'journalctl returned no JSON lines. The SSH user needs the systemd-journal group or passwordless sudo.'
+          : null,
     );
   }
 

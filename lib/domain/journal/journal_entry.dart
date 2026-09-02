@@ -32,11 +32,13 @@ class JournalPage {
     required this.entries,
     required this.permissionDenied,
     this.hasJournald = true,
+    this.emptyHint,
   });
 
   final List<JournalEntry> entries;
   final bool permissionDenied;
   final bool hasJournald;
+  final String? emptyHint;
 
   String? get olderThanUsec {
     if (entries.isEmpty) {

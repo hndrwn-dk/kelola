@@ -11,20 +11,21 @@ class JournalProbe extends Probe<JournalPage> {
     this.priority,
     this.grep,
     this.untilUsec,
+    this.sinceUsec,
     this.limit = 200,
+    this.reverse = true,
   });
 
   final String? unit;
   final int? priority;
   final String? grep;
   final String? untilUsec;
+  final String? sinceUsec;
   final int limit;
+  final bool reverse;
 
-  @override
-  String command(HostFacts facts) {
-    final args = StringBuffer(
-      'journalctl -o json --no-pager -n $limit --reverse',
-    );
+  String get _filters {
+    final args = StringBuffer();
     final u = unit?.trim();
     if (u != null && u.isNotEmpty) {
       args.write(' -u ${shellSingleQuote(u)}');
@@ -42,15 +43,39 @@ class JournalProbe extends Probe<JournalPage> {
         args.write(' --until @$sec');
       }
     }
-    final inner = args.toString();
-    final prefix = 'LC_ALL=C SYSTEMD_PAGER= SYSTEMD_COLORS=0';
+    if (sinceUsec != null && sinceUsec!.isNotEmpty) {
+      final sec = (int.tryParse(sinceUsec!) ?? 0) ~/ 1000000;
+      if (sec > 0) {
+        args.write(' --since @$sec');
+      }
+    }
+    if (reverse) {
+      args.write(' --reverse');
+    }
+    return args.toString();
+  }
+
+  @override
+  String command(HostFacts facts) {
     if (!facts.hasJournald) {
       return 'echo "---NOJOURNAL---"';
     }
-    if (facts.journalReadable) {
-      return '$prefix $inner';
-    }
-    return '$prefix sudo -n $inner';
+    final f = _filters;
+    return '''
+LC_ALL=C SYSTEMD_PAGER= SYSTEMD_COLORS=0
+set +e
+out=\$(journalctl -o json --no-pager -n $limit --system$f 2>/dev/null)
+if printf '%s' "\$out" | grep -q '{'; then
+  printf '%s\\n' "\$out"
+  exit 0
+fi
+out=\$(sudo -n journalctl -o json --no-pager -n $limit --system$f 2>/dev/null)
+if printf '%s' "\$out" | grep -q '{'; then
+  printf '%s\\n' "\$out"
+  exit 0
+fi
+echo "---DENIED---"
+''';
   }
 
   @override
@@ -62,7 +87,8 @@ class JournalProbe extends Probe<JournalPage> {
         hasJournald: false,
       );
     }
-    if (looksLikeSudoPasswordPrompt(stderr) ||
+    if (stdout.contains('---DENIED---') ||
+        looksLikeSudoPasswordPrompt(stderr) ||
         looksLikeSudoPasswordPrompt(stdout)) {
       return const JournalPage(entries: [], permissionDenied: true);
     }
@@ -74,6 +100,15 @@ class JournalProbe extends Probe<JournalPage> {
 
   @override
   RiskLevel get risk => RiskLevel.read;
+
+  @override
+  String get auditTitle {
+    final u = unit?.trim();
+    if (u == null || u.isEmpty) {
+      return 'Read journal';
+    }
+    return 'Read journal for $u';
+  }
 
   @override
   Duration get timeout => const Duration(seconds: 25);

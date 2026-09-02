@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 
 class HostNavTile extends StatelessWidget {
   const HostNavTile({
@@ -16,22 +17,11 @@ class HostNavTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<KelolaColors>()!;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        tileColor: colors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: colors.line),
-        ),
-        title: Text(title),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(color: colors.dim, fontSize: 12),
-        ),
-        trailing: Icon(Icons.chevron_right, color: colors.dim),
-        onTap: onTap,
-      ),
+    return KelolaWorkRow(
+      title: title,
+      subtitle: subtitle,
+      onTap: onTap,
+      trailing: Icon(Icons.chevron_right, color: colors.dim, size: 18),
     );
   }
 }

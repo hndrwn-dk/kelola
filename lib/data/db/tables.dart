@@ -14,8 +14,13 @@ class Hosts extends Table {
   TextColumn get note => text().nullable()();
   IntColumn get lastRttMs => integer().nullable()();
   TextColumn get attention => text().withDefault(const Constant('unknown'))();
+  IntColumn get failedUnitCount => integer().nullable()();
+  IntColumn get diskRootPercent => integer().nullable()();
+  DateTimeColumn get attentionAt => dateTime().nullable()();
   DateTimeColumn get lastSeenAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
+  BoolColumn get sudoNeedsPassword =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -77,6 +82,7 @@ class AuditRecords extends Table {
   TextColumn get hostId => text()();
   TextColumn get hostAlias => text()();
   TextColumn get remoteUser => text()();
+  TextColumn get title => text().withDefault(const Constant(''))();
   TextColumn get command => text()();
   TextColumn get risk => text()();
   BoolColumn get usedSudo => boolean()();

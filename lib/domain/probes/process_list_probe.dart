@@ -7,10 +7,13 @@ class ProcessListProbe extends Probe<List<ProcessRow>> {
   const ProcessListProbe();
 
   @override
+  String get auditTitle => 'Listed processes';
+
+  @override
   String command(HostFacts facts) {
     return r'''
 LC_ALL=C
-ps -eo pid,ppid,user,pcpu,pmem,rss,stat,comm --no-headers --sort=-pcpu
+ps -eo pid,ppid,user,pcpu,pmem,rss,etime,stat,comm --no-headers --sort=-pcpu
 ''';
   }
 

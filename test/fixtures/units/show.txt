@@ -9,6 +9,9 @@ UnitFileState=enabled
 FragmentPath=/usr/lib/systemd/system/nginx.service
 MainPID=0
 Result=exit-code
+ExecMainStatus=1
+ExecMainCode=1
+ActiveEnterTimestamp=Sun 2026-08-30 09:12:04 UTC
 ---LOGS---
 2026-09-01T11:20:00+00:00 nginx[1]: bind() to 0.0.0.0:80 failed (98: Address already in use)
 ---DEPS---

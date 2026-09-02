@@ -54,5 +54,9 @@ void main() {
     expect(detail.activeState, 'failed');
     expect(detail.fragmentPath, contains('nginx.service'));
     expect(detail.logs, contains('Address already in use'));
+    expect(detail.execMainStatus, '1');
+    expect(detail.execMainCode, '1');
+    expect(detail.result, 'exit-code');
+    expect(detail.activeEnterTimestamp, contains('2026-08-30'));
   });
 }

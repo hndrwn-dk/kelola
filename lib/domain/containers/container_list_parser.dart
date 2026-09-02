@@ -5,13 +5,44 @@ import 'package:kelola/domain/containers/container_row.dart';
 class ContainerListParser {
   const ContainerListParser();
 
-  List<ContainerRow> parse(String stdout) {
-    final engine = _section(stdout, 'ENGINE').trim().split('\n').first.trim();
+  ContainerInventory parse(String stdout) {
+    final engineBlock = _section(stdout, 'ENGINE');
+    final engines = engineBlock
+        .split(RegExp(r'\s+'))
+        .map((e) => e.split('/').last.trim())
+        .where((e) => e.isNotEmpty && e != 'none')
+        .toList();
+    final engine = engines.isEmpty
+        ? _section(stdout, 'ENGINE').trim().split('\n').first.trim()
+        : engines.first;
+    final pods = _parsePods(_section(stdout, 'PODS'), engine);
+    final dockerDenied = stdout.contains('---DOCKER_DENIED---');
     final body = _section(stdout, 'PS');
-    if (engine == 'none' || body.isEmpty) {
+    final dockerRows = _parsePs(body, _dockerEngine(engines, engine));
+    return ContainerInventory(
+      rows: [...pods, ...dockerRows],
+      engines: engines,
+      dockerDenied: dockerDenied,
+    );
+  }
+
+  String _dockerEngine(List<String> engines, String fallback) {
+    for (final e in engines) {
+      if (e == 'docker' || e == 'podman' || e == 'crictl') {
+        return e;
+      }
+    }
+    return fallback;
+  }
+
+  List<ContainerRow> _parsePs(String body, String engine) {
+    if (body.isEmpty) {
       return const [];
     }
     final trimmed = body.trim();
+    if (trimmed.startsWith('{') && trimmed.contains('"containers"')) {
+      return _parseCrictl(trimmed, engine == 'none' ? 'crictl' : engine);
+    }
     if (trimmed.startsWith('[')) {
       return _parseArray(trimmed, engine);
     }
@@ -23,6 +54,84 @@ class ContainerListParser {
       }
     }
     return out;
+  }
+
+  List<ContainerRow> _parsePods(String raw, String engine) {
+    final out = <ContainerRow>[];
+    final label = engine == 'kubectl' ? 'k8s' : (engine == 'k3s' ? 'k3s' : 'k8s');
+    for (final line in raw.split('\n')) {
+      final parts = line.trim().split('\t');
+      if (parts.length < 3) {
+        continue;
+      }
+      final ns = parts[0];
+      final name = parts[1];
+      if (ns.isEmpty || name.isEmpty || ns == 'none') {
+        continue;
+      }
+      final phase = parts[2];
+      final image = parts.length > 3 ? parts.sublist(3).join('\t') : '';
+      out.add(
+        ContainerRow(
+          id: '$ns/$name',
+          names: name,
+          namespace: ns,
+          image: image,
+          state: phase.toLowerCase() == 'running' ? 'running' : phase,
+          status: phase,
+          engine: label,
+        ),
+      );
+    }
+    return out;
+  }
+
+  List<ContainerRow> _parseCrictl(String raw, String engine) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return const [];
+      }
+      final list = decoded['containers'];
+      if (list is! List) {
+        return const [];
+      }
+      final out = <ContainerRow>[];
+      for (final item in list) {
+        if (item is! Map) {
+          continue;
+        }
+        final map = item.cast<String, dynamic>();
+        final id = (map['id'] ?? '').toString();
+        if (id.isEmpty) {
+          continue;
+        }
+        final meta = map['metadata'];
+        var name = '';
+        if (meta is Map) {
+          name = (meta['name'] ?? '').toString();
+        }
+        var image = '';
+        final img = map['image'];
+        if (img is Map) {
+          image = (img['image'] ?? img['name'] ?? '').toString();
+        }
+        final state = (map['state'] ?? '').toString();
+        out.add(
+          ContainerRow(
+            id: id,
+            names: name,
+            image: image,
+            state: state.toLowerCase().replaceFirst('container_', ''),
+            status: state,
+            engine: engine,
+          ),
+        );
+      }
+      return out;
+    } on FormatException {
+      return const [];
+    }
   }
 
   List<ContainerRow> _parseArray(String raw, String engine) {
@@ -72,13 +181,18 @@ class ContainerListParser {
       names = namesRaw.map((e) => e.toString()).join(', ');
     }
     names = names.replaceFirst(RegExp(r'^/'), '');
+    var ports = (map['Ports'] ?? '').toString();
+    final portsRaw = map['Ports'];
+    if (portsRaw is List) {
+      ports = portsRaw.map((e) => e.toString()).join(', ');
+    }
     return ContainerRow(
       id: id,
       names: names,
       image: (map['Image'] ?? '').toString(),
       state: (map['State'] ?? '').toString(),
       status: (map['Status'] ?? '').toString(),
-      ports: (map['Ports'] ?? '').toString(),
+      ports: ports,
       engine: engine,
     );
   }

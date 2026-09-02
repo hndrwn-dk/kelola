@@ -7,6 +7,7 @@ class ContainerRow {
     required this.status,
     this.ports = '',
     this.engine = 'docker',
+    this.namespace = '',
   });
 
   final String id;
@@ -16,6 +17,32 @@ class ContainerRow {
   final String status;
   final String ports;
   final String engine;
+  final String namespace;
 
-  bool get running => state.toLowerCase() == 'running';
+  bool get running {
+    final s = state.toLowerCase();
+    return s == 'running' || s == 'container_running';
+  }
+
+  String get title {
+    if (namespace.isNotEmpty) {
+      return '$namespace/$names';
+    }
+    if (names.isNotEmpty) {
+      return names;
+    }
+    return id;
+  }
+}
+
+class ContainerInventory {
+  const ContainerInventory({
+    required this.rows,
+    this.engines = const [],
+    this.dockerDenied = false,
+  });
+
+  final List<ContainerRow> rows;
+  final List<String> engines;
+  final bool dockerDenied;
 }

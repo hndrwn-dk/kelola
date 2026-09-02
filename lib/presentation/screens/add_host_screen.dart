@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/presentation/screens/enrollment_screen.dart';
+import 'package:kelola/presentation/theme/kelola_theme.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
 
 class AddHostScreen extends ConsumerStatefulWidget {
@@ -85,59 +87,70 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Add host')),
+    final colors = Theme.of(context).extension<KelolaColors>()!;
+    return KelolaPage(
+      title: 'Add host',
+      kicker: 'SSH ONLY · NO AGENT',
       body: ListView(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         children: [
-          TextField(
+          KelolaField(
+            label: 'Name',
             controller: _alias,
-            decoration: const InputDecoration(labelText: 'Name'),
+            hint: 'nas-01',
           ),
-          const SizedBox(height: 10),
-          TextField(
+          const SizedBox(height: 14),
+          KelolaField(
+            label: 'Address',
             controller: _address,
-            decoration: const InputDecoration(labelText: 'Address'),
+            hint: '192.168.1.24',
+            keyboardType: TextInputType.url,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: TextField(
+                child: KelolaField(
+                  label: 'Port',
                   controller: _port,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Port'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: TextField(
+                child: KelolaField(
+                  label: 'User',
                   controller: _user,
-                  decoration: const InputDecoration(labelText: 'User'),
+                  hint: 'not root',
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           FilledButton(
             onPressed: _save,
             child: const Text('Next — add the key'),
           ),
-          const SizedBox(height: 28),
-          const Text('Import ssh_config instead'),
-          const SizedBox(height: 8),
-          TextField(
+          const SizedBox(height: 32),
+          const KelolaSection('Or import ssh_config'),
+          const SizedBox(height: 6),
+          Text(
+            'Paste Host blocks. IdentityFile is ignored — this phone keeps one hardware key.',
+            style: TextStyle(color: colors.dim, fontSize: 12, height: 1.45),
+          ),
+          const SizedBox(height: 10),
+          KelolaField(
+            label: 'Config',
             controller: _config,
             minLines: 6,
             maxLines: 12,
-            decoration: const InputDecoration(
-              hintText: 'Paste Host blocks. IdentityFile is ignored.',
-            ),
+            hint: 'Host nas-01\n  HostName 192.168.1.24\n  User hendr',
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           OutlinedButton(
             onPressed: _importing ? null : _import,
-            child: const Text('Import'),
+            child: Text(_importing ? 'Importing…' : 'Import'),
           ),
         ],
       ),

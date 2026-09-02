@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/screens/hosts_screen.dart';
-import 'package:kelola/providers.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 
 class BootGate extends ConsumerStatefulWidget {
   const BootGate({super.key});
@@ -25,23 +25,11 @@ class _BootGateState extends ConsumerState<BootGate> {
     final fromLink = _hostIdFromRoute(
       WidgetsBinding.instance.platformDispatcher.defaultRouteName,
     );
-    if (fromLink != null) {
-      if (mounted) {
-        setState(() {
-          _hostId = fromLink;
-          _ready = true;
-        });
-      }
-      return;
-    }
-    final last = await ref.read(hostRepositoryProvider).lastHostId();
-    final live = last != null &&
-        ref.read(sessionPoolProvider).hasLiveSession(last);
     if (!mounted) {
       return;
     }
     setState(() {
-      _hostId = live ? last : null;
+      _hostId = fromLink;
       _ready = true;
     });
   }
@@ -67,7 +55,7 @@ class _BootGateState extends ConsumerState<BootGate> {
   Widget build(BuildContext context) {
     if (!_ready) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: KelolaSpinner()),
       );
     }
     final id = _hostId;

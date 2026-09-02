@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kelola/presentation/theme/kelola_fonts.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
 
 class TofuScreen extends ConsumerWidget {
@@ -18,8 +20,9 @@ class TofuScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).extension<KelolaColors>()!;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Unknown host key')),
+    return KelolaPage(
+      title: 'Unknown host key',
+      kicker: 'TRUST ON FIRST USE',
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -27,14 +30,21 @@ class TofuScreen extends ConsumerWidget {
           children: [
             Text(
               'This is the first time Kelola has seen this host. Accept the fingerprint to pin it.',
-              style: TextStyle(color: colors.muted),
+              style: TextStyle(color: colors.muted, height: 1.5),
             ),
-            const SizedBox(height: 16),
-            Text(algorithm, style: TextStyle(color: colors.dim)),
-            const SizedBox(height: 8),
-            SelectableText(
-              fingerprint,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+            const SizedBox(height: 18),
+            KelolaPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  KelolaSection(algorithm),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    fingerprint,
+                    style: KelolaFonts.machine(size: 13),
+                  ),
+                ],
+              ),
             ),
             const Spacer(),
             FilledButton(
