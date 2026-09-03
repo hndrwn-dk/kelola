@@ -27,14 +27,23 @@ One hardware key per phone, reused for every host. That is intentional.
 | Enrollment QR + TOFU host-key pinning | Working |
 | HostFacts + dashboard | Working against Ubuntu/OpenSSH |
 | systemd units (list/detail/start/stop/restart) | Working; OpenRC lists without crashing |
-| journald logs (filter, grep, older page) | Working |
-| Disk (`df` + `du`), processes, containers, SFTP files | Working |
+| journald logs (filter, grep, older page, follow) | Working |
+| Disk (`df` + `du`), processes, containers (start/stop/restart/logs), SFTP files | Working |
 | Local audit log (write-before-exec, JSON copy) | Working |
 | Read-only host switch | Enforced at the SSH dispatcher |
 
-Still ahead: tunnels, terminal, fleet, NAT, LLM. See [`readiness/MILESTONES.md`](readiness/MILESTONES.md).
+Still ahead: tunnels, terminal PTY, cron/users, fleet, NAT, LLM. See [`readiness/MILESTONES.md`](readiness/MILESTONES.md).
 
 Specs: [`readiness/SPEC.md`](readiness/SPEC.md) · design: [`readiness/DESIGN.html`](readiness/DESIGN.html) · M0 decision: [`readiness/M0-GO-NO-GO.md`](readiness/M0-GO-NO-GO.md).
+
+## Screenshots
+
+<p>
+<img src="docs/screenshots/hosts.png" width="220" alt="Hosts list grouped by attention">
+<img src="docs/screenshots/host-details.png" width="220" alt="Host details and HostFacts">
+<img src="docs/screenshots/containers.png" width="220" alt="Docker containers with stacks and actions">
+<img src="docs/screenshots/logs.png" width="220" alt="journald follow with LIVE streaming">
+</p>
 
 ## Host requirements
 
@@ -82,3 +91,8 @@ readiness/         product spec and milestone plan
 - Cipher/KEX allowlist is modern-only (ChaCha20, AES-GCM, AES-CTR, curve25519, ECDH P-256). No SHA-1, no CBC.
 - Stopping `sshd` or a network unit requires typing the host alias.
 - Private keys never appear in logs, backups, or the UI. Restoring inventory on a new phone means re-enrollment.
+- Report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
