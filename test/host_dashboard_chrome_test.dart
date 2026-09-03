@@ -46,6 +46,7 @@ void main() {
             onDetails: () {},
             onAudit: () {},
             onRemove: () {},
+            onDiagnostic: () {},
           ),
         ),
       ),
@@ -57,6 +58,7 @@ void main() {
     expect(find.text('Note'), findsOneWidget);
     expect(find.text('Edit host'), findsOneWidget);
     expect(find.text('Host details'), findsOneWidget);
+    expect(find.text('Diagnostic pack'), findsOneWidget);
     expect(find.text('Audit log'), findsOneWidget);
     expect(find.text('Remove host'), findsOneWidget);
     expect(find.text('Read-only'), findsNothing);

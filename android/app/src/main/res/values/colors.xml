@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0D1117</color>
+    <color name="kelola_ink">#0E1116</color>
+    <color name="kelola_surface">#161A21</color>
+    <color name="kelola_text">#E4E8EE</color>
+    <color name="kelola_muted">#8A95A5</color>
+    <color name="kelola_dim">#5C6675</color>
+    <color name="kelola_amber">#F0A02C</color>
+    <color name="kelola_line">#2A323D</color>
 </resources>

@@ -11,6 +11,7 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_inventory_view.dart';
 import 'package:kelola/domain/hosts/pooled_run.dart';
 import 'package:kelola/domain/incident/incident_sheet.dart';
+import 'package:kelola/domain/widget/publish_home_widget.dart';
 import 'package:kelola/presentation/host_inventory_ping.dart';
 import 'package:kelola/presentation/screens/add_host_screen.dart';
 import 'package:kelola/presentation/screens/audit_screen.dart';
@@ -35,6 +36,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     destructive: 0,
     failed: 0,
   );
+  var _widgetOn = false;
   final Set<HostInventoryBucket> _forceExpanded = {};
   final Set<HostInventoryBucket> _forceCollapsed = {};
 
@@ -45,12 +47,15 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   }
 
   Future<void> _loadAudit() async {
-    final rows = await ref.read(hostRepositoryProvider).listAudit();
+    final repo = ref.read(hostRepositoryProvider);
+    final rows = await repo.listAudit();
+    final widgetOn = await repo.widgetEnabled();
     if (!mounted) {
       return;
     }
     setState(() {
       _audit = summarizeAudit(rows, now: DateTime.now().toUtc());
+      _widgetOn = widgetOn;
     });
   }
 
@@ -184,9 +189,25 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   ),
                 ),
               ),
-              const SafeArea(
+              SafeArea(
                 top: false,
-                child: HostsColophon(version: kelolaAppVersion),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                      child: ServiceRow(
+                        risk: RiskLevel.read,
+                        name: 'Home widget',
+                        meta: _widgetOn
+                            ? 'on · last refresh only'
+                            : 'off · last refresh only',
+                        onTap: _toggleWidget,
+                      ),
+                    ),
+                    const HostsColophon(version: kelolaAppVersion),
+                  ],
+                ),
               ),
             ],
           ),
@@ -448,6 +469,23 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         }
       },
     );
+    await publishHomeWidget(
+      repo: repo,
+      bridge: ref.read(homeWidgetBridgeProvider),
+    );
+  }
+
+  Future<void> _toggleWidget() async {
+    final next = !_widgetOn;
+    final repo = ref.read(hostRepositoryProvider);
+    await repo.setWidgetEnabled(next);
+    await publishHomeWidget(
+      repo: repo,
+      bridge: ref.read(homeWidgetBridgeProvider),
+    );
+    if (mounted) {
+      setState(() => _widgetOn = next);
+    }
   }
 
   Future<void> _deleteHost(Host host) async {

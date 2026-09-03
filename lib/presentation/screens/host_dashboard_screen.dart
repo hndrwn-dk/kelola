@@ -13,6 +13,7 @@ import 'package:kelola/domain/hosts/poll_backoff.dart';
 import 'package:kelola/domain/probes/dashboard_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/metrics_probe.dart';
+import 'package:kelola/domain/widget/publish_home_widget.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/nav.dart';
 import 'package:kelola/presentation/screens/audit_screen.dart';
@@ -29,12 +30,14 @@ import 'package:kelola/presentation/screens/metrics_screen.dart';
 import 'package:kelola/presentation/screens/network_screen.dart';
 import 'package:kelola/presentation/screens/processes_screen.dart';
 import 'package:kelola/presentation/screens/terminal_sheet.dart';
+import 'package:kelola/presentation/screens/snippets_screen.dart';
 import 'package:kelola/presentation/screens/units_screen.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/probes/host_action_probe.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
+import 'package:kelola/presentation/widgets/diagnostic_pack_sheet.dart';
 import 'package:kelola/presentation/widgets/incident_sheet.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart' show keyBackendLabel;
@@ -65,9 +68,14 @@ HealthStatus loadHealth(double load1, int? nprocCores) {
 }
 
 class HostDashboardScreen extends ConsumerStatefulWidget {
-  const HostDashboardScreen({super.key, required this.hostId});
+  const HostDashboardScreen({
+    super.key,
+    required this.hostId,
+    this.openIncident = false,
+  });
 
   final String hostId;
+  final bool openIncident;
 
   @override
   ConsumerState<HostDashboardScreen> createState() =>
@@ -84,6 +92,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   Timer? _cpuTimer;
   final _cpuBackoff = PollBackoff();
   bool _cpuBusy = false;
+  var _openedIncident = false;
 
   @override
   void initState() {
@@ -149,6 +158,10 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         diskRootPercent: dash.diskRootPercent,
         attentionAt: now,
       );
+      await publishHomeWidget(
+        repo: repo,
+        bridge: ref.read(homeWidgetBridgeProvider),
+      );
       final updated = await repo.get(host.id);
       setState(() {
         _facts = facts;
@@ -177,12 +190,34 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
             id: widget.hostId,
             attention: HostAttention.unreachable,
           );
+      await publishHomeWidget(
+        repo: ref.read(hostRepositoryProvider),
+        bridge: ref.read(homeWidgetBridgeProvider),
+      );
       setState(() => _error = describeSshError(e));
     } finally {
       if (mounted) {
         setState(() => _loading = false);
+        _maybeOpenIncident();
       }
     }
+  }
+
+  void _maybeOpenIncident() {
+    if (!widget.openIncident || _openedIncident) {
+      return;
+    }
+    final host = _host;
+    if (host == null) {
+      return;
+    }
+    _openedIncident = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      openHostIncident(context, ref, host);
+    });
   }
 
   void _armCpu() {
@@ -283,6 +318,9 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
           onNote: _editNote,
           onEdit: _openEdit,
           onDetails: _openDetails,
+          onDiagnostic: host == null
+              ? null
+              : () => openDiagnosticPack(context, ref, host),
           onAudit: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -574,6 +612,13 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
               ),
               const SizedBox(height: 6),
               ServiceRow(
+                risk: RiskLevel.read,
+                name: 'Snippets',
+                meta: 'templates · never fleet',
+                onTap: () => _open((_) => SnippetsScreen(host: host)),
+              ),
+              const SizedBox(height: 6),
+              ServiceRow(
                 risk: RiskLevel.mutate,
                 name: 'Flush caches',
                 meta: 'mutate · sudo -n drop_caches',
@@ -857,6 +902,7 @@ class HostDashboardMenuButton extends StatelessWidget {
     required this.onDetails,
     required this.onAudit,
     required this.onRemove,
+    this.onDiagnostic,
   });
 
   final VoidCallback onNote;
@@ -864,6 +910,7 @@ class HostDashboardMenuButton extends StatelessWidget {
   final VoidCallback onDetails;
   final VoidCallback onAudit;
   final VoidCallback onRemove;
+  final VoidCallback? onDiagnostic;
 
   @override
   Widget build(BuildContext context) {
@@ -879,6 +926,8 @@ class HostDashboardMenuButton extends StatelessWidget {
             onEdit();
           case 'details':
             onDetails();
+          case 'diagnostic':
+            onDiagnostic?.call();
           case 'audit':
             onAudit();
           case 'delete':
@@ -889,6 +938,11 @@ class HostDashboardMenuButton extends StatelessWidget {
         const PopupMenuItem(value: 'note', child: Text('Note')),
         const PopupMenuItem(value: 'edit', child: Text('Edit host')),
         const PopupMenuItem(value: 'details', child: Text('Host details')),
+        if (onDiagnostic != null)
+          const PopupMenuItem(
+            value: 'diagnostic',
+            child: Text('Diagnostic pack'),
+          ),
         const PopupMenuItem(value: 'audit', child: Text('Audit log')),
         PopupMenuItem(
           value: 'delete',

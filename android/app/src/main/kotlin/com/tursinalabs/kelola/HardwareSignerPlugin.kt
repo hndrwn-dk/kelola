@@ -1,4 +1,4 @@
-package labs.tursina.kelola
+package com.tursinalabs.kelola
 
 import android.content.Context
 import android.os.Build
@@ -261,7 +261,7 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
     )
 
     companion object {
-        private const val CHANNEL = "labs.tursina.kelola/hardware_signer"
+        private const val CHANNEL = "com.tursinalabs.kelola/hardware_signer"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val TAG = "KelolaSigner"
     }

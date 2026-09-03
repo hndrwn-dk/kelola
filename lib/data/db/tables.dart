@@ -101,6 +101,8 @@ class AppSettings extends Table {
   TextColumn get lastHostId => text().nullable()();
   TextColumn get publicKeySpkiB64 => text().nullable()();
   TextColumn get keyBackend => text().nullable()();
+  BoolColumn get widgetEnabled =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -118,4 +120,16 @@ class SearchIndexCache extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {hostId, kind, name};
+}
+
+@DataClassName('SnippetRow')
+class Snippets extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get template => text()();
+  BoolColumn get starter => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
 }

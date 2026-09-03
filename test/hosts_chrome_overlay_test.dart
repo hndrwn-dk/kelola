@@ -60,6 +60,16 @@ void main() {
       findsNothing,
     );
     expect(tester.widget<Row>(row).mainAxisSize, MainAxisSize.min);
+
+    final versionStyle = tester.widget<Text>(version).style!;
+    final keysStyle = tester.widget<Text>(keys).style!;
+    expect(versionStyle.fontFamily, 'IBMPlexSans');
+    expect(keysStyle.fontFamily, 'IBMPlexSans');
+    expect(versionStyle.fontStyle, FontStyle.italic);
+    expect(keysStyle.fontStyle, FontStyle.italic);
+    expect(versionStyle.fontSize, keysStyle.fontSize);
+    expect(versionStyle.color, keysStyle.color);
+    expect(versionStyle.height, keysStyle.height);
   });
 
   testWidgets('hosts root bar is not an opaque surface slab', (tester) async {

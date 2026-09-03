@@ -68,7 +68,7 @@ flutter test
 flutter run
 ```
 
-Package id: `labs.tursina.kelola`.
+Package id: `com.tursinalabs.kelola`.
 
 ## Layout
 

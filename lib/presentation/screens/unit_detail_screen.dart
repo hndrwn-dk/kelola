@@ -9,10 +9,12 @@ import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/unit_action_probe.dart';
 import 'package:kelola/domain/probes/unit_detail_probe.dart';
 import 'package:kelola/domain/units/service_unit.dart';
+import 'package:kelola/domain/units/undo.dart';
 import 'package:kelola/domain/units/unit_detail_view.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/screens/journal_screen.dart';
 import 'package:kelola/presentation/widgets/confirm_unit_action.dart';
+import 'package:kelola/presentation/widgets/undo_snackbar.dart';
 import 'package:kelola/providers.dart';
 
 const _actionOrder = [
@@ -93,11 +95,12 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
       _error = null;
     });
     try {
+      final action = UnitActionProbe(unitName: widget.unitName, verb: verb);
       final result = await runHostProbe(
         ref: ref,
         context: context,
         host: widget.host,
-        probe: UnitActionProbe(unitName: widget.unitName, verb: verb),
+        probe: action,
         facts: widget.facts,
       );
       if (!result.ok) {
@@ -110,6 +113,50 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
         setState(() {
           _error =
               '${verb.name} returned 0, but ${widget.unitName} is still ${result.activeState} (${result.subState}). A k3s/nginx pod can keep serving after the systemd unit stops.';
+        });
+      } else {
+        final undo = undoProbeFor(action);
+        if (undo != null && mounted) {
+          showUndoSnackBar(
+            context,
+            message: action.auditTitle,
+            onUndo: () => _undo(undo),
+          );
+        }
+      }
+      await _load();
+    } on ReadOnlyViolation {
+      setState(() => _error = 'This host is read-only.');
+    } catch (e) {
+      setState(() => _error = describeSshError(e));
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _undo(UnitActionProbe undo) async {
+    if (_busy || !mounted) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final result = await runHostProbe(
+        ref: ref,
+        context: context,
+        host: widget.host,
+        probe: undo,
+        facts: widget.facts,
+      );
+      if (!result.ok) {
+        setState(() {
+          _error = result.stderr.isEmpty
+              ? '${undo.verb.name} exited ${result.exitCode}'
+              : result.stderr;
         });
       }
       await _load();

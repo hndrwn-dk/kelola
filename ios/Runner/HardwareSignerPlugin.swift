@@ -5,7 +5,7 @@ import UIKit
 public class HardwareSignerPlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
-      name: "labs.tursina.kelola/hardware_signer",
+      name: "com.tursinalabs.kelola/hardware_signer",
       binaryMessenger: registrar.messenger()
     )
     let instance = HardwareSignerPlugin()
