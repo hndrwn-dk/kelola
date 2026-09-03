@@ -36,5 +36,9 @@ void main() {
     expect(find.byType(DestructiveConfirmSheet), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('Reboot nas-01?'), findsOneWidget);
+    final sheet = tester.widget<DestructiveConfirmSheet>(
+      find.byType(DestructiveConfirmSheet),
+    );
+    expect(sheet.confirmToken, 'nas-01');
   });
 }

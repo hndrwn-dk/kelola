@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:kelola/domain/containers/container_row.dart';
+import 'package:kelola/domain/containers/docker_ps_parser.dart';
+import 'package:kelola/domain/containers/podman_ps_parser.dart';
 
 class ContainerListParser {
   const ContainerListParser();
@@ -13,47 +15,55 @@ class ContainerListParser {
         .where((e) => e.isNotEmpty && e != 'none')
         .toList();
     final engine = engines.isEmpty
-        ? _section(stdout, 'ENGINE').trim().split('\n').first.trim()
+        ? engineBlock.trim().split('\n').first.trim()
         : engines.first;
     final pods = _parsePods(_section(stdout, 'PODS'), engine);
     final dockerDenied = stdout.contains('---DOCKER_DENIED---');
-    final body = _section(stdout, 'PS');
-    final dockerRows = _parsePs(body, _dockerEngine(engines, engine));
+    final dockerBody = _section(stdout, 'PS_DOCKER');
+    final podmanBody = _section(stdout, 'PS_PODMAN');
+    final legacy = _section(stdout, 'PS');
+    final dockerRows = dockerBody.isNotEmpty
+        ? parseDockerNdjson(dockerBody)
+        : _legacyDocker(legacy, engine);
+    final podmanRows = podmanBody.isNotEmpty
+        ? parsePodmanJson(podmanBody)
+        : _legacyPodman(legacy, dockerRows.isNotEmpty);
     return ContainerInventory(
-      rows: [...pods, ...dockerRows],
+      rows: [...pods, ...dockerRows, ...podmanRows],
       engines: engines,
       dockerDenied: dockerDenied,
     );
   }
 
-  String _dockerEngine(List<String> engines, String fallback) {
-    for (final e in engines) {
-      if (e == 'docker' || e == 'podman' || e == 'crictl') {
-        return e;
-      }
-    }
-    return fallback;
-  }
-
-  List<ContainerRow> _parsePs(String body, String engine) {
-    if (body.isEmpty) {
+  List<ContainerRow> _legacyDocker(
+    String body,
+    String engine,
+  ) {
+    final trimmed = body.trim();
+    if (trimmed.isEmpty || trimmed.startsWith('[')) {
       return const [];
     }
-    final trimmed = body.trim();
     if (trimmed.startsWith('{') && trimmed.contains('"containers"')) {
-      return _parseCrictl(trimmed, engine == 'none' ? 'crictl' : engine);
+      return _parseCrictl(
+        trimmed,
+        engine == 'none' || engine.isEmpty ? 'crictl' : engine,
+      );
     }
-    if (trimmed.startsWith('[')) {
-      return _parseArray(trimmed, engine);
+    return parseDockerNdjson(trimmed);
+  }
+
+  List<ContainerRow> _legacyPodman(
+    String body,
+    bool alreadyGotDocker,
+  ) {
+    final trimmed = body.trim();
+    if (!trimmed.startsWith('[')) {
+      return const [];
     }
-    final out = <ContainerRow>[];
-    for (final line in trimmed.split('\n')) {
-      final row = _parseObject(line.trim(), engine);
-      if (row != null) {
-        out.add(row);
-      }
+    if (alreadyGotDocker) {
+      return const [];
     }
-    return out;
+    return parsePodmanJson(trimmed);
   }
 
   List<ContainerRow> _parsePods(String raw, String engine) {
@@ -132,69 +142,6 @@ class ContainerListParser {
     } on FormatException {
       return const [];
     }
-  }
-
-  List<ContainerRow> _parseArray(String raw, String engine) {
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) {
-        return const [];
-      }
-      final out = <ContainerRow>[];
-      for (final item in decoded) {
-        if (item is Map) {
-          final row = _fromMap(item.cast<String, dynamic>(), engine);
-          if (row != null) {
-            out.add(row);
-          }
-        }
-      }
-      return out;
-    } on FormatException {
-      return const [];
-    }
-  }
-
-  ContainerRow? _parseObject(String line, String engine) {
-    if (line.isEmpty || line[0] != '{') {
-      return null;
-    }
-    try {
-      final decoded = jsonDecode(line);
-      if (decoded is! Map) {
-        return null;
-      }
-      return _fromMap(decoded.cast<String, dynamic>(), engine);
-    } on FormatException {
-      return null;
-    }
-  }
-
-  ContainerRow? _fromMap(Map<String, dynamic> map, String engine) {
-    final id = (map['ID'] ?? map['Id'] ?? '').toString();
-    if (id.isEmpty) {
-      return null;
-    }
-    var names = (map['Names'] ?? map['Name'] ?? '').toString();
-    final namesRaw = map['Names'];
-    if (namesRaw is List) {
-      names = namesRaw.map((e) => e.toString()).join(', ');
-    }
-    names = names.replaceFirst(RegExp(r'^/'), '');
-    var ports = (map['Ports'] ?? '').toString();
-    final portsRaw = map['Ports'];
-    if (portsRaw is List) {
-      ports = portsRaw.map((e) => e.toString()).join(', ');
-    }
-    return ContainerRow(
-      id: id,
-      names: names,
-      image: (map['Image'] ?? '').toString(),
-      state: (map['State'] ?? '').toString(),
-      status: (map['Status'] ?? '').toString(),
-      ports: ports,
-      engine: engine,
-    );
   }
 
   String _section(String stdout, String name) {

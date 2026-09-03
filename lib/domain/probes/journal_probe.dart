@@ -1,5 +1,6 @@
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
+import 'package:kelola/domain/journal/journal_follow.dart';
 import 'package:kelola/domain/journal/journal_parser.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
@@ -25,34 +26,14 @@ class JournalProbe extends Probe<JournalPage> {
   final bool reverse;
 
   String get _filters {
-    final args = StringBuffer();
-    final u = unit?.trim();
-    if (u != null && u.isNotEmpty) {
-      args.write(' -u ${shellSingleQuote(u)}');
-    }
-    if (priority != null) {
-      args.write(' -p $priority');
-    }
-    final g = grep?.trim();
-    if (g != null && g.isNotEmpty) {
-      args.write(' --grep ${shellSingleQuote(g)}');
-    }
-    if (untilUsec != null && untilUsec!.isNotEmpty) {
-      final sec = (int.tryParse(untilUsec!) ?? 0) ~/ 1000000;
-      if (sec > 0) {
-        args.write(' --until @$sec');
-      }
-    }
-    if (sinceUsec != null && sinceUsec!.isNotEmpty) {
-      final sec = (int.tryParse(sinceUsec!) ?? 0) ~/ 1000000;
-      if (sec > 0) {
-        args.write(' --since @$sec');
-      }
-    }
-    if (reverse) {
-      args.write(' --reverse');
-    }
-    return args.toString();
+    return journalctlFilters(
+      unit: unit,
+      priority: priority,
+      grep: grep,
+      untilUsec: untilUsec,
+      sinceUsec: sinceUsec,
+      reverse: reverse,
+    );
   }
 
   @override

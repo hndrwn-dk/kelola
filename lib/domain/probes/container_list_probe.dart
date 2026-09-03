@@ -26,7 +26,7 @@ elif command -v kubectl >/dev/null 2>&1; then
     || sudo -n kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null \
     || true
 fi
-echo "---PS---"
+echo "---PS_DOCKER---"
 if command -v docker >/dev/null 2>&1; then
   if docker info >/dev/null 2>&1; then
     docker ps -a --format '{{json .}}'
@@ -35,13 +35,12 @@ if command -v docker >/dev/null 2>&1; then
   else
     echo "---DOCKER_DENIED---"
   fi
-elif command -v podman >/dev/null 2>&1; then
-  podman ps -a --format json 2>/dev/null || sudo -n podman ps -a --format json 2>/dev/null || true
-elif command -v crictl >/dev/null 2>&1; then
-  sudo -n crictl ps -a --output json 2>/dev/null || crictl ps -a --output json 2>/dev/null || true
-elif command -v k3s >/dev/null 2>&1; then
-  sudo -n k3s crictl ps -a --output json 2>/dev/null || true
 fi
+echo "---PS_PODMAN---"
+if command -v podman >/dev/null 2>&1; then
+  podman ps -a --format json 2>/dev/null || sudo -n podman ps -a --format json 2>/dev/null || true
+fi
+echo "---PS---"
 ''';
   }
 

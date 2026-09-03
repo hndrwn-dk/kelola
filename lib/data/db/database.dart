@@ -6,7 +6,16 @@ import 'package:kelola/data/db/tables.dart';
 part 'database.g.dart';
 
 @DriftDatabase(
-  tables: [Hosts, HostKeys, CachedFacts, Recents, Pins, AuditRecords, AppSettings],
+  tables: [
+    Hosts,
+    HostKeys,
+    CachedFacts,
+    Recents,
+    Pins,
+    AuditRecords,
+    AppSettings,
+    SearchIndexCache,
+  ],
 )
 class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase() : super(driftDatabase(name: 'kelola'));
@@ -16,7 +25,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -34,6 +43,9 @@ class KelolaDatabase extends _$KelolaDatabase {
           }
           if (from < 4) {
             await m.addColumn(hosts, hosts.sudoNeedsPassword);
+          }
+          if (from < 5) {
+            await m.createTable(searchIndexCache);
           }
         },
       );

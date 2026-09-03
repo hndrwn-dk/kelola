@@ -6,8 +6,12 @@ class ContainerRow {
     required this.state,
     required this.status,
     this.ports = '',
+    this.publishedPorts = '',
     this.engine = 'docker',
     this.namespace = '',
+    this.composeProject = '',
+    this.exitCode,
+    this.labels = const {},
   });
 
   final String id;
@@ -16,8 +20,12 @@ class ContainerRow {
   final String state;
   final String status;
   final String ports;
+  final String publishedPorts;
   final String engine;
   final String namespace;
+  final String composeProject;
+  final int? exitCode;
+  final Map<String, String> labels;
 
   bool get running {
     final s = state.toLowerCase();

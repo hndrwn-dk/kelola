@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
+import 'package:kelola/domain/journal/journal_follow.dart';
 import 'package:kelola/domain/journal/journal_view.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/journal_probe.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/ssh_host_key_flow.dart';
 import 'package:kelola/providers.dart';
 
 class JournalScreen extends ConsumerStatefulWidget {
@@ -26,7 +29,10 @@ class JournalScreen extends ConsumerStatefulWidget {
 }
 
 class _JournalScreenState extends ConsumerState<JournalScreen> {
+  static const _followCap = 1000;
+
   Host? _host;
+  HostFacts? _facts;
   final _entries = <JournalEntry>[];
   String? _error;
   String? _emptyHint;
@@ -37,7 +43,10 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
   String _q = '';
   bool _searching = false;
   bool _lastHour = false;
+  bool _live = false;
+  bool _gone = false;
   String? _older;
+  JournalFollowHandle? _follow;
   final _scroll = ScrollController();
 
   @override
@@ -49,6 +58,10 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
 
   @override
   void dispose() {
+    _gone = true;
+    final follow = _follow;
+    _follow = null;
+    follow?.cancel();
     _scroll.dispose();
     super.dispose();
   }
@@ -109,6 +122,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
       );
       setState(() {
         _host = host;
+        _facts = facts;
         _hasJournald = page.hasJournald;
         _permissionDenied = page.permissionDenied;
         _emptyHint = page.emptyHint;
@@ -122,6 +136,9 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
         }
         _older = page.olderThanUsec;
       });
+      if (_live) {
+        await _startFollow();
+      }
     } catch (e) {
       setState(() => _error = describeSshError(e));
     } finally {
@@ -129,6 +146,107 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  void _prependFollow(JournalEntry e) {
+    if (!mounted) {
+      return;
+    }
+    if (!shouldAcceptFollowEntry(e, _entries)) {
+      return;
+    }
+    setState(() {
+      _entries.insert(0, e);
+      if (_entries.length > _followCap) {
+        _entries.removeRange(_followCap, _entries.length);
+      }
+    });
+  }
+
+  Future<void> _toggleLive() async {
+    if (_live) {
+      await _stopFollow();
+      if (mounted) {
+        setState(() => _live = false);
+      }
+      return;
+    }
+    setState(() => _live = true);
+    await _startFollow();
+  }
+
+  Future<void> _startFollow() async {
+    final host = _host;
+    final facts = _facts;
+    if (host == null || facts == null || !_live) {
+      return;
+    }
+    await _stopFollow();
+    try {
+      final handle = await ref.read(sessionPoolProvider).startJournalFollow(
+            host,
+            facts: facts,
+            unit: widget.unit,
+            priority: _priority,
+            grep: _q,
+            onEntry: _prependFollow,
+            onDenied: () {
+              if (!mounted) {
+                return;
+              }
+              setState(() {
+                _permissionDenied = true;
+                _live = false;
+              });
+              _stopFollow();
+            },
+            onError: (e) {
+              if (!mounted) {
+                return;
+              }
+              setState(() => _error = describeSshError(e));
+            },
+            onClosed: () {
+              if (!mounted || _gone) {
+                return;
+              }
+              if (_live) {
+                setState(() => _live = false);
+              }
+            },
+            onUnknownHostKey: (hostId, algorithm, fingerprint) {
+              return promptUnknownHostKey(
+                context,
+                hostId: hostId,
+                algorithm: algorithm,
+                fingerprint: fingerprint,
+              );
+            },
+          );
+      if (_gone || !mounted || !_live) {
+        await handle.cancel();
+        return;
+      }
+      _follow = handle;
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = describeSshError(e);
+          _live = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _stopFollow() async {
+    final handle = _follow;
+    _follow = null;
+    await handle?.cancel();
+  }
+
+  void _setFilter(VoidCallback change) {
+    setState(change);
+    _load(reset: true);
   }
 
   JournalLineKind _kind(JournalEntry e) {
@@ -212,40 +330,27 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
                     FilterPill(
                       label: 'err+',
                       selected: _priority == 3,
-                      onTap: () {
-                        setState(() => _priority = 3);
-                        _load(reset: true);
-                      },
+                      onTap: () => _setFilter(() => _priority = 3),
                     ),
                     FilterPill(
                       label: 'warn+',
                       selected: _priority == 4,
-                      onTap: () {
-                        setState(() => _priority = 4);
-                        _load(reset: true);
-                      },
+                      onTap: () => _setFilter(() => _priority = 4),
                     ),
                     FilterPill(
                       label: 'all',
                       selected: _priority == null,
-                      onTap: () {
-                        setState(() => _priority = null);
-                        _load(reset: true);
-                      },
+                      onTap: () => _setFilter(() => _priority = null),
                     ),
                     FilterPill(
                       label: '1h',
                       selected: _lastHour,
-                      onTap: () {
-                        setState(() => _lastHour = !_lastHour);
-                        _load(reset: true);
-                      },
+                      onTap: () => _setFilter(() => _lastHour = !_lastHour),
                     ),
                     FilterPill(
                       label: 'live',
-                      selected: false,
-                      enabled: false,
-                      onTap: () {},
+                      selected: _live,
+                      onTap: _toggleLive,
                     ),
                   ],
                 ),

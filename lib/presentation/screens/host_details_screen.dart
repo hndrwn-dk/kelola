@@ -6,6 +6,7 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/facts/serial_mask.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 
 class HostDetailsScreen extends StatefulWidget {
@@ -131,6 +132,14 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
                 label: 'Last connected',
                 value: last == null ? 'never' : Host.ageLabel(last),
                 mono: last != null,
+              ),
+              FactEntry(
+                label: 'Service control',
+                value: serviceControlLabel(
+                  readOnly: host.readOnly,
+                  sudoNeedsPassword: host.sudoNeedsPassword,
+                ),
+                mono: false,
               ),
             ],
           ),

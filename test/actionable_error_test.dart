@@ -28,16 +28,19 @@ void main() {
       ),
     );
 
+    final snippet = kelolaSudoHint(user: 'hendra').snippet;
     expect(find.text(sudoRequiredTitle), findsOneWidget);
     expect(find.textContaining('password'), findsWidgets);
     expect(find.textContaining('mutate'), findsWidgets);
-    expect(find.textContaining('polkit'), findsOneWidget);
-    expect(find.text(kelolaSudoersLine(user: 'hendra')), findsOneWidget);
+    expect(find.textContaining('visudo -f /etc/sudoers.d/kelola'), findsWidgets);
+    expect(find.text(snippet), findsOneWidget);
     expect(find.byTooltip('Copy'), findsOneWidget);
+    expect(snippet, isNot(contains('/bin/sh')));
+    expect(snippet, isNot(contains('NOPASSWD: ALL')));
 
     await tester.tap(find.byTooltip('Copy'));
     await tester.pump();
-    expect(copied, kelolaSudoersLine(user: 'hendra'));
+    expect(copied, snippet);
     expect(find.text('Copied'), findsOneWidget);
   });
 
@@ -54,8 +57,51 @@ void main() {
     );
 
     expect(find.byType(ActionableError), findsOneWidget);
-    expect(find.text(kelolaSudoersLine(user: 'hendra')), findsOneWidget);
+    expect(
+      find.text(kelolaSudoHint(user: 'hendra').snippet),
+      findsOneWidget,
+    );
     expect(find.text(SudoRequiredException().toString()), findsNothing);
+  });
+
+  testWidgets('KelolaError uses probe context for a unit restart sudo failure',
+      (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    final error = SudoRequiredException(
+      SudoHintContext.systemd(unit: 'nginx.service', verb: 'restart'),
+    );
+    await tester.pumpWidget(
+      KelolaApp(
+        home: Scaffold(
+          body: KelolaError(
+            message: error.toString(),
+            sudoUser: 'hendra',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(ActionableError), findsOneWidget);
+    expect(find.textContaining('systemctl restart nginx.service'), findsWidgets);
+    expect(find.textContaining('nginx.service'), findsWidgets);
+    expect(find.textContaining('/bin/sh'), findsNothing);
+    expect(find.textContaining('sshd.service'), findsNothing);
+
+    await tester.tap(find.byTooltip('Copy'));
+    await tester.pump();
+    expect(copied, contains('systemctl restart nginx.service'));
+    expect(copied, contains('visudo -f /etc/sudoers.d/kelola'));
+    expect(copied, contains('49-kelola.rules'));
+    expect(copied, isNot(contains('/bin/sh')));
   });
 
   testWidgets('KelolaError keeps ordinary errors as body copy', (tester) async {

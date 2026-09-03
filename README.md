@@ -28,11 +28,11 @@ One hardware key per phone, reused for every host. That is intentional.
 | HostFacts + dashboard | Working against Ubuntu/OpenSSH |
 | systemd units (list/detail/start/stop/restart) | Working; OpenRC lists without crashing |
 | journald logs (filter, grep, older page) | Working |
-| Disk (`df` + `du`), processes, containers | Working (read) |
+| Disk (`df` + `du`), processes, containers, SFTP files | Working |
 | Local audit log (write-before-exec, JSON copy) | Working |
 | Read-only host switch | Enforced at the SSH dispatcher |
 
-Still ahead: log follow, SFTP, tunnels, packages/firewall apply, terminal, fleet, NAT, LLM. See [`readiness/MILESTONES.md`](readiness/MILESTONES.md).
+Still ahead: tunnels, terminal, fleet, NAT, LLM. See [`readiness/MILESTONES.md`](readiness/MILESTONES.md).
 
 Specs: [`readiness/SPEC.md`](readiness/SPEC.md) · design: [`readiness/DESIGN.html`](readiness/DESIGN.html) · M0 decision: [`readiness/M0-GO-NO-GO.md`](readiness/M0-GO-NO-GO.md).
 

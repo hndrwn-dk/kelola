@@ -1,20 +1,25 @@
+import 'package:kelola/domain/containers/container_engine.dart';
+import 'package:kelola/domain/containers/container_lockout.dart';
 import 'package:kelola/domain/containers/container_row.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
-enum ContainerVerb { start, stop, restart, pause, unpause, inspect }
+enum ContainerVerb { start, stop, restart, pause, unpause, inspect, remove }
 
 class ContainerActionProbe extends Probe<String> {
   const ContainerActionProbe({
     required this.row,
     required this.verb,
+    this.sshPort = 22,
   });
 
   final ContainerRow row;
   final ContainerVerb verb;
+  final int sshPort;
 
   @override
   String command(HostFacts facts) {
@@ -33,20 +38,16 @@ LC_ALL=C
     }
     final id = shellSingleQuote(row.id);
     if (verb == ContainerVerb.inspect) {
-      return '''
-LC_ALL=C
-bin=\$(command -v docker || command -v podman || true)
-if [ -z "\$bin" ]; then echo missing engine; exit 1; fi
-("\$bin" inspect $id 2>/dev/null || sudo -n "\$bin" inspect $id 2>/dev/null) | head -n 80
-''';
+      return containerEngineScript(
+        engine: row.engine,
+        body: 'run inspect $id | head -n 80',
+      );
     }
-    final action = verb.name;
-    return '''
-LC_ALL=C
-bin=\$(command -v docker || command -v podman || true)
-if [ -z "\$bin" ]; then echo missing engine; exit 1; fi
-"\$bin" $action $id 2>/dev/null || sudo -n "\$bin" $action $id
-''';
+    final action = verb == ContainerVerb.remove ? 'rm' : verb.name;
+    return containerEngineCommand(
+      engine: row.engine,
+      args: '$action $id',
+    );
   }
 
   @override
@@ -58,7 +59,13 @@ if [ -z "\$bin" ]; then echo missing engine; exit 1; fi
     }
     if (looksLikeSudoPasswordPrompt(stderr) ||
         looksLikeSudoPasswordPrompt(stdout)) {
-      throw SudoRequiredException();
+      throw SudoRequiredException(
+        SudoHintContext.container(
+          engine: row.engine,
+          verb: verb == ContainerVerb.remove ? 'rm' : verb.name,
+          target: row.title,
+        ),
+      );
     }
     if (exitCode != 0) {
       throw KelolaException(
@@ -77,6 +84,7 @@ if [ -z "\$bin" ]; then echo missing engine; exit 1; fi
       ContainerVerb.pause => 'Paused',
       ContainerVerb.unpause => 'Unpaused',
       ContainerVerb.inspect => 'Inspected',
+      ContainerVerb.remove => 'Removed',
     };
     return '$past ${row.title}';
   }
@@ -85,6 +93,14 @@ if [ -z "\$bin" ]; then echo missing engine; exit 1; fi
   bool get needsSudo => verb != ContainerVerb.inspect;
 
   @override
-  RiskLevel get risk =>
-      verb == ContainerVerb.inspect ? RiskLevel.read : RiskLevel.mutate;
+  RiskLevel get risk {
+    if (verb == ContainerVerb.inspect) {
+      return RiskLevel.read;
+    }
+    if (verb == ContainerVerb.remove ||
+        isLockoutContainerAction(verb.name, row, sshPort: sshPort)) {
+      return RiskLevel.destructive;
+    }
+    return RiskLevel.mutate;
+  }
 }

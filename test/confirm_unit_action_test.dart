@@ -40,6 +40,10 @@ void main() {
       find.textContaining('end your session'),
       findsOneWidget,
     );
+    final stopSheet = tester.widget<DestructiveConfirmSheet>(
+      find.byType(DestructiveConfirmSheet),
+    );
+    expect(stopSheet.confirmToken, 'nas-01');
   });
 
   testWidgets('lockout restart uses DestructiveConfirmSheet', (tester) async {
@@ -68,6 +72,10 @@ void main() {
 
     expect(find.byType(DestructiveConfirmSheet), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
+    final restartSheet = tester.widget<DestructiveConfirmSheet>(
+      find.byType(DestructiveConfirmSheet),
+    );
+    expect(restartSheet.confirmToken, 'nas-01');
   });
 
   testWidgets('non-lockout stop stays a mutate dialog', (tester) async {

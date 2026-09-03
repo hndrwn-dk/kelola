@@ -3892,6 +3892,315 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   }
 }
 
+class $SearchIndexCacheTable extends SearchIndexCache
+    with TableInfo<$SearchIndexCacheTable, SearchIndexRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SearchIndexCacheTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _indexedAtMeta = const VerificationMeta(
+    'indexedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> indexedAt = GeneratedColumn<DateTime>(
+    'indexed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [hostId, kind, name, indexedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'search_index';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SearchIndexRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('indexed_at')) {
+      context.handle(
+        _indexedAtMeta,
+        indexedAt.isAcceptableOrUnknown(data['indexed_at']!, _indexedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_indexedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {hostId, kind, name};
+  @override
+  SearchIndexRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SearchIndexRow(
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      indexedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}indexed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SearchIndexCacheTable createAlias(String alias) {
+    return $SearchIndexCacheTable(attachedDatabase, alias);
+  }
+}
+
+class SearchIndexRow extends DataClass implements Insertable<SearchIndexRow> {
+  final String hostId;
+  final String kind;
+  final String name;
+  final DateTime indexedAt;
+  const SearchIndexRow({
+    required this.hostId,
+    required this.kind,
+    required this.name,
+    required this.indexedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['host_id'] = Variable<String>(hostId);
+    map['kind'] = Variable<String>(kind);
+    map['name'] = Variable<String>(name);
+    map['indexed_at'] = Variable<DateTime>(indexedAt);
+    return map;
+  }
+
+  SearchIndexCacheCompanion toCompanion(bool nullToAbsent) {
+    return SearchIndexCacheCompanion(
+      hostId: Value(hostId),
+      kind: Value(kind),
+      name: Value(name),
+      indexedAt: Value(indexedAt),
+    );
+  }
+
+  factory SearchIndexRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SearchIndexRow(
+      hostId: serializer.fromJson<String>(json['hostId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      name: serializer.fromJson<String>(json['name']),
+      indexedAt: serializer.fromJson<DateTime>(json['indexedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'hostId': serializer.toJson<String>(hostId),
+      'kind': serializer.toJson<String>(kind),
+      'name': serializer.toJson<String>(name),
+      'indexedAt': serializer.toJson<DateTime>(indexedAt),
+    };
+  }
+
+  SearchIndexRow copyWith({
+    String? hostId,
+    String? kind,
+    String? name,
+    DateTime? indexedAt,
+  }) => SearchIndexRow(
+    hostId: hostId ?? this.hostId,
+    kind: kind ?? this.kind,
+    name: name ?? this.name,
+    indexedAt: indexedAt ?? this.indexedAt,
+  );
+  SearchIndexRow copyWithCompanion(SearchIndexCacheCompanion data) {
+    return SearchIndexRow(
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      name: data.name.present ? data.name.value : this.name,
+      indexedAt: data.indexedAt.present ? data.indexedAt.value : this.indexedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SearchIndexRow(')
+          ..write('hostId: $hostId, ')
+          ..write('kind: $kind, ')
+          ..write('name: $name, ')
+          ..write('indexedAt: $indexedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(hostId, kind, name, indexedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SearchIndexRow &&
+          other.hostId == this.hostId &&
+          other.kind == this.kind &&
+          other.name == this.name &&
+          other.indexedAt == this.indexedAt);
+}
+
+class SearchIndexCacheCompanion extends UpdateCompanion<SearchIndexRow> {
+  final Value<String> hostId;
+  final Value<String> kind;
+  final Value<String> name;
+  final Value<DateTime> indexedAt;
+  final Value<int> rowid;
+  const SearchIndexCacheCompanion({
+    this.hostId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.name = const Value.absent(),
+    this.indexedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SearchIndexCacheCompanion.insert({
+    required String hostId,
+    required String kind,
+    required String name,
+    required DateTime indexedAt,
+    this.rowid = const Value.absent(),
+  }) : hostId = Value(hostId),
+       kind = Value(kind),
+       name = Value(name),
+       indexedAt = Value(indexedAt);
+  static Insertable<SearchIndexRow> custom({
+    Expression<String>? hostId,
+    Expression<String>? kind,
+    Expression<String>? name,
+    Expression<DateTime>? indexedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (hostId != null) 'host_id': hostId,
+      if (kind != null) 'kind': kind,
+      if (name != null) 'name': name,
+      if (indexedAt != null) 'indexed_at': indexedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SearchIndexCacheCompanion copyWith({
+    Value<String>? hostId,
+    Value<String>? kind,
+    Value<String>? name,
+    Value<DateTime>? indexedAt,
+    Value<int>? rowid,
+  }) {
+    return SearchIndexCacheCompanion(
+      hostId: hostId ?? this.hostId,
+      kind: kind ?? this.kind,
+      name: name ?? this.name,
+      indexedAt: indexedAt ?? this.indexedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (indexedAt.present) {
+      map['indexed_at'] = Variable<DateTime>(indexedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SearchIndexCacheCompanion(')
+          ..write('hostId: $hostId, ')
+          ..write('kind: $kind, ')
+          ..write('name: $name, ')
+          ..write('indexedAt: $indexedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$KelolaDatabase extends GeneratedDatabase {
   _$KelolaDatabase(QueryExecutor e) : super(e);
   $KelolaDatabaseManager get managers => $KelolaDatabaseManager(this);
@@ -3902,6 +4211,9 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
   late final $PinsTable pins = $PinsTable(this);
   late final $AuditRecordsTable auditRecords = $AuditRecordsTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $SearchIndexCacheTable searchIndexCache = $SearchIndexCacheTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3914,6 +4226,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     pins,
     auditRecords,
     appSettings,
+    searchIndexCache,
   ];
 }
 
@@ -5840,6 +6153,197 @@ typedef $$AppSettingsTableProcessedTableManager =
       AppSettingsRow,
       PrefetchHooks Function()
     >;
+typedef $$SearchIndexCacheTableCreateCompanionBuilder =
+    SearchIndexCacheCompanion Function({
+      required String hostId,
+      required String kind,
+      required String name,
+      required DateTime indexedAt,
+      Value<int> rowid,
+    });
+typedef $$SearchIndexCacheTableUpdateCompanionBuilder =
+    SearchIndexCacheCompanion Function({
+      Value<String> hostId,
+      Value<String> kind,
+      Value<String> name,
+      Value<DateTime> indexedAt,
+      Value<int> rowid,
+    });
+
+class $$SearchIndexCacheTableFilterComposer
+    extends Composer<_$KelolaDatabase, $SearchIndexCacheTable> {
+  $$SearchIndexCacheTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get indexedAt => $composableBuilder(
+    column: $table.indexedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SearchIndexCacheTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $SearchIndexCacheTable> {
+  $$SearchIndexCacheTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get indexedAt => $composableBuilder(
+    column: $table.indexedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SearchIndexCacheTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $SearchIndexCacheTable> {
+  $$SearchIndexCacheTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get indexedAt =>
+      $composableBuilder(column: $table.indexedAt, builder: (column) => column);
+}
+
+class $$SearchIndexCacheTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $SearchIndexCacheTable,
+          SearchIndexRow,
+          $$SearchIndexCacheTableFilterComposer,
+          $$SearchIndexCacheTableOrderingComposer,
+          $$SearchIndexCacheTableAnnotationComposer,
+          $$SearchIndexCacheTableCreateCompanionBuilder,
+          $$SearchIndexCacheTableUpdateCompanionBuilder,
+          (
+            SearchIndexRow,
+            BaseReferences<
+              _$KelolaDatabase,
+              $SearchIndexCacheTable,
+              SearchIndexRow
+            >,
+          ),
+          SearchIndexRow,
+          PrefetchHooks Function()
+        > {
+  $$SearchIndexCacheTableTableManager(
+    _$KelolaDatabase db,
+    $SearchIndexCacheTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SearchIndexCacheTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SearchIndexCacheTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SearchIndexCacheTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> hostId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<DateTime> indexedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SearchIndexCacheCompanion(
+                hostId: hostId,
+                kind: kind,
+                name: name,
+                indexedAt: indexedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String hostId,
+                required String kind,
+                required String name,
+                required DateTime indexedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SearchIndexCacheCompanion.insert(
+                hostId: hostId,
+                kind: kind,
+                name: name,
+                indexedAt: indexedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SearchIndexCacheTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $SearchIndexCacheTable,
+      SearchIndexRow,
+      $$SearchIndexCacheTableFilterComposer,
+      $$SearchIndexCacheTableOrderingComposer,
+      $$SearchIndexCacheTableAnnotationComposer,
+      $$SearchIndexCacheTableCreateCompanionBuilder,
+      $$SearchIndexCacheTableUpdateCompanionBuilder,
+      (
+        SearchIndexRow,
+        BaseReferences<
+          _$KelolaDatabase,
+          $SearchIndexCacheTable,
+          SearchIndexRow
+        >,
+      ),
+      SearchIndexRow,
+      PrefetchHooks Function()
+    >;
 
 class $KelolaDatabaseManager {
   final _$KelolaDatabase _db;
@@ -5857,4 +6361,6 @@ class $KelolaDatabaseManager {
       $$AuditRecordsTableTableManager(_db, _db.auditRecords);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$SearchIndexCacheTableTableManager get searchIndexCache =>
+      $$SearchIndexCacheTableTableManager(_db, _db.searchIndexCache);
 }

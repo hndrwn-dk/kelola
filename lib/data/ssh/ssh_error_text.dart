@@ -10,6 +10,13 @@ String describeSshError(Object error) {
   if (error is TimeoutException) {
     return 'Timed out waiting for SSH login. Pin the host key promptly, and check that the phone can reach the host address.';
   }
+  if (error is SftpStatusError) {
+    final msg = error.message.trim();
+    return msg.isEmpty ? error.toString() : msg;
+  }
+  if (error is SftpError) {
+    return error.message;
+  }
   if (error is SSHAuthFailError) {
     return 'Login failed. Check the username and that this phone\'s public key is in ~/.ssh/authorized_keys.';
   }

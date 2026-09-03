@@ -77,6 +77,7 @@ void main() {
         .readAsStringSync();
     expect(src, contains('PollBackoff'));
     expect(src, contains('DISCONNECTED'));
+    expect(src, contains("label: 'Network'"));
     expect(src, isNot(contains('} catch (_) {}')));
   });
 

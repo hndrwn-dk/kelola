@@ -21,6 +21,21 @@ void main() {
     );
   });
 
+  test('nginx restart sudo failure carries that unit as hint context', () {
+    const probe = UnitActionProbe(
+      unitName: 'nginx.service',
+      verb: UnitVerb.restart,
+    );
+    expect(
+      () => probe.parse('', 'sudo: a password is required', 1),
+      throwsA(
+        isA<SudoRequiredException>()
+            .having((e) => e.context.unit, 'unit', 'nginx.service')
+            .having((e) => e.context.verb, 'verb', 'restart'),
+      ),
+    );
+  });
+
   test('sudo interactive authentication required becomes SudoRequiredException',
       () {
     const probe = UnitActionProbe(
