@@ -10,6 +10,7 @@ import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/openssh_ecdsa.dart';
 import 'package:kelola/data/ssh/session_pool.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/incident/correlation.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
 
 final databaseProvider = Provider<KelolaDatabase>((ref) {
@@ -111,11 +112,16 @@ final hostKeyPolicyProvider = Provider<HostKeyPolicy>((ref) {
   return HostKeyPolicy(ref.watch(hostRepositoryProvider));
 });
 
+final correlationStoreProvider = Provider<CorrelationStore>((ref) {
+  return CorrelationStore();
+});
+
 final sessionPoolProvider = Provider<SshSessionPool>((ref) {
   final pool = SshSessionPool(
     repository: ref.watch(hostRepositoryProvider),
     signer: ref.watch(hardwareSignerProvider),
     hostKeys: ref.watch(hostKeyPolicyProvider),
+    correlation: ref.watch(correlationStoreProvider),
     publicBlob: () {
       final blob = ref.read(enrollmentProvider).publicBlob;
       if (blob == null) {
@@ -139,4 +145,27 @@ final recentsProvider = FutureProvider<List<Host>>((ref) {
 
 final lastHostIdProvider = FutureProvider<String?>((ref) {
   return ref.watch(hostRepositoryProvider).lastHostId();
+});
+
+final _searchUnitsFromDbProvider =
+    FutureProvider.autoDispose<List<SearchUnit>>((ref) {
+  return ref.watch(hostRepositoryProvider).listSearchUnits();
+});
+
+final _searchContainersFromDbProvider =
+    FutureProvider.autoDispose<List<SearchContainer>>((ref) {
+  return ref.watch(hostRepositoryProvider).listSearchContainers();
+});
+
+/// Last-known units from the local search index. Filled when UnitsProbe
+/// succeeds — search never SSHs to populate it.
+final cachedSearchUnitsProvider = Provider.autoDispose<List<SearchUnit>>((ref) {
+  return ref.watch(_searchUnitsFromDbProvider).valueOrNull ?? const [];
+});
+
+/// Last-known containers from the local search index. Filled when
+/// ContainerListProbe succeeds — search never SSHs to populate it.
+final cachedSearchContainersProvider =
+    Provider.autoDispose<List<SearchContainer>>((ref) {
+  return ref.watch(_searchContainersFromDbProvider).valueOrNull ?? const [];
 });

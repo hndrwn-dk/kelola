@@ -105,3 +105,17 @@ class AppSettings extends Table {
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
+
+@DataClassName('SearchIndexRow')
+class SearchIndexCache extends Table {
+  @override
+  String get tableName => 'search_index';
+
+  TextColumn get hostId => text().references(Hosts, #id)();
+  TextColumn get kind => text()();
+  TextColumn get name => text()();
+  DateTimeColumn get indexedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {hostId, kind, name};
+}

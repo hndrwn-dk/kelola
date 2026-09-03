@@ -61,6 +61,8 @@ void main() {
     expect(find.text('SYSTEM'), findsOneWidget);
     expect(find.text('TOOLING'), findsOneWidget);
     expect(find.text('SECURITY'), findsOneWidget);
+    expect(find.text('Service control'), findsOneWidget);
+    expect(find.text('sudo'), findsOneWidget);
     expect(find.text('Edit host'), findsOneWidget);
     expect(find.byType(ServiceRow), findsNothing);
 
@@ -80,6 +82,29 @@ void main() {
     await tester.tap(find.text('Edit host'));
     await tester.pump();
     expect(edited, isTrue);
+  });
+
+  testWidgets('Service control is none when sudo needs a password', (tester) async {
+    await tester.pumpWidget(
+      const KelolaApp(
+        home: HostDetailsScreen(
+          host: Host(
+            id: 'h1',
+            alias: 'nas-01',
+            address: '192.168.1.24',
+            port: 22,
+            username: 'hendra',
+            keyAlias: 'kelola-user',
+            sudoNeedsPassword: true,
+          ),
+          facts: facts,
+        ),
+      ),
+    );
+
+    expect(find.text('Service control'), findsOneWidget);
+    expect(find.text('none — read only'), findsOneWidget);
+    expect(find.textContaining('units'), findsNothing);
   });
 
   testWidgets('missing nproc shows unknown, never 1', (tester) async {

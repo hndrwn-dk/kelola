@@ -102,8 +102,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ActionableError), findsOneWidget);
-    expect(find.text(kelolaSudoersLine(user: 'hendra')), findsOneWidget);
-    expect(find.textContaining('polkit'), findsOneWidget);
+    expect(
+      find.text(kelolaSudoHint(user: 'hendra').snippet),
+      findsOneWidget,
+    );
+    expect(find.textContaining('visudo -f /etc/sudoers.d/kelola'), findsWidgets);
   });
 
   testWidgets('combined footer is one wrapping row', (tester) async {

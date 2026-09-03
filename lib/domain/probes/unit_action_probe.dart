@@ -3,6 +3,7 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/domain/units/lockout.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
@@ -46,7 +47,9 @@ rc-service $q status 2>/dev/null || true
   UnitActionResult parse(String stdout, String stderr, int exitCode) {
     if (looksLikeSudoPasswordPrompt(stderr) ||
         looksLikeSudoPasswordPrompt(stdout)) {
-      throw SudoRequiredException();
+      throw SudoRequiredException(
+        SudoHintContext.systemd(unit: unitName, verb: verb.name),
+      );
     }
     final verify = _section(stdout, 'VERIFY');
     return UnitActionResult(

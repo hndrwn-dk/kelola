@@ -10,6 +10,9 @@ import 'package:kelola/domain/probes/host_action_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/journal_probe.dart';
 import 'package:kelola/domain/probes/process_signal_probe.dart';
+import 'package:kelola/domain/probes/firewall_apply_probe.dart';
+import 'package:kelola/domain/probes/package_apply_probe.dart';
+import 'package:kelola/domain/firewall/firewall_snapshot.dart';
 import 'package:kelola/domain/probes/unit_action_probe.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 
@@ -94,6 +97,20 @@ void main() {
         verb: ContainerVerb.restart,
       ).auditTitle,
       'Restarted web',
+    );
+    expect(
+      const PackageApplyProbe(
+        names: ['openssl', 'libssl3', 'curl'],
+        securityOnly: true,
+        manager: PackageManager.apt,
+      ).auditTitle,
+      'Applied 3 security updates',
+    );
+    expect(
+      const FirewallRevertProbe(
+        FirewallChange(verb: FirewallVerb.addPort, port: '8080/tcp'),
+      ).auditTitle,
+      'Reverted firewall rule',
     );
   });
 }

@@ -3,9 +3,12 @@ import 'package:kelola/data/db/database.dart';
 import 'package:kelola/domain/audit/audit_event.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/containers/container_row.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_edit.dart';
 import 'package:kelola/domain/hosts/ssh_config_import.dart';
+import 'package:kelola/domain/search/inventory_search.dart';
+import 'package:kelola/domain/units/service_unit.dart';
 import 'package:uuid/uuid.dart';
 
 class HostRepository {
@@ -114,6 +117,8 @@ class HostRepository {
           .write(const HostsCompanion(jumpHostId: Value(null)));
       await (_db.delete(_db.hostKeys)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.cachedFacts)..where((t) => t.hostId.equals(id)))
+          .go();
+      await (_db.delete(_db.searchIndexCache)..where((t) => t.hostId.equals(id)))
           .go();
       await (_db.delete(_db.recents)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.pins)..where((t) => t.hostId.equals(id))).go();
@@ -547,6 +552,138 @@ class HostRepository {
           ),
         )
         .toList();
+  }
+
+  static const searchKindUnit = 'unit';
+  static const searchKindContainer = 'container';
+  static const searchKindFailedUnit = 'failed_unit';
+
+  Future<void> replaceSearchUnits({
+    required String hostId,
+    required List<String> names,
+    required DateTime at,
+  }) {
+    return _replaceSearchKind(
+      hostId: hostId,
+      kind: searchKindUnit,
+      names: names,
+      at: at,
+    );
+  }
+
+  Future<void> replaceSearchFailedUnits({
+    required String hostId,
+    required List<String> names,
+    required DateTime at,
+  }) {
+    return _replaceSearchKind(
+      hostId: hostId,
+      kind: searchKindFailedUnit,
+      names: names,
+      at: at,
+    );
+  }
+
+  Future<void> replaceSearchContainers({
+    required String hostId,
+    required List<String> names,
+    required DateTime at,
+  }) {
+    return _replaceSearchKind(
+      hostId: hostId,
+      kind: searchKindContainer,
+      names: names,
+      at: at,
+    );
+  }
+
+  Future<List<String>> listFailedUnitNames(String hostId) async {
+    final rows = await (_db.select(_db.searchIndexCache)
+          ..where(
+            (t) =>
+                t.hostId.equals(hostId) & t.kind.equals(searchKindFailedUnit),
+          ))
+        .get();
+    return [for (final r in rows) r.name];
+  }
+
+  Future<void> _replaceSearchKind({
+    required String hostId,
+    required String kind,
+    required List<String> names,
+    required DateTime at,
+  }) {
+    return _db.transaction(() async {
+      await (_db.delete(_db.searchIndexCache)
+            ..where((t) => t.hostId.equals(hostId) & t.kind.equals(kind)))
+          .go();
+      final seen = <String>{};
+      for (final raw in names) {
+        final name = raw.trim();
+        if (name.isEmpty || !seen.add(name)) {
+          continue;
+        }
+        await _db.into(_db.searchIndexCache).insert(
+              SearchIndexCacheCompanion.insert(
+                hostId: hostId,
+                kind: kind,
+                name: name,
+                indexedAt: at.toUtc(),
+              ),
+            );
+      }
+    });
+  }
+
+  Future<List<SearchUnit>> listSearchUnits() async {
+    final aliases = await _hostAliases();
+    final rows = await (_db.select(_db.searchIndexCache)
+          ..where((t) => t.kind.equals(searchKindUnit)))
+        .get();
+    return rows
+        .map(
+          (row) => SearchUnit(
+            hostId: row.hostId,
+            hostAlias: aliases[row.hostId] ?? row.hostId,
+            unit: ServiceUnit(
+              name: row.name,
+              description: '',
+              load: '',
+              active: '',
+              sub: '',
+            ),
+            indexedAt: row.indexedAt,
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<SearchContainer>> listSearchContainers() async {
+    final aliases = await _hostAliases();
+    final rows = await (_db.select(_db.searchIndexCache)
+          ..where((t) => t.kind.equals(searchKindContainer)))
+        .get();
+    return rows
+        .map(
+          (row) => SearchContainer(
+            hostId: row.hostId,
+            hostAlias: aliases[row.hostId] ?? row.hostId,
+            row: ContainerRow(
+              id: row.name,
+              names: row.name,
+              image: '',
+              state: '',
+              status: '',
+            ),
+            indexedAt: row.indexedAt,
+          ),
+        )
+        .toList();
+  }
+
+  Future<Map<String, String>> _hostAliases() async {
+    final rows = await _db.select(_db.hosts).get();
+    return {for (final r in rows) r.id: r.alias};
   }
 
   Host _toHost(HostRow row, {String? prettyName, String? osId}) {

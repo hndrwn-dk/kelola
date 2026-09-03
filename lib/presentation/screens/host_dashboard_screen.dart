@@ -18,11 +18,15 @@ import 'package:kelola/presentation/nav.dart';
 import 'package:kelola/presentation/screens/audit_screen.dart';
 import 'package:kelola/presentation/screens/containers_screen.dart';
 import 'package:kelola/presentation/screens/disk_screen.dart';
+import 'package:kelola/presentation/screens/firewall_screen.dart';
+import 'package:kelola/presentation/screens/files_screen.dart';
+import 'package:kelola/presentation/screens/packages_screen.dart';
 import 'package:kelola/presentation/screens/host_key_mismatch_screen.dart';
 import 'package:kelola/presentation/screens/host_details_screen.dart';
 import 'package:kelola/presentation/screens/edit_host_screen.dart';
 import 'package:kelola/presentation/screens/journal_screen.dart';
 import 'package:kelola/presentation/screens/metrics_screen.dart';
+import 'package:kelola/presentation/screens/network_screen.dart';
 import 'package:kelola/presentation/screens/processes_screen.dart';
 import 'package:kelola/presentation/screens/terminal_sheet.dart';
 import 'package:kelola/presentation/screens/units_screen.dart';
@@ -31,6 +35,7 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/probes/host_action_probe.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
+import 'package:kelola/presentation/widgets/incident_sheet.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart' show keyBackendLabel;
 import 'package:kelola/providers.dart';
@@ -307,9 +312,17 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 status: HealthStatus.failed,
                 name: '${dash.failedUnitCount} units failed',
                 meta: dash.failedUnitNames.isEmpty
-                    ? 'open services, failed first'
+                    ? 'open incident'
                     : dash.failedUnitNames.join(' · '),
-                onTap: () => _openUnits(failedOnly: true),
+                pillText: '${dash.failedUnitCount} failed',
+                onTap: host == null
+                    ? null
+                    : () => openHostIncident(
+                          context,
+                          ref,
+                          host,
+                          failedUnitNames: dash.failedUnitNames,
+                        ),
               ),
               const SizedBox(height: 8),
             ] else if (dash != null && dash.diskRootPercent >= 90) ...[
@@ -317,8 +330,11 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 risk: RiskLevel.read,
                 status: HealthStatus.warning,
                 name: '/ at ${dash.diskRootPercent}%',
-                meta: 'open df, then du',
-                onTap: () => _open((id) => DiskScreen(hostId: id)),
+                meta: 'open incident',
+                pillText: 'disk ${dash.diskRootPercent}%',
+                onTap: host == null
+                    ? null
+                    : () => openHostIncident(context, ref, host),
               ),
               const SizedBox(height: 8),
             ],
@@ -504,9 +520,37 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 const SizedBox(width: 7),
                 Expanded(
                   child: ToolTile(
-                    label: 'Note',
-                    meta: 'local',
-                    onTap: _editNote,
+                    label: 'Packages',
+                    meta: 'updates',
+                    onTap: () => _open((id) => PackagesScreen(hostId: id)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Expanded(
+                  child: ToolTile(
+                    label: 'Firewall',
+                    meta: 'rules',
+                    onTap: () => _open((id) => FirewallScreen(hostId: id)),
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: ToolTile(
+                    label: 'Network',
+                    meta: 'ip ss',
+                    onTap: () => _open((id) => NetworkScreen(hostId: id)),
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: ToolTile(
+                    label: 'Files',
+                    meta: 'sftp',
+                    onTap: () => _open((id) => FilesScreen(hostId: id)),
                   ),
                 ),
               ],

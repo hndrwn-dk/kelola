@@ -2,6 +2,7 @@ import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
 enum HostVerb { reboot, poweroff, dropCaches }
@@ -27,7 +28,12 @@ class HostActionProbe extends Probe<String> {
   String parse(String stdout, String stderr, int exitCode) {
     if (looksLikeSudoPasswordPrompt(stderr) ||
         looksLikeSudoPasswordPrompt(stdout)) {
-      throw SudoRequiredException();
+      throw SudoRequiredException(switch (verb) {
+        HostVerb.reboot => const SudoHintContext(kind: SudoHintKind.hostReboot),
+        HostVerb.poweroff =>
+          const SudoHintContext(kind: SudoHintKind.hostPoweroff),
+        HostVerb.dropCaches => const SudoHintContext.dropCaches(),
+      });
     }
     if (exitCode != 0) {
       throw KelolaException(

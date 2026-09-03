@@ -10,6 +10,7 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_inventory_view.dart';
 import 'package:kelola/domain/hosts/pooled_run.dart';
+import 'package:kelola/domain/incident/incident_sheet.dart';
 import 'package:kelola/presentation/host_inventory_ping.dart';
 import 'package:kelola/presentation/screens/add_host_screen.dart';
 import 'package:kelola/presentation/screens/audit_screen.dart';
@@ -18,6 +19,7 @@ import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/screens/search_screen.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
 import 'package:kelola/presentation/widgets/host_list_actions.dart';
+import 'package:kelola/presentation/widgets/incident_sheet.dart';
 import 'package:kelola/providers.dart';
 
 class HostsScreen extends ConsumerStatefulWidget {
@@ -385,8 +387,13 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         name: host.alias,
         meta: host.subtitle,
         detail: hostInventoryDetail(host),
+        pillText: incidentChipLabel(host),
+        pillStatus: _health(host),
         compact: true,
         onTap: () => _openHost(host),
+        onPillTap: incidentChipLabel(host) == null
+            ? null
+            : () => openHostIncident(context, ref, host),
         onLongPress: () => _hostActions(host),
       ),
     );

@@ -3,6 +3,7 @@ import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/processes/process_row.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
 enum ProcessSignal { term, kill }
@@ -58,7 +59,13 @@ exit \$ec
     }
     if (looksLikeSudoPasswordPrompt(stderr) ||
         looksLikeSudoPasswordPrompt(stdout)) {
-      throw SudoRequiredException();
+      throw SudoRequiredException(
+        SudoHintContext(
+          kind: SudoHintKind.processSignal,
+          verb: signal == ProcessSignal.kill ? 'KILL' : 'TERM',
+          target: '$pid',
+        ),
+      );
     }
     if (exitCode != 0) {
       throw KelolaException(

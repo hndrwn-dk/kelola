@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/presentation/ssh_host_key_flow.dart';
@@ -12,11 +13,15 @@ Future<T> runHostProbe<T>({
   required Host host,
   required Probe<T> probe,
   HostFacts? facts,
+  void Function(int done, int? total)? onProgress,
+  TransferCancel? cancel,
 }) {
   return ref.read(sessionPoolProvider).execute(
         host,
         probe,
         facts: facts,
+        onProgress: onProgress,
+        cancel: cancel,
         onUnknownHostKey: (hostId, algorithm, fingerprint) {
           return promptUnknownHostKey(
             context,

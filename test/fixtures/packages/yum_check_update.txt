@@ -1,0 +1,2 @@
+openssl.x86_64    1:1.1.1k-1.el8    updates
+bash.x86_64       4.4.20-4.el8      updates

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -13,8 +14,21 @@ import 'package:kelola/domain/audit/probe_audit_policy.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/journal/journal_entry.dart';
+import 'package:kelola/domain/journal/journal_follow.dart';
+import 'package:kelola/data/ssh/dart_sftp_port.dart';
+import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/probes/sftp_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/search/search_index_write.dart';
+import 'package:kelola/domain/incident/correlation.dart';
+
+typedef JournalFollowOpener = Future<JournalFollowChannel> Function({
+  required Host host,
+  required String command,
+  UnknownHostKeyHandler? onUnknownHostKey,
+});
 
 class SshSessionPool {
   SshSessionPool({
@@ -23,23 +37,43 @@ class SshSessionPool {
     required HostKeyPolicy hostKeys,
     required Uint8List Function() publicBlob,
     this.maxPerHost = 3,
+    JournalFollowOpener? followOpener,
+    CorrelationStore? correlation,
   })  : _repository = repository,
         _signer = signer,
         _hostKeys = hostKeys,
-        _publicBlob = publicBlob;
+        _publicBlob = publicBlob,
+        _followOpener = followOpener,
+        _correlation = correlation ?? CorrelationStore();
 
   final HostRepository _repository;
   final HardwareSigner _signer;
   final HostKeyPolicy _hostKeys;
   final Uint8List Function() _publicBlob;
   final int maxPerHost;
+  final JournalFollowOpener? _followOpener;
+  final CorrelationStore _correlation;
 
   final Map<String, List<SSHClient>> _pool = {};
+  final Map<String, SSHClient> _followClients = {};
+  final Map<String, JournalFollowHandle> _follows = {};
   final ProbeAuditPolicy _auditPolicy = ProbeAuditPolicy();
 
   bool hasLiveSession(String hostId) {
     final list = _pool[hostId];
-    return list != null && list.any((c) => !c.isClosed);
+    if (list != null && list.any((c) => !c.isClosed)) {
+      return true;
+    }
+    final follow = _followClients[hostId];
+    return follow != null && !follow.isClosed;
+  }
+
+  int get activeFollowCount =>
+      _follows.values.where((h) => h.isOpen).length;
+
+  bool hasActiveFollow(String hostId) {
+    final handle = _follows[hostId];
+    return handle != null && handle.isOpen;
   }
 
   Future<T> execute<T>(
@@ -47,6 +81,8 @@ class SshSessionPool {
     Probe<T> probe, {
     HostFacts? facts,
     UnknownHostKeyHandler? onUnknownHostKey,
+    void Function(int done, int? total)? onProgress,
+    TransferCancel? cancel,
   }) async {
     if (host.username == 'root') {
       throw RootLoginRejectedException();
@@ -83,18 +119,37 @@ class SshSessionPool {
     }
     try {
       final client = await _acquire(host, onUnknownHostKey: onUnknownHostKey);
-      final result = await client.runWithResult(command).timeout(probe.timeout);
-      final parsed = probe.parse(
-        utf8.decode(result.stdout),
-        utf8.decode(result.stderr),
-        result.exitCode ?? -1,
-      );
+      late final T parsed;
+      int? exitCode = 0;
+      if (probe is SftpProbe<T>) {
+        final sftp = await client.sftp();
+        try {
+          final future = probe.run(
+            DartSshSftpPort(sftp),
+            onProgress: onProgress,
+            cancel: cancel,
+          );
+          parsed = probe.isStream
+              ? await future
+              : await future.timeout(probe.timeout);
+        } finally {
+          await sftp.close();
+        }
+      } else {
+        final result = await client.runWithResult(command).timeout(probe.timeout);
+        exitCode = result.exitCode;
+        parsed = probe.parse(
+          utf8.decode(result.stdout),
+          utf8.decode(result.stderr),
+          result.exitCode ?? -1,
+        );
+      }
       _auditPolicy.onSuccess(host.id);
       final durationMs = DateTime.now().difference(started).inMilliseconds;
       if (auditId != null) {
         await _repository.finishAudit(
           auditId,
-          exitCode: result.exitCode,
+          exitCode: exitCode,
           durationMs: durationMs,
         );
       } else {
@@ -106,13 +161,19 @@ class SshSessionPool {
           command: draft.command,
           risk: draft.risk,
           usedSudo: draft.usedSudo,
-          exitCode: result.exitCode,
+          exitCode: exitCode,
           durationMs: durationMs,
         );
       }
       if (draft.usedSudo) {
         await _repository.setSudoNeedsPassword(host.id, false);
       }
+      await writeSearchIndexFromProbe(
+        repo: _repository,
+        hostId: host.id,
+        parsed: parsed,
+      );
+      _correlation.ingest(host.id, probe, parsed);
       return parsed;
     } catch (e) {
       final durationMs = DateTime.now().difference(started).inMilliseconds;
@@ -158,6 +219,77 @@ class SshSessionPool {
       }
       rethrow;
     }
+  }
+
+  Future<JournalFollowHandle> startJournalFollow(
+    Host host, {
+    required HostFacts facts,
+    required void Function(JournalEntry entry) onEntry,
+    String? unit,
+    int? priority,
+    String? grep,
+    void Function()? onDenied,
+    void Function(Object error)? onError,
+    void Function()? onClosed,
+    UnknownHostKeyHandler? onUnknownHostKey,
+  }) async {
+    await stopJournalFollow(host.id);
+    final command = JournalFollowCommand(
+      unit: unit,
+      priority: priority,
+      grep: grep,
+    ).command(facts);
+    final opener = _followOpener ?? _openFollowChannel;
+    final channel = await opener(
+      host: host,
+      command: command,
+      onUnknownHostKey: onUnknownHostKey,
+    );
+    final handle = JournalFollowHandle.bind(
+      channel: channel,
+      onEntry: onEntry,
+      onDenied: onDenied,
+      onError: onError,
+      onClosed: onClosed,
+    );
+    _follows[host.id] = handle;
+    return handle;
+  }
+
+  Future<void> stopJournalFollow(String hostId) async {
+    final handle = _follows.remove(hostId);
+    await handle?.cancel();
+  }
+
+  Future<JournalFollowChannel> _openFollowChannel({
+    required Host host,
+    required String command,
+    UnknownHostKeyHandler? onUnknownHostKey,
+  }) async {
+    final stale = _followClients.remove(host.id);
+    if (stale != null && !stale.isClosed) {
+      await stale.close();
+    }
+    _pool[host.id]?.removeWhere((c) => c.isClosed);
+    final used = _pool[host.id]?.length ?? 0;
+    if (used >= maxPerHost) {
+      await _pool[host.id]!.removeLast().close();
+    }
+    final client = await _open(
+      host,
+      {host.id},
+      onUnknownHostKey: onUnknownHostKey,
+    );
+    _followClients[host.id] = client;
+    final session = await client.execute(
+      command,
+      pty: journalFollowRequiresPty ? const SSHPtyConfig() : null,
+    );
+    return _DartSshFollowChannel(
+      client: client,
+      session: session,
+      onClosed: () => _followClients.remove(host.id),
+    );
   }
 
   Future<SSHClient> _acquire(
@@ -249,6 +381,11 @@ class SshSessionPool {
   }
 
   Future<void> disconnect(String hostId) async {
+    await stopJournalFollow(hostId);
+    final follow = _followClients.remove(hostId);
+    if (follow != null && !follow.isClosed) {
+      await follow.close();
+    }
     final list = _pool.remove(hostId) ?? [];
     for (final c in list) {
       await c.close();
@@ -256,8 +393,51 @@ class SshSessionPool {
   }
 
   Future<void> closeAll() async {
-    for (final id in _pool.keys.toList()) {
+    final ids = {..._pool.keys, ..._followClients.keys, ..._follows.keys};
+    for (final id in ids) {
       await disconnect(id);
     }
+  }
+}
+
+class _DartSshFollowChannel implements JournalFollowChannel {
+  _DartSshFollowChannel({
+    required SSHClient client,
+    required SSHSession session,
+    required this.onClosed,
+  })  : _client = client,
+        _session = session {
+    // Drain stderr so a full stderr window cannot stall stdout.
+    _stderrSub = _session.stderr.listen((_) {}, onError: (_) {});
+  }
+
+  final SSHClient _client;
+  final SSHSession _session;
+  final void Function() onClosed;
+  StreamSubscription<List<int>>? _stderrSub;
+  bool _closed = false;
+
+  @override
+  Stream<List<int>> get stdout => _session.stdout;
+
+  @override
+  bool get isClosed => _closed || _client.isClosed;
+
+  @override
+  Future<void> close() async {
+    if (_closed) {
+      return;
+    }
+    _closed = true;
+    await _stderrSub?.cancel();
+    _stderrSub = null;
+    try {
+      _session.kill(SSHSignal.TERM);
+    } catch (_) {}
+    _session.close();
+    if (!_client.isClosed) {
+      await _client.close();
+    }
+    onClosed();
   }
 }

@@ -1,0 +1,15 @@
+NOTE: This is only a simulation!
+Reading package lists...
+Building dependency tree...
+Calculating upgrade...
+The following packages will be upgraded:
+  curl libssl3 openssl tzdata
+4 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Inst libssl3 [3.0.11-1~deb12u2] (3.0.13-1~deb12u1 Debian-Security:12/stable-security [amd64])
+Inst openssl [3.0.11-1~deb12u2] (3.0.13-1~deb12u1 Debian-Security:12/stable-security [amd64])
+Inst curl [7.88.1-10+deb12u5] (7.88.1-10+deb12u6 Debian:12/stable [amd64])
+Inst tzdata [2024a-0+deb12u1] (2024b-0+deb12u1 Debian:12/stable [amd64])
+Conf libssl3 (3.0.13-1~deb12u1 Debian-Security:12/stable-security [amd64])
+Conf openssl (3.0.13-1~deb12u1 Debian-Security:12/stable-security [amd64])
+Conf curl (7.88.1-10+deb12u6 Debian:12/stable [amd64])
+Conf tzdata (2024b-0+deb12u1 Debian:12/stable [amd64])

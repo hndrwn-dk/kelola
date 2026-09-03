@@ -3,6 +3,7 @@ import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/probes/host_action_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 
 void main() {
   test('reboot and poweroff are destructive sudo -n', () {
@@ -19,6 +20,20 @@ void main() {
     expect(p.risk, RiskLevel.mutate);
     expect(p.command(HostFacts.undiscovered), contains('drop_caches'));
     expect(p.command(HostFacts.undiscovered), contains('sudo -n'));
+  });
+
+  test('drop caches sudo failure is not passwordless-capable', () {
+    const probe = HostActionProbe(HostVerb.dropCaches);
+    expect(
+      () => probe.parse('', 'sudo: a password is required', 1),
+      throwsA(
+        isA<SudoRequiredException>().having(
+          (e) => e.context.kind,
+          'kind',
+          SudoHintKind.dropCaches,
+        ),
+      ),
+    );
   });
 
   test('sudo password required becomes SudoRequiredException', () {

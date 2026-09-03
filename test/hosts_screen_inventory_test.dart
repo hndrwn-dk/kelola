@@ -90,6 +90,7 @@ void main() {
       find.text('2 failed · disk 91% · checked 4m ago'),
       findsOneWidget,
     );
+    expect(find.text('2 FAILED'), findsOneWidget);
     expect(find.byType(OsIcon), findsWidgets);
     expect(find.byType(SectionSlab), findsNWidgets(3));
   });

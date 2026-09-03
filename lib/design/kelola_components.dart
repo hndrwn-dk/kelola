@@ -253,6 +253,7 @@ class ServiceRow extends StatelessWidget {
   final bool compact;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final VoidCallback? onPillTap;
 
   const ServiceRow({
     super.key,
@@ -270,6 +271,7 @@ class ServiceRow extends StatelessWidget {
     this.compact = false,
     this.onTap,
     this.onLongPress,
+    this.onPillTap,
   });
 
   @override
@@ -365,12 +367,24 @@ class ServiceRow extends StatelessWidget {
             ],
             if (pillText != null) ...[
               const SizedBox(width: 8),
-              _Pill(
-                text: pillText!,
-                risk: risk,
-                status: pillStatus,
-                dim: status == HealthStatus.unknown,
-              ),
+              if (onPillTap != null)
+                GestureDetector(
+                  onTap: onPillTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: _Pill(
+                    text: pillText!,
+                    risk: risk,
+                    status: pillStatus,
+                    dim: status == HealthStatus.unknown,
+                  ),
+                )
+              else
+                _Pill(
+                  text: pillText!,
+                  risk: risk,
+                  status: pillStatus,
+                  dim: status == HealthStatus.unknown,
+                ),
             ],
             if (onTap != null && endValue == null) ...[
               const SizedBox(width: 6),
@@ -664,7 +678,7 @@ class DestructiveConfirmSheet extends StatefulWidget {
   final String title;
   final String consequence;
   final String warning;
-  final String confirmToken; // e.g. the hostname
+  final String confirmToken; // name of the object being destroyed
   final VoidCallback onConfirmed;
 
   const DestructiveConfirmSheet({
@@ -968,12 +982,19 @@ class ActionableError extends StatelessWidget {
     required this.snippet,
   });
 
-  factory ActionableError.sudo({Key? key, String user = 'YOURUSER'}) {
+  factory ActionableError.sudo({
+    Key? key,
+    String user = 'YOURUSER',
+    SudoHintContext context = const SudoHintContext(),
+    String? message,
+  }) {
+    final ctx = message == null ? context : SudoHintContext.tryParse(message);
+    final hint = kelolaSudoHint(user: user, context: ctx);
     return ActionableError(
       key: key,
       title: sudoRequiredTitle,
-      body: sudoRequiredBody,
-      snippet: kelolaSudoersLine(user: user),
+      body: hint.body,
+      snippet: hint.snippet,
     );
   }
 
@@ -1040,7 +1061,10 @@ class KelolaError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (looksLikeSudoRequired(message)) {
-      return ActionableError.sudo(user: sudoUser ?? 'YOURUSER');
+      return ActionableError.sudo(
+        user: sudoUser ?? 'YOURUSER',
+        message: message,
+      );
     }
     return Text(
       message,

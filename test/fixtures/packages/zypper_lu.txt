@@ -1,0 +1,4 @@
+S | Repository | Name    | Current Version | Available Version | Arch
+--+------------+---------+-----------------+-------------------+-------
+v | repo-oss   | openssl | 3.0.8-1.1       | 3.0.8-2.1         | x86_64
+v | repo-oss   | curl    | 8.0.1-1.1       | 8.0.1-2.1         | x86_64
