@@ -3621,12 +3621,28 @@ class $AppSettingsTable extends AppSettings
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _widgetEnabledMeta = const VerificationMeta(
+    'widgetEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> widgetEnabled = GeneratedColumn<bool>(
+    'widget_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("widget_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
     lastHostId,
     publicKeySpkiB64,
     keyBackend,
+    widgetEnabled,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3667,6 +3683,15 @@ class $AppSettingsTable extends AppSettings
         keyBackend.isAcceptableOrUnknown(data['key_backend']!, _keyBackendMeta),
       );
     }
+    if (data.containsKey('widget_enabled')) {
+      context.handle(
+        _widgetEnabledMeta,
+        widgetEnabled.isAcceptableOrUnknown(
+          data['widget_enabled']!,
+          _widgetEnabledMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3692,6 +3717,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.string,
         data['${effectivePrefix}key_backend'],
       ),
+      widgetEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}widget_enabled'],
+      )!,
     );
   }
 
@@ -3706,11 +3735,13 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   final String? lastHostId;
   final String? publicKeySpkiB64;
   final String? keyBackend;
+  final bool widgetEnabled;
   const AppSettingsRow({
     required this.id,
     this.lastHostId,
     this.publicKeySpkiB64,
     this.keyBackend,
+    required this.widgetEnabled,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3725,6 +3756,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     if (!nullToAbsent || keyBackend != null) {
       map['key_backend'] = Variable<String>(keyBackend);
     }
+    map['widget_enabled'] = Variable<bool>(widgetEnabled);
     return map;
   }
 
@@ -3740,6 +3772,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       keyBackend: keyBackend == null && nullToAbsent
           ? const Value.absent()
           : Value(keyBackend),
+      widgetEnabled: Value(widgetEnabled),
     );
   }
 
@@ -3753,6 +3786,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       lastHostId: serializer.fromJson<String?>(json['lastHostId']),
       publicKeySpkiB64: serializer.fromJson<String?>(json['publicKeySpkiB64']),
       keyBackend: serializer.fromJson<String?>(json['keyBackend']),
+      widgetEnabled: serializer.fromJson<bool>(json['widgetEnabled']),
     );
   }
   @override
@@ -3763,6 +3797,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       'lastHostId': serializer.toJson<String?>(lastHostId),
       'publicKeySpkiB64': serializer.toJson<String?>(publicKeySpkiB64),
       'keyBackend': serializer.toJson<String?>(keyBackend),
+      'widgetEnabled': serializer.toJson<bool>(widgetEnabled),
     };
   }
 
@@ -3771,6 +3806,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     Value<String?> lastHostId = const Value.absent(),
     Value<String?> publicKeySpkiB64 = const Value.absent(),
     Value<String?> keyBackend = const Value.absent(),
+    bool? widgetEnabled,
   }) => AppSettingsRow(
     id: id ?? this.id,
     lastHostId: lastHostId.present ? lastHostId.value : this.lastHostId,
@@ -3778,6 +3814,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
         ? publicKeySpkiB64.value
         : this.publicKeySpkiB64,
     keyBackend: keyBackend.present ? keyBackend.value : this.keyBackend,
+    widgetEnabled: widgetEnabled ?? this.widgetEnabled,
   );
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
@@ -3791,6 +3828,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       keyBackend: data.keyBackend.present
           ? data.keyBackend.value
           : this.keyBackend,
+      widgetEnabled: data.widgetEnabled.present
+          ? data.widgetEnabled.value
+          : this.widgetEnabled,
     );
   }
 
@@ -3800,13 +3840,15 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('id: $id, ')
           ..write('lastHostId: $lastHostId, ')
           ..write('publicKeySpkiB64: $publicKeySpkiB64, ')
-          ..write('keyBackend: $keyBackend')
+          ..write('keyBackend: $keyBackend, ')
+          ..write('widgetEnabled: $widgetEnabled')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, lastHostId, publicKeySpkiB64, keyBackend);
+  int get hashCode =>
+      Object.hash(id, lastHostId, publicKeySpkiB64, keyBackend, widgetEnabled);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3814,7 +3856,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.id == this.id &&
           other.lastHostId == this.lastHostId &&
           other.publicKeySpkiB64 == this.publicKeySpkiB64 &&
-          other.keyBackend == this.keyBackend);
+          other.keyBackend == this.keyBackend &&
+          other.widgetEnabled == this.widgetEnabled);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
@@ -3822,29 +3865,34 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<String?> lastHostId;
   final Value<String?> publicKeySpkiB64;
   final Value<String?> keyBackend;
+  final Value<bool> widgetEnabled;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.lastHostId = const Value.absent(),
     this.publicKeySpkiB64 = const Value.absent(),
     this.keyBackend = const Value.absent(),
+    this.widgetEnabled = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
     this.lastHostId = const Value.absent(),
     this.publicKeySpkiB64 = const Value.absent(),
     this.keyBackend = const Value.absent(),
+    this.widgetEnabled = const Value.absent(),
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
     Expression<String>? lastHostId,
     Expression<String>? publicKeySpkiB64,
     Expression<String>? keyBackend,
+    Expression<bool>? widgetEnabled,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (lastHostId != null) 'last_host_id': lastHostId,
       if (publicKeySpkiB64 != null) 'public_key_spki_b64': publicKeySpkiB64,
       if (keyBackend != null) 'key_backend': keyBackend,
+      if (widgetEnabled != null) 'widget_enabled': widgetEnabled,
     });
   }
 
@@ -3853,12 +3901,14 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<String?>? lastHostId,
     Value<String?>? publicKeySpkiB64,
     Value<String?>? keyBackend,
+    Value<bool>? widgetEnabled,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
       lastHostId: lastHostId ?? this.lastHostId,
       publicKeySpkiB64: publicKeySpkiB64 ?? this.publicKeySpkiB64,
       keyBackend: keyBackend ?? this.keyBackend,
+      widgetEnabled: widgetEnabled ?? this.widgetEnabled,
     );
   }
 
@@ -3877,6 +3927,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     if (keyBackend.present) {
       map['key_backend'] = Variable<String>(keyBackend.value);
     }
+    if (widgetEnabled.present) {
+      map['widget_enabled'] = Variable<bool>(widgetEnabled.value);
+    }
     return map;
   }
 
@@ -3886,7 +3939,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('id: $id, ')
           ..write('lastHostId: $lastHostId, ')
           ..write('publicKeySpkiB64: $publicKeySpkiB64, ')
-          ..write('keyBackend: $keyBackend')
+          ..write('keyBackend: $keyBackend, ')
+          ..write('widgetEnabled: $widgetEnabled')
           ..write(')'))
         .toString();
   }
@@ -4201,6 +4255,367 @@ class SearchIndexCacheCompanion extends UpdateCompanion<SearchIndexRow> {
   }
 }
 
+class $SnippetsTable extends Snippets
+    with TableInfo<$SnippetsTable, SnippetRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SnippetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _templateMeta = const VerificationMeta(
+    'template',
+  );
+  @override
+  late final GeneratedColumn<String> template = GeneratedColumn<String>(
+    'template',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _starterMeta = const VerificationMeta(
+    'starter',
+  );
+  @override
+  late final GeneratedColumn<bool> starter = GeneratedColumn<bool>(
+    'starter',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("starter" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    template,
+    starter,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'snippets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SnippetRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('template')) {
+      context.handle(
+        _templateMeta,
+        template.isAcceptableOrUnknown(data['template']!, _templateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_templateMeta);
+    }
+    if (data.containsKey('starter')) {
+      context.handle(
+        _starterMeta,
+        starter.isAcceptableOrUnknown(data['starter']!, _starterMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SnippetRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SnippetRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      template: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}template'],
+      )!,
+      starter: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}starter'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SnippetsTable createAlias(String alias) {
+    return $SnippetsTable(attachedDatabase, alias);
+  }
+}
+
+class SnippetRow extends DataClass implements Insertable<SnippetRow> {
+  final String id;
+  final String name;
+  final String template;
+  final bool starter;
+  final DateTime updatedAt;
+  const SnippetRow({
+    required this.id,
+    required this.name,
+    required this.template,
+    required this.starter,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['template'] = Variable<String>(template);
+    map['starter'] = Variable<bool>(starter);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  SnippetsCompanion toCompanion(bool nullToAbsent) {
+    return SnippetsCompanion(
+      id: Value(id),
+      name: Value(name),
+      template: Value(template),
+      starter: Value(starter),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory SnippetRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SnippetRow(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      template: serializer.fromJson<String>(json['template']),
+      starter: serializer.fromJson<bool>(json['starter']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'template': serializer.toJson<String>(template),
+      'starter': serializer.toJson<bool>(starter),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  SnippetRow copyWith({
+    String? id,
+    String? name,
+    String? template,
+    bool? starter,
+    DateTime? updatedAt,
+  }) => SnippetRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    template: template ?? this.template,
+    starter: starter ?? this.starter,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  SnippetRow copyWithCompanion(SnippetsCompanion data) {
+    return SnippetRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      template: data.template.present ? data.template.value : this.template,
+      starter: data.starter.present ? data.starter.value : this.starter,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SnippetRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('template: $template, ')
+          ..write('starter: $starter, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, template, starter, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SnippetRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.template == this.template &&
+          other.starter == this.starter &&
+          other.updatedAt == this.updatedAt);
+}
+
+class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> template;
+  final Value<bool> starter;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const SnippetsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.template = const Value.absent(),
+    this.starter = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SnippetsCompanion.insert({
+    required String id,
+    required String name,
+    required String template,
+    this.starter = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       template = Value(template),
+       updatedAt = Value(updatedAt);
+  static Insertable<SnippetRow> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? template,
+    Expression<bool>? starter,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (template != null) 'template': template,
+      if (starter != null) 'starter': starter,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SnippetsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? template,
+    Value<bool>? starter,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return SnippetsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      template: template ?? this.template,
+      starter: starter ?? this.starter,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (template.present) {
+      map['template'] = Variable<String>(template.value);
+    }
+    if (starter.present) {
+      map['starter'] = Variable<bool>(starter.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SnippetsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('template: $template, ')
+          ..write('starter: $starter, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$KelolaDatabase extends GeneratedDatabase {
   _$KelolaDatabase(QueryExecutor e) : super(e);
   $KelolaDatabaseManager get managers => $KelolaDatabaseManager(this);
@@ -4214,6 +4629,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
   late final $SearchIndexCacheTable searchIndexCache = $SearchIndexCacheTable(
     this,
   );
+  late final $SnippetsTable snippets = $SnippetsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4227,6 +4643,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     auditRecords,
     appSettings,
     searchIndexCache,
+    snippets,
   ];
 }
 
@@ -5978,6 +6395,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<String?> lastHostId,
       Value<String?> publicKeySpkiB64,
       Value<String?> keyBackend,
+      Value<bool> widgetEnabled,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -5985,6 +6403,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<String?> lastHostId,
       Value<String?> publicKeySpkiB64,
       Value<String?> keyBackend,
+      Value<bool> widgetEnabled,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -6013,6 +6432,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<String> get keyBackend => $composableBuilder(
     column: $table.keyBackend,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get widgetEnabled => $composableBuilder(
+    column: $table.widgetEnabled,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6045,6 +6469,11 @@ class $$AppSettingsTableOrderingComposer
     column: $table.keyBackend,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get widgetEnabled => $composableBuilder(
+    column: $table.widgetEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -6071,6 +6500,11 @@ class $$AppSettingsTableAnnotationComposer
 
   GeneratedColumn<String> get keyBackend => $composableBuilder(
     column: $table.keyBackend,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get widgetEnabled => $composableBuilder(
+    column: $table.widgetEnabled,
     builder: (column) => column,
   );
 }
@@ -6110,11 +6544,13 @@ class $$AppSettingsTableTableManager
                 Value<String?> lastHostId = const Value.absent(),
                 Value<String?> publicKeySpkiB64 = const Value.absent(),
                 Value<String?> keyBackend = const Value.absent(),
+                Value<bool> widgetEnabled = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 lastHostId: lastHostId,
                 publicKeySpkiB64: publicKeySpkiB64,
                 keyBackend: keyBackend,
+                widgetEnabled: widgetEnabled,
               ),
           createCompanionCallback:
               ({
@@ -6122,11 +6558,13 @@ class $$AppSettingsTableTableManager
                 Value<String?> lastHostId = const Value.absent(),
                 Value<String?> publicKeySpkiB64 = const Value.absent(),
                 Value<String?> keyBackend = const Value.absent(),
+                Value<bool> widgetEnabled = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 lastHostId: lastHostId,
                 publicKeySpkiB64: publicKeySpkiB64,
                 keyBackend: keyBackend,
+                widgetEnabled: widgetEnabled,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -6344,6 +6782,206 @@ typedef $$SearchIndexCacheTableProcessedTableManager =
       SearchIndexRow,
       PrefetchHooks Function()
     >;
+typedef $$SnippetsTableCreateCompanionBuilder =
+    SnippetsCompanion Function({
+      required String id,
+      required String name,
+      required String template,
+      Value<bool> starter,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$SnippetsTableUpdateCompanionBuilder =
+    SnippetsCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> template,
+      Value<bool> starter,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$SnippetsTableFilterComposer
+    extends Composer<_$KelolaDatabase, $SnippetsTable> {
+  $$SnippetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get template => $composableBuilder(
+    column: $table.template,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get starter => $composableBuilder(
+    column: $table.starter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SnippetsTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $SnippetsTable> {
+  $$SnippetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get template => $composableBuilder(
+    column: $table.template,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get starter => $composableBuilder(
+    column: $table.starter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SnippetsTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $SnippetsTable> {
+  $$SnippetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get template =>
+      $composableBuilder(column: $table.template, builder: (column) => column);
+
+  GeneratedColumn<bool> get starter =>
+      $composableBuilder(column: $table.starter, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$SnippetsTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $SnippetsTable,
+          SnippetRow,
+          $$SnippetsTableFilterComposer,
+          $$SnippetsTableOrderingComposer,
+          $$SnippetsTableAnnotationComposer,
+          $$SnippetsTableCreateCompanionBuilder,
+          $$SnippetsTableUpdateCompanionBuilder,
+          (
+            SnippetRow,
+            BaseReferences<_$KelolaDatabase, $SnippetsTable, SnippetRow>,
+          ),
+          SnippetRow,
+          PrefetchHooks Function()
+        > {
+  $$SnippetsTableTableManager(_$KelolaDatabase db, $SnippetsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SnippetsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SnippetsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SnippetsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> template = const Value.absent(),
+                Value<bool> starter = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SnippetsCompanion(
+                id: id,
+                name: name,
+                template: template,
+                starter: starter,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String template,
+                Value<bool> starter = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SnippetsCompanion.insert(
+                id: id,
+                name: name,
+                template: template,
+                starter: starter,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SnippetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $SnippetsTable,
+      SnippetRow,
+      $$SnippetsTableFilterComposer,
+      $$SnippetsTableOrderingComposer,
+      $$SnippetsTableAnnotationComposer,
+      $$SnippetsTableCreateCompanionBuilder,
+      $$SnippetsTableUpdateCompanionBuilder,
+      (
+        SnippetRow,
+        BaseReferences<_$KelolaDatabase, $SnippetsTable, SnippetRow>,
+      ),
+      SnippetRow,
+      PrefetchHooks Function()
+    >;
 
 class $KelolaDatabaseManager {
   final _$KelolaDatabase _db;
@@ -6363,4 +7001,6 @@ class $KelolaDatabaseManager {
       $$AppSettingsTableTableManager(_db, _db.appSettings);
   $$SearchIndexCacheTableTableManager get searchIndexCache =>
       $$SearchIndexCacheTableTableManager(_db, _db.searchIndexCache);
+  $$SnippetsTableTableManager get snippets =>
+      $$SnippetsTableTableManager(_db, _db.snippets);
 }

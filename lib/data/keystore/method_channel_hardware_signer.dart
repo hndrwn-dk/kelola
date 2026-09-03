@@ -5,7 +5,7 @@ import 'package:kelola/domain/facts/enums.dart';
 class MethodChannelHardwareSigner implements HardwareSigner {
   MethodChannelHardwareSigner({
     MethodChannel channel = const MethodChannel(
-      'labs.tursina.kelola/hardware_signer',
+      'com.tursinalabs.kelola/hardware_signer',
     ),
   }) : _channel = channel;
 

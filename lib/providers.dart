@@ -9,6 +9,7 @@ import 'package:kelola/data/keystore/method_channel_hardware_signer.dart';
 import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/openssh_ecdsa.dart';
 import 'package:kelola/data/ssh/session_pool.dart';
+import 'package:kelola/data/widget/home_widget_bridge.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/incident/correlation.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
@@ -114,6 +115,10 @@ final hostKeyPolicyProvider = Provider<HostKeyPolicy>((ref) {
 
 final correlationStoreProvider = Provider<CorrelationStore>((ref) {
   return CorrelationStore();
+});
+
+final homeWidgetBridgeProvider = Provider<HomeWidgetBridge>((ref) {
+  return const MethodChannelHomeWidgetBridge();
 });
 
 final sessionPoolProvider = Provider<SshSessionPool>((ref) {

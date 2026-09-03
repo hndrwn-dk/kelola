@@ -28,10 +28,20 @@ CREATE TABLE hosts (
 );
 ''';
 
+const _v4AppSettingsSql = '''
+CREATE TABLE app_settings (
+  id INTEGER NOT NULL PRIMARY KEY,
+  last_host_id TEXT NULL,
+  public_key_spki_b64 TEXT NULL,
+  key_backend TEXT NULL
+);
+''';
+
 void main() {
   test('onUpgrade from schema 4 creates search_index', () async {
     final raw = sqlite3.openInMemory();
     raw.execute(_v4HostsSql);
+    raw.execute(_v4AppSettingsSql);
     raw.execute('PRAGMA user_version = 4');
 
     final tablesBefore = raw
@@ -53,10 +63,17 @@ void main() {
     expect(tablesAfter, isNotEmpty);
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 5);
+    expect(version.data['user_version'], 7);
 
     final cols = await db.customSelect('PRAGMA table_info(search_index)').get();
     final names = cols.map((r) => r.read<String>('name')).toSet();
     expect(names, containsAll(['host_id', 'kind', 'name', 'indexed_at']));
+
+    final settingsCols =
+        await db.customSelect('PRAGMA table_info(app_settings)').get();
+    expect(
+      settingsCols.map((r) => r.read<String>('name')).toSet(),
+      contains('widget_enabled'),
+    );
   });
 }

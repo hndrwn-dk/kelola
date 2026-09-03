@@ -8,6 +8,8 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_edit.dart';
 import 'package:kelola/domain/hosts/ssh_config_import.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
+import 'package:kelola/domain/snippets/snippet.dart';
+import 'package:kelola/domain/snippets/starters.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:uuid/uuid.dart';
 
@@ -707,6 +709,72 @@ class HostRepository {
       prettyName: prettyName,
       osId: osId,
       sudoNeedsPassword: row.sudoNeedsPassword,
+    );
+  }
+
+  Future<bool> widgetEnabled() async {
+    return (await _settings())?.widgetEnabled ?? false;
+  }
+
+  Future<void> setWidgetEnabled(bool value) async {
+    final existing = await _settings();
+    await _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion(
+            id: const Value(1),
+            lastHostId: Value(existing?.lastHostId),
+            publicKeySpkiB64: Value(existing?.publicKeySpkiB64),
+            keyBackend: Value(existing?.keyBackend),
+            widgetEnabled: Value(value),
+          ),
+        );
+  }
+
+  Future<List<Snippet>> listSnippets() async {
+    var rows = await _db.select(_db.snippets).get();
+    if (rows.isEmpty) {
+      await seedShippedSnippets();
+      rows = await _db.select(_db.snippets).get();
+    }
+    return rows.map(_toSnippet).toList();
+  }
+
+  Future<void> seedShippedSnippets() async {
+    final now = DateTime.now().toUtc();
+    for (final s in shippedSnippets) {
+      await _db.into(_db.snippets).insertOnConflictUpdate(
+            SnippetsCompanion(
+              id: Value(s.id),
+              name: Value(s.name),
+              template: Value(s.template),
+              starter: Value(s.starter),
+              updatedAt: Value(now),
+            ),
+          );
+    }
+  }
+
+  Future<void> upsertSnippet(Snippet snippet) {
+    return _db.into(_db.snippets).insertOnConflictUpdate(
+          SnippetsCompanion(
+            id: Value(snippet.id),
+            name: Value(snippet.name),
+            template: Value(snippet.template),
+            starter: Value(snippet.starter),
+            updatedAt: Value(DateTime.now().toUtc()),
+          ),
+        );
+  }
+
+  Future<void> deleteSnippet(String id) {
+    return (_db.delete(_db.snippets)..where((t) => t.id.equals(id))).go();
+  }
+
+  Snippet _toSnippet(SnippetRow row) {
+    return Snippet(
+      id: row.id,
+      name: row.name,
+      template: row.template,
+      starter: row.starter,
     );
   }
 }

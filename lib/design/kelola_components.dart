@@ -1925,18 +1925,9 @@ class HostsColophon extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(
-                  'v$version',
-                  style: KelolaType.mono(color: c.muted, size: 11),
-                ),
+                Text('v$version', style: _colophonStyle(c)),
                 const SizedBox(width: 8),
-                Text(
-                  'Keys stay on this device',
-                  style: KelolaType.body(color: c.muted, size: 11).copyWith(
-                    fontStyle: FontStyle.italic,
-                    height: 1.4,
-                  ),
-                ),
+                Text('Keys stay on this device', style: _colophonStyle(c)),
               ],
             ),
           ),
@@ -1944,5 +1935,12 @@ class HostsColophon extends StatelessWidget {
       ),
     );
   }
+}
+
+TextStyle _colophonStyle(KelolaColors c) {
+  return KelolaType.body(color: c.muted, size: 11).copyWith(
+    fontStyle: FontStyle.italic,
+    height: 1.4,
+  );
 }
 

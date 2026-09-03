@@ -19,6 +19,7 @@ import 'package:kelola/domain/probes/unit_list_probe.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/confirm_unit_action.dart';
+import 'package:kelola/presentation/widgets/diagnostic_pack_sheet.dart';
 import 'package:kelola/providers.dart';
 
 Future<void> showIncidentSheet(
@@ -78,6 +79,7 @@ class IncidentSheetPanel extends StatelessWidget {
     required this.view,
     this.onAction,
     this.onLookUp,
+    this.onDiagnostic,
     this.error,
   });
 
@@ -85,6 +87,7 @@ class IncidentSheetPanel extends StatelessWidget {
   final IncidentSheetView view;
   final void Function(IncidentAction action)? onAction;
   final void Function(CorrelationLookUp lookUp)? onLookUp;
+  final VoidCallback? onDiagnostic;
   final String? error;
 
   @override
@@ -202,6 +205,15 @@ class IncidentSheetPanel extends StatelessWidget {
                 const SizedBox(height: 6),
               ],
             ],
+            if (onDiagnostic != null) ...[
+              const SizedBox(height: 6),
+              ServiceRow(
+                risk: RiskLevel.read,
+                name: 'Diagnostic pack',
+                meta: 'preview then share',
+                onTap: onDiagnostic,
+              ),
+            ],
           ],
         ),
       ),
@@ -241,6 +253,7 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
       error: _error,
       onAction: _act,
       onLookUp: _lookUp,
+      onDiagnostic: () => openDiagnosticPack(context, ref, widget.host),
     );
   }
 
