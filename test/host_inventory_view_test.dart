@@ -105,7 +105,7 @@ void main() {
     expect(view.summary, '2 hosts · 1 needs attention · 1 healthy');
   });
 
-  test('second sub-line uses 15-minute staleness on the check age', () {
+  test('inventory detail metrics moved to Fleet; Hosts keep pill only', () {
     final fresh = _host(
       alias: 'nas-01',
       attention: HostAttention.failedUnits,
@@ -121,15 +121,9 @@ void main() {
       attentionAt: now.subtract(const Duration(minutes: 16)),
     );
     expect(fresh.isAttentionStale(now: now), isFalse);
-    expect(
-      hostInventoryDetail(fresh, now: now),
-      '2 failed · disk 91% · checked 4m ago',
-    );
+    expect(hostInventoryDetail(fresh, now: now), isNull);
     expect(stale.isAttentionStale(now: now), isTrue);
-    expect(
-      hostInventoryDetail(stale, now: now),
-      '2 failed · disk 91% · checked 16m ago',
-    );
+    expect(hostInventoryDetail(stale, now: now), isNull);
     expect(hostInventoryDetail(_host(alias: 'ub'), now: now), isNull);
   });
 

@@ -6,7 +6,7 @@ import 'package:kelola/domain/packages/package_commands.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 
-/// Single read round-trip for fleet health grid. Timeout capped at 10s.
+/// Single batched read for fleet tiles. No sleep / dual /proc/stat.
 class FleetHealthProbe extends Probe<FleetHostHealth> {
   const FleetHealthProbe({this.hostId = '', this.alias = ''});
 
@@ -34,10 +34,20 @@ echo "---FAILED_NAMES---"
         ? r'''
 echo "---PENDING---"
 echo 0
+echo "---SECURITY---"
+echo 0
 '''
         : '''
 echo "---PENDING---"
 { ${PackageCommands.listUpdates(facts.pkg)} 2>/dev/null || true; } | grep -cve '^\$' || echo 0
+echo "---SECURITY---"
+{ ${PackageCommands.listSecurity(facts.pkg)} 2>/dev/null || true; } | grep -cve '^\$\\|^N/A' || echo 0
+''';
+    final nproc = facts.nprocCores != null
+        ? 'echo "---NPROC---"\necho ${facts.nprocCores}\n'
+        : r'''
+echo "---NPROC---"
+nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0
 ''';
     return '''
 LC_ALL=C
@@ -45,44 +55,92 @@ echo "---UPTIME---"
 cat /proc/uptime
 echo "---LOAD---"
 cat /proc/loadavg
-echo "---STAT1---"
-head -1 /proc/stat
-echo "---STAT2---"
-head -1 /proc/stat
+$nproc
 echo "---MEM---"
 cat /proc/meminfo
 echo "---DISK---"
 df -PT
 $failed
 $pending
+echo "---CONTAINERS---"
+if command -v docker >/dev/null 2>&1; then
+  docker ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null \\
+    || sudo -n docker ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null \\
+    || true
+elif command -v podman >/dev/null 2>&1; then
+  podman ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null \\
+    || sudo -n podman ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null \\
+    || true
+fi
+echo "---REBOOT---"
+if [ -f /var/run/reboot-required ]; then echo 1; else echo 0; fi
 ''';
   }
 
   @override
   FleetHostHealth parse(String stdout, String stderr, int exitCode) {
+    final sections = _sections(stdout);
     final dash = const DashboardParser().parse(stdout);
-    final pending = _pending(stdout);
+    final nproc = int.tryParse((sections['NPROC'] ?? '').trim()) ?? 0;
+    final pending = int.tryParse((sections['PENDING'] ?? '').trim().split('\n').first) ?? 0;
+    final security =
+        int.tryParse((sections['SECURITY'] ?? '').trim().split('\n').first) ?? 0;
+    final reboot = (sections['REBOOT'] ?? '').trim().startsWith('1');
+    final containers = countFleetContainerTrouble(
+      (sections['CONTAINERS'] ?? '').split('\n'),
+    );
+    final highDisk = _highDiskMounts(sections['DISK'] ?? '');
     return FleetHostHealth(
       hostId: hostId,
       alias: alias,
       reachable: true,
       load1: dash.load1,
+      nprocCores: nproc > 0 ? nproc : null,
+      memPercent: dash.memUsedPercent,
       diskRootPercent: dash.diskRootPercent,
+      highDiskMounts: highDisk,
       failedUnitCount: dash.failedUnitCount,
       pendingUpdates: pending,
+      securityUpdates: security,
+      containersDown: containers.down,
+      containersUnhealthy: containers.unhealthy,
+      uptime: dash.uptime,
+      rebootRequired: reboot,
       fetchedAt: DateTime.now().toUtc(),
     );
   }
 
-  static int _pending(String stdout) {
-    const marker = '---PENDING---';
-    final i = stdout.indexOf(marker);
-    if (i < 0) {
-      return 0;
+  static Map<String, String> _sections(String stdout) {
+    final sections = <String, String>{};
+    final re = RegExp(r'^---([A-Z0-9_]+)---\s*$', multiLine: true);
+    final matches = re.allMatches(stdout).toList();
+    for (var i = 0; i < matches.length; i++) {
+      final name = matches[i].group(1)!;
+      final start = matches[i].end;
+      final end = i + 1 < matches.length ? matches[i + 1].start : stdout.length;
+      sections[name] = stdout.substring(start, end).trim();
     }
-    final rest = stdout.substring(i + marker.length).trimLeft();
-    final line = rest.split('\n').first.trim();
-    return int.tryParse(line) ?? 0;
+    return sections;
+  }
+
+  static List<String> _highDiskMounts(String df) {
+    final out = <String>[];
+    for (final line in df.split('\n').skip(1)) {
+      final cols = line.trim().split(RegExp(r'\s+'));
+      if (cols.length < 7) {
+        continue;
+      }
+      final mount = cols.last;
+      final cap = cols[cols.length - 2].replaceAll('%', '');
+      final pct = int.tryParse(cap) ?? 0;
+      if (mount == '/') {
+        continue;
+      }
+      if (pct > FleetHostHealth.diskWarnMount) {
+        out.add('$mount:$pct%');
+      }
+    }
+    return out;
   }
 
   @override

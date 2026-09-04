@@ -10,7 +10,7 @@ import 'package:kelola/domain/hosts/pooled_run.dart';
 import 'package:kelola/domain/probes/fleet_health_probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/presentation/host_session.dart';
-import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
+import 'package:kelola/presentation/widgets/fleet_host_sheet.dart';
 import 'package:kelola/providers.dart';
 
 class FleetScreen extends ConsumerStatefulWidget {
@@ -27,7 +27,6 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
   String? _tagFilter;
   String? _error;
   bool _refreshing = false;
-  var _loadedCache = false;
 
   @override
   void initState() {
@@ -43,9 +42,10 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
       return;
     }
     setState(() {
-      _byId.addAll(cache);
+      _byId
+        ..clear()
+        ..addAll(cache);
       _allTags = tags;
-      _loadedCache = true;
     });
     await _refresh();
   }
@@ -94,29 +94,35 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
           probe: probe,
         );
         final live = FleetHostHealth(
-          hostId: health.hostId.isEmpty ? host.id : health.hostId,
-          alias: health.alias.isEmpty ? host.alias : health.alias,
+          hostId: host.id,
+          alias: host.alias,
           reachable: true,
           load1: health.load1,
+          nprocCores: health.nprocCores,
+          memPercent: health.memPercent,
           diskRootPercent: health.diskRootPercent,
+          highDiskMounts: health.highDiskMounts,
           failedUnitCount: health.failedUnitCount,
           pendingUpdates: health.pendingUpdates,
+          securityUpdates: health.securityUpdates,
+          containersDown: health.containersDown,
+          containersUnhealthy: health.containersUnhealthy,
+          uptime: health.uptime,
+          rebootRequired: health.rebootRequired,
           fetchedAt: DateTime.now().toUtc(),
         );
         await ref.read(hostRepositoryProvider).saveFleetCache(live);
         if (!mounted) {
           return;
         }
+        // Progressive: paint this tile as soon as the host finishes.
         setState(() {
           _byId[host.id] = live;
           _loading.remove(host.id);
         });
       },
       onItemDone: (host, error) async {
-        if (!mounted) {
-          return;
-        }
-        if (error == null) {
+        if (!mounted || error == null) {
           return;
         }
         final cached = _byId[host.id];
@@ -125,26 +131,23 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
           alias: host.alias,
           reachable: false,
           load1: cached?.load1 ?? 0,
+          nprocCores: cached?.nprocCores,
+          memPercent: cached?.memPercent ?? 0,
           diskRootPercent: cached?.diskRootPercent ?? 0,
+          highDiskMounts: cached?.highDiskMounts ?? const [],
           failedUnitCount: cached?.failedUnitCount ?? 0,
           pendingUpdates: cached?.pendingUpdates ?? 0,
-          fetchedAt: cached?.fetchedAt ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+          securityUpdates: cached?.securityUpdates ?? 0,
+          containersDown: cached?.containersDown ?? 0,
+          containersUnhealthy: cached?.containersUnhealthy ?? 0,
+          uptime: cached?.uptime ?? Duration.zero,
+          rebootRequired: cached?.rebootRequired ?? false,
+          fetchedAt: cached?.fetchedAt ??
+              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
           fromCache: cached != null,
         );
         if (cached != null) {
-          await ref.read(hostRepositoryProvider).saveFleetCache(
-                FleetHostHealth(
-                  hostId: unreachable.hostId,
-                  alias: unreachable.alias,
-                  reachable: false,
-                  load1: cached.load1,
-                  diskRootPercent: cached.diskRootPercent,
-                  failedUnitCount: cached.failedUnitCount,
-                  pendingUpdates: cached.pendingUpdates,
-                  fetchedAt: cached.fetchedAt,
-                  fromCache: true,
-                ),
-              );
+          await ref.read(hostRepositoryProvider).saveFleetCache(unreachable);
         }
         if (!mounted) {
           return;
@@ -167,12 +170,36 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
       case FleetSeverity.unreachable:
         return RiskLevel.destructive;
       case FleetSeverity.failedUnits:
+      case FleetSeverity.badContainers:
       case FleetSeverity.diskHigh:
         return RiskLevel.mutate;
+      case FleetSeverity.securityUpdates:
       case FleetSeverity.pendingUpdates:
       case FleetSeverity.loadHigh:
+      case FleetSeverity.memHigh:
+      case FleetSeverity.rebootRequired:
       case FleetSeverity.healthy:
         return RiskLevel.read;
+    }
+  }
+
+  HealthStatus? _statusFor(FleetHostHealth h) {
+    switch (h.severity) {
+      case FleetSeverity.unreachable:
+        return HealthStatus.unknown;
+      case FleetSeverity.failedUnits:
+      case FleetSeverity.badContainers:
+        return HealthStatus.failed;
+      case FleetSeverity.diskHigh:
+      case FleetSeverity.securityUpdates:
+      case FleetSeverity.loadHigh:
+      case FleetSeverity.memHigh:
+        return HealthStatus.warning;
+      case FleetSeverity.pendingUpdates:
+      case FleetSeverity.rebootRequired:
+        return HealthStatus.warning;
+      case FleetSeverity.healthy:
+        return HealthStatus.healthy;
     }
   }
 
@@ -201,6 +228,8 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
     ];
     final filtered = filterFleetByTag(rows, tagsByHost, _tagFilter);
     final sorted = sortFleetHealth(filtered);
+    final width = MediaQuery.sizeOf(context).width;
+    final columns = width >= 720 ? 4 : (width >= 480 ? 3 : 2);
 
     return Scaffold(
       backgroundColor: c.ink,
@@ -225,7 +254,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
             child: Text(
-              'Read probes only · cap 5 · 10s/host',
+              'Tiles fill as hosts finish · read only · cap 5 · 10s',
               style: KelolaType.mono(color: c.dim, size: 9.5, letterSpacing: 0.5),
             ),
           ),
@@ -270,13 +299,17 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                           style: KelolaType.body(color: c.muted, size: 14),
                         ),
                       )
-                    : ListView.separated(
+                    : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(14, 0, 14, 28),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          childAspectRatio: columns >= 3 ? 1.15 : 1.05,
+                        ),
                         itemCount: sorted.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 6),
                         itemBuilder: (context, i) {
                           final row = sorted[i];
-                          final loading = _loading.contains(row.hostId);
                           final host = hosts.firstWhere(
                             (h) => h.id == row.hostId,
                             orElse: () => Host(
@@ -288,24 +321,18 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                               keyAlias: '',
                             ),
                           );
-                          final tags = host.tags.isEmpty
-                              ? ''
-                              : ' · ${host.tags.join(', ')}';
-                          return ServiceRow(
+                          return FleetHostTile(
+                            alias: row.alias,
+                            summary: row.tileSummary(),
                             risk: _riskFor(row),
-                            name: row.alias,
-                            meta: loading && !_loadedCache
-                                ? 'checking…'
-                                : '${row.metaLine()}$tags',
-                            pillText: loading ? '…' : null,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) =>
-                                      HostDashboardScreen(hostId: host.id),
-                                ),
-                              );
-                            },
+                            status: _statusFor(row),
+                            loading: _loading.contains(row.hostId),
+                            onTap: () => openFleetHostSheet(
+                              context,
+                              ref,
+                              host: host,
+                              health: row,
+                            ),
                           );
                         },
                       ),

@@ -15,6 +15,7 @@ import 'package:kelola/domain/probes/journal_probe.dart';
 import 'package:kelola/domain/probes/network_list_probe.dart';
 import 'package:kelola/domain/probes/process_list_probe.dart';
 import 'package:kelola/domain/probes/unit_action_probe.dart';
+import 'package:kelola/domain/probes/unit_detail_probe.dart';
 import 'package:kelola/domain/probes/unit_list_probe.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/data/llm/assist_service.dart';
@@ -23,6 +24,7 @@ import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/confirm_unit_action.dart';
 import 'package:kelola/presentation/widgets/diagnostic_pack_sheet.dart';
 import 'package:kelola/domain/llm/assist_request.dart';
+import 'package:kelola/domain/llm/explain_context.dart';
 import 'package:kelola/providers.dart';
 
 Future<void> showIncidentSheet(
@@ -85,6 +87,7 @@ class IncidentSheetPanel extends StatelessWidget {
     this.onDiagnostic,
     this.onExplain,
     this.error,
+    this.status,
   });
 
   final Host host;
@@ -94,6 +97,7 @@ class IncidentSheetPanel extends StatelessWidget {
   final VoidCallback? onDiagnostic;
   final VoidCallback? onExplain;
   final String? error;
+  final String? status;
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +128,13 @@ class IncidentSheetPanel extends StatelessWidget {
               style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
             ),
             const SizedBox(height: 12),
+            if (status != null) ...[
+              Text(
+                status!,
+                style: KelolaType.body(color: c.muted, size: 12),
+              ),
+              const SizedBox(height: 10),
+            ],
             if (error != null) ...[
               KelolaError(message: error!, sudoUser: host.username),
               const SizedBox(height: 10),
@@ -251,6 +262,7 @@ class _LiveIncidentSheet extends ConsumerStatefulWidget {
 
 class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
   String? _error;
+  String? _status;
 
   IncidentSheetView get _view {
     return buildIncidentSheet(
@@ -265,32 +277,38 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
       host: widget.host,
       view: _view,
       error: _error,
+      status: _status,
       onAction: _act,
       onLookUp: _lookUp,
       onDiagnostic: () => openDiagnosticPack(context, ref, widget.host),
-      onExplain: () => _explain(),
+      onExplain: _status != null ? null : () => _explain(),
     );
   }
 
   Future<void> _explain() async {
     final host = widget.host;
-    final view = _view;
-    final focus = view.focus;
+    setState(() {
+      _error = null;
+      _status = 'Preparing context…';
+    });
     try {
       final settings = await requireAssistSettings(ref);
       if (!mounted) {
         return;
       }
-      final journal = view.lines
-          .map((e) => e.message)
-          .where((m) => m.trim().isNotEmpty)
-          .take(50)
-          .join('\n');
+      var view = _view;
+      final focus = view.focus;
       final hostnames = [host.alias, host.address];
       final usernames = [host.username];
       late final AssistRequest request;
       late final Future<String> Function(AssistService service) run;
+
       if (focus?.kind == IncidentObjectKind.disk) {
+        var journal = view.lines
+            .map((e) => e.message)
+            .where((m) => m.trim().isNotEmpty)
+            .take(50)
+            .join('\n');
         request = AssistRequest(
           system:
               'Explain what is consuming disk space. '
@@ -308,23 +326,94 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
             );
       } else {
         final unit = focus?.name ?? 'unknown.unit';
+        var showOutput = focus?.summary ?? '';
+        var journal = view.lines
+            .map((e) => e.message)
+            .where((m) => m.trim().isNotEmpty)
+            .take(50)
+            .join('\n');
+        final needsFetch = !view.logsInCache || journal.trim().isEmpty;
+        if (needsFetch) {
+          if (!mounted) {
+            return;
+          }
+          setState(() => _status = 'Loading unit journal…');
+          final facts =
+              await ref.read(hostRepositoryProvider).facts(host.id) ??
+                  HostFacts.undiscovered;
+          if (!mounted) {
+            return;
+          }
+          final detail = await runHostProbe(
+            ref: ref,
+            context: context,
+            host: host,
+            facts: facts,
+            probe: UnitDetailProbe(unit),
+          );
+          if (!mounted) {
+            return;
+          }
+          showOutput = formatUnitShowForAssist(detail);
+          journal = journalLinesFromUnitDetail(detail).join('\n');
+          setState(() {}); // refresh sheet from correlation ingest
+          view = _view;
+          if (journal.trim().isEmpty && view.logsInCache) {
+            journal = view.lines.map((e) => e.message).join('\n');
+          }
+        } else if (showOutput == 'failed' || showOutput.trim().isEmpty) {
+          // Summary alone is too thin — still pull systemctl show.
+          if (!mounted) {
+            return;
+          }
+          setState(() => _status = 'Loading unit status…');
+          final facts =
+              await ref.read(hostRepositoryProvider).facts(host.id) ??
+                  HostFacts.undiscovered;
+          if (!mounted) {
+            return;
+          }
+          final detail = await runHostProbe(
+            ref: ref,
+            context: context,
+            host: host,
+            facts: facts,
+            probe: UnitDetailProbe(unit),
+          );
+          if (!mounted) {
+            return;
+          }
+          showOutput = formatUnitShowForAssist(detail);
+          if (journal.trim().isEmpty) {
+            journal = journalLinesFromUnitDetail(detail).join('\n');
+          }
+          setState(() {});
+        }
+
         request = AssistRequest(
           system:
               'Explain why this systemd unit failed in plain language. '
+              'Ground the answer in the journal and systemctl show fields. '
+              'Quote the concrete error line when present. '
               'Suggest one next step. Do not invent facts absent from the input.',
-          user: 'Unit: $unit\n\n--- journal ---\n$journal',
+          user: 'Unit: $unit\n\n--- show ---\n$showOutput\n\n--- journal ---\n$journal',
           hostnames: hostnames,
           usernames: usernames,
         );
         run = (s) => s.explainFailedUnit(
               settings: settings,
               unitName: unit,
-              showOutput: focus?.summary ?? '',
+              showOutput: showOutput,
               journal: journal,
               hostnames: hostnames,
               usernames: usernames,
             );
       }
+
+      if (!mounted) {
+        return;
+      }
+      setState(() => _status = 'Asking model…');
       final text = await runAssistWithPreview(
         context: context,
         ref: ref,
@@ -332,19 +421,30 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
         request: request,
         run: run,
       );
-      if (!mounted || text == null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _status = null);
+      if (text == null) {
         return;
       }
       await showAssistResult(context, title: 'Explain', body: text);
     } catch (e) {
       if (mounted) {
-        setState(() => _error = describeSshError(e));
+        setState(() {
+          _status = null;
+          _error = describeSshError(e);
+        });
       }
     }
   }
 
   Future<void> _lookUp(CorrelationLookUp lookUp) async {
     final host = widget.host;
+    setState(() {
+      _error = null;
+      _status = 'Looking up…';
+    });
     try {
       final facts =
           await ref.read(hostRepositoryProvider).facts(host.id) ??
@@ -411,11 +511,17 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
           );
       }
       if (mounted) {
-        setState(() => _error = null);
+        setState(() {
+          _error = null;
+          _status = null;
+        });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _error = describeSshError(e));
+        setState(() {
+          _status = null;
+          _error = describeSshError(e);
+        });
       }
     }
   }

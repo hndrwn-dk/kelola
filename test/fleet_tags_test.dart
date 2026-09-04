@@ -81,6 +81,6 @@ void main() {
     expect(cache[h.id]!.fromCache, isTrue);
     expect(cache[h.id]!.pendingUpdates, 3);
     expect(cache[h.id]!.isStale(now: DateTime.utc(2026, 1, 1, 13)), isTrue);
-    expect(cache[h.id]!.metaLine(now: DateTime.utc(2026, 1, 1, 13)), contains('cache'));
+    expect(cache[h.id]!.tileSummary(now: DateTime.utc(2026, 1, 1, 13)), contains('cache'));
   });
 }

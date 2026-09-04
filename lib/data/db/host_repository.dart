@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/domain/audit/audit_event.dart';
@@ -781,6 +783,14 @@ class HostRepository {
             failedUnitCount: health.failedUnitCount,
             pendingUpdates: health.pendingUpdates,
             fetchedAt: health.fetchedAt.toUtc(),
+            nprocCores: Value(health.nprocCores),
+            memPercent: Value(health.memPercent),
+            highDiskJson: Value(jsonEncode(health.highDiskMounts)),
+            securityUpdates: Value(health.securityUpdates),
+            containersDown: Value(health.containersDown),
+            containersUnhealthy: Value(health.containersUnhealthy),
+            uptimeSeconds: Value(health.uptime.inSeconds),
+            rebootRequired: Value(health.rebootRequired),
           ),
         );
   }
@@ -796,13 +806,31 @@ class HostRepository {
           alias: aliasById[r.hostId] ?? r.hostId,
           reachable: r.reachable,
           load1: r.load1,
+          nprocCores: r.nprocCores,
+          memPercent: r.memPercent,
           diskRootPercent: r.diskRootPercent,
+          highDiskMounts: _decodeStringList(r.highDiskJson),
           failedUnitCount: r.failedUnitCount,
           pendingUpdates: r.pendingUpdates,
+          securityUpdates: r.securityUpdates,
+          containersDown: r.containersDown,
+          containersUnhealthy: r.containersUnhealthy,
+          uptime: Duration(seconds: r.uptimeSeconds),
+          rebootRequired: r.rebootRequired,
           fetchedAt: r.fetchedAt,
           fromCache: true,
         ),
     };
+  }
+
+  List<String> _decodeStringList(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((e) => '$e').toList();
+      }
+    } catch (_) {}
+    return const [];
   }
 
   Future<bool> widgetEnabled() async {
