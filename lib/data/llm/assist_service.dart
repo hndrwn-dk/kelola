@@ -50,6 +50,8 @@ class AssistService {
       request: AssistRequest(
         system:
             'Explain why this systemd unit failed in plain language. '
+            'Ground the answer in the journal and systemctl show fields. '
+            'Quote the concrete error line when present. '
             'Suggest one next step. Do not invent facts absent from the input.',
         user:
             'Unit: $unitName\n\n--- show ---\n$showOutput\n\n--- journal ---\n$journal',

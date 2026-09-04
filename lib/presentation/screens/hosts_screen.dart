@@ -439,7 +439,6 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         leading: OsIcon.forOsId(host.osId),
         name: host.alias,
         meta: host.subtitle,
-        detail: hostInventoryDetail(host),
         pillText: incidentChipLabel(host),
         pillStatus: _health(host),
         compact: true,

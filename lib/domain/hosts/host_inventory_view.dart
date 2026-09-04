@@ -112,18 +112,6 @@ HostInventoryBucket inventoryBucket(Host host, {DateTime? now}) {
   return HostInventoryBucket.notChecked;
 }
 
-String? hostInventoryDetail(Host host, {DateTime? now}) {
-  final at = host.attentionAt;
-  if (at == null) {
-    return null;
-  }
-  final bits = <String>[];
-  if (host.failedUnitCount != null && host.failedUnitCount! > 0) {
-    bits.add('${host.failedUnitCount} failed');
-  }
-  if (host.diskRootPercent != null) {
-    bits.add('disk ${host.diskRootPercent}%');
-  }
-  bits.add('checked ${Host.ageLabel(at, now: now)}');
-  return bits.join(' · ');
-}
+/// Hosts inventory no longer shows metric detail (disk% · checked age).
+/// Attention belongs on the pill / Fleet tiles.
+String? hostInventoryDetail(Host host, {DateTime? now}) => null;

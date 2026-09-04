@@ -233,6 +233,77 @@ class ToolTile extends StatelessWidget {
   }
 }
 
+/// Dense fleet monitor cell. Severity on the RiskBand edge; metrics are mono.
+class FleetHostTile extends StatelessWidget {
+  final String alias;
+  final String summary;
+  final RiskLevel risk;
+  final HealthStatus? status;
+  final bool loading;
+  final VoidCallback? onTap;
+
+  const FleetHostTile({
+    super.key,
+    required this.alias,
+    required this.summary,
+    required this.risk,
+    this.status,
+    this.loading = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(KelolaRadii.md),
+        child: RiskBand(
+          risk: risk,
+          status: status,
+          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      alias,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: KelolaType.display(color: c.text, size: 13),
+                    ),
+                  ),
+                  if (loading)
+                    SizedBox(
+                      width: 10,
+                      height: 10,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: c.amber,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                summary,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: KelolaType.mono(color: c.muted, size: 9.5)
+                    .copyWith(height: 1.35),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A single row inside a RiskBand: optional status dot from HealthStatus
 /// (object rows only — action rows omit [status] and get no dot), optional
 /// kicker (human label, display font, muted), name (display font), meta

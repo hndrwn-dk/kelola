@@ -35,53 +35,77 @@ Future<T?> runAssistWithPreview<T>({
   return run(service);
 }
 
+final _assistResult = ValueNotifier<({String title, String body})?>(null);
+var _assistResultSheetOpen = false;
+
+/// Shows Assist output. A second call replaces the open sheet instead of stacking.
 Future<void> showAssistResult(
   BuildContext context, {
   required String title,
   required String body,
-}) {
-  final c = context.kc;
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(14, 24, 14, 28),
-        child: RiskBand(
-          risk: RiskLevel.read,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(ctx).height * 0.7,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title, style: KelolaType.display(color: c.text, size: 16)),
-                const SizedBox(height: 10),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: SelectionArea(
-                      child: Text(
-                        body,
-                        style: KelolaType.body(color: c.text, size: 13),
+}) async {
+  _assistResult.value = (title: title, body: body);
+  if (_assistResultSheetOpen) {
+    return;
+  }
+  _assistResultSheetOpen = true;
+  try {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return ValueListenableBuilder<({String title, String body})?>(
+          valueListenable: _assistResult,
+          builder: (context, data, _) {
+            final c = context.kc;
+            final titleText = data?.title ?? title;
+            final bodyText = data?.body ?? body;
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(14, 24, 14, 28),
+              child: RiskBand(
+                risk: RiskLevel.read,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(ctx).height * 0.7,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        titleText,
+                        style: KelolaType.display(color: c.text, size: 16),
                       ),
-                    ),
+                      const SizedBox(height: 10),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: SelectionArea(
+                            child: Text(
+                              bodyText,
+                              style: KelolaType.body(color: c.text, size: 13),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ServiceRow(
+                        risk: RiskLevel.read,
+                        name: 'Close',
+                        meta: 'assist only · nothing ran',
+                        onTap: () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                ServiceRow(
-                  risk: RiskLevel.read,
-                  name: 'Close',
-                  meta: 'assist only · nothing ran',
-                  onTap: () => Navigator.of(ctx).pop(),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
+              ),
+            );
+          },
+        );
+      },
+    );
+  } finally {
+    _assistResultSheetOpen = false;
+    _assistResult.value = null;
+  }
 }

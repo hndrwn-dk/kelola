@@ -5114,6 +5114,103 @@ class $FleetCacheTable extends FleetCache
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _nprocCoresMeta = const VerificationMeta(
+    'nprocCores',
+  );
+  @override
+  late final GeneratedColumn<int> nprocCores = GeneratedColumn<int>(
+    'nproc_cores',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _memPercentMeta = const VerificationMeta(
+    'memPercent',
+  );
+  @override
+  late final GeneratedColumn<int> memPercent = GeneratedColumn<int>(
+    'mem_percent',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _highDiskJsonMeta = const VerificationMeta(
+    'highDiskJson',
+  );
+  @override
+  late final GeneratedColumn<String> highDiskJson = GeneratedColumn<String>(
+    'high_disk_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _securityUpdatesMeta = const VerificationMeta(
+    'securityUpdates',
+  );
+  @override
+  late final GeneratedColumn<int> securityUpdates = GeneratedColumn<int>(
+    'security_updates',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _containersDownMeta = const VerificationMeta(
+    'containersDown',
+  );
+  @override
+  late final GeneratedColumn<int> containersDown = GeneratedColumn<int>(
+    'containers_down',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _containersUnhealthyMeta =
+      const VerificationMeta('containersUnhealthy');
+  @override
+  late final GeneratedColumn<int> containersUnhealthy = GeneratedColumn<int>(
+    'containers_unhealthy',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _uptimeSecondsMeta = const VerificationMeta(
+    'uptimeSeconds',
+  );
+  @override
+  late final GeneratedColumn<int> uptimeSeconds = GeneratedColumn<int>(
+    'uptime_seconds',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _rebootRequiredMeta = const VerificationMeta(
+    'rebootRequired',
+  );
+  @override
+  late final GeneratedColumn<bool> rebootRequired = GeneratedColumn<bool>(
+    'reboot_required',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("reboot_required" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     hostId,
@@ -5123,6 +5220,14 @@ class $FleetCacheTable extends FleetCache
     failedUnitCount,
     pendingUpdates,
     fetchedAt,
+    nprocCores,
+    memPercent,
+    highDiskJson,
+    securityUpdates,
+    containersDown,
+    containersUnhealthy,
+    uptimeSeconds,
+    rebootRequired,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5201,6 +5306,72 @@ class $FleetCacheTable extends FleetCache
     } else if (isInserting) {
       context.missing(_fetchedAtMeta);
     }
+    if (data.containsKey('nproc_cores')) {
+      context.handle(
+        _nprocCoresMeta,
+        nprocCores.isAcceptableOrUnknown(data['nproc_cores']!, _nprocCoresMeta),
+      );
+    }
+    if (data.containsKey('mem_percent')) {
+      context.handle(
+        _memPercentMeta,
+        memPercent.isAcceptableOrUnknown(data['mem_percent']!, _memPercentMeta),
+      );
+    }
+    if (data.containsKey('high_disk_json')) {
+      context.handle(
+        _highDiskJsonMeta,
+        highDiskJson.isAcceptableOrUnknown(
+          data['high_disk_json']!,
+          _highDiskJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('security_updates')) {
+      context.handle(
+        _securityUpdatesMeta,
+        securityUpdates.isAcceptableOrUnknown(
+          data['security_updates']!,
+          _securityUpdatesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('containers_down')) {
+      context.handle(
+        _containersDownMeta,
+        containersDown.isAcceptableOrUnknown(
+          data['containers_down']!,
+          _containersDownMeta,
+        ),
+      );
+    }
+    if (data.containsKey('containers_unhealthy')) {
+      context.handle(
+        _containersUnhealthyMeta,
+        containersUnhealthy.isAcceptableOrUnknown(
+          data['containers_unhealthy']!,
+          _containersUnhealthyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('uptime_seconds')) {
+      context.handle(
+        _uptimeSecondsMeta,
+        uptimeSeconds.isAcceptableOrUnknown(
+          data['uptime_seconds']!,
+          _uptimeSecondsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reboot_required')) {
+      context.handle(
+        _rebootRequiredMeta,
+        rebootRequired.isAcceptableOrUnknown(
+          data['reboot_required']!,
+          _rebootRequiredMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -5238,6 +5409,38 @@ class $FleetCacheTable extends FleetCache
         DriftSqlType.dateTime,
         data['${effectivePrefix}fetched_at'],
       )!,
+      nprocCores: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}nproc_cores'],
+      ),
+      memPercent: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}mem_percent'],
+      )!,
+      highDiskJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}high_disk_json'],
+      )!,
+      securityUpdates: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}security_updates'],
+      )!,
+      containersDown: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}containers_down'],
+      )!,
+      containersUnhealthy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}containers_unhealthy'],
+      )!,
+      uptimeSeconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}uptime_seconds'],
+      )!,
+      rebootRequired: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}reboot_required'],
+      )!,
     );
   }
 
@@ -5255,6 +5458,14 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
   final int failedUnitCount;
   final int pendingUpdates;
   final DateTime fetchedAt;
+  final int? nprocCores;
+  final int memPercent;
+  final String highDiskJson;
+  final int securityUpdates;
+  final int containersDown;
+  final int containersUnhealthy;
+  final int uptimeSeconds;
+  final bool rebootRequired;
   const FleetCacheRow({
     required this.hostId,
     required this.reachable,
@@ -5263,6 +5474,14 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
     required this.failedUnitCount,
     required this.pendingUpdates,
     required this.fetchedAt,
+    this.nprocCores,
+    required this.memPercent,
+    required this.highDiskJson,
+    required this.securityUpdates,
+    required this.containersDown,
+    required this.containersUnhealthy,
+    required this.uptimeSeconds,
+    required this.rebootRequired,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5274,6 +5493,16 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
     map['failed_unit_count'] = Variable<int>(failedUnitCount);
     map['pending_updates'] = Variable<int>(pendingUpdates);
     map['fetched_at'] = Variable<DateTime>(fetchedAt);
+    if (!nullToAbsent || nprocCores != null) {
+      map['nproc_cores'] = Variable<int>(nprocCores);
+    }
+    map['mem_percent'] = Variable<int>(memPercent);
+    map['high_disk_json'] = Variable<String>(highDiskJson);
+    map['security_updates'] = Variable<int>(securityUpdates);
+    map['containers_down'] = Variable<int>(containersDown);
+    map['containers_unhealthy'] = Variable<int>(containersUnhealthy);
+    map['uptime_seconds'] = Variable<int>(uptimeSeconds);
+    map['reboot_required'] = Variable<bool>(rebootRequired);
     return map;
   }
 
@@ -5286,6 +5515,16 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
       failedUnitCount: Value(failedUnitCount),
       pendingUpdates: Value(pendingUpdates),
       fetchedAt: Value(fetchedAt),
+      nprocCores: nprocCores == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nprocCores),
+      memPercent: Value(memPercent),
+      highDiskJson: Value(highDiskJson),
+      securityUpdates: Value(securityUpdates),
+      containersDown: Value(containersDown),
+      containersUnhealthy: Value(containersUnhealthy),
+      uptimeSeconds: Value(uptimeSeconds),
+      rebootRequired: Value(rebootRequired),
     );
   }
 
@@ -5302,6 +5541,16 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
       failedUnitCount: serializer.fromJson<int>(json['failedUnitCount']),
       pendingUpdates: serializer.fromJson<int>(json['pendingUpdates']),
       fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
+      nprocCores: serializer.fromJson<int?>(json['nprocCores']),
+      memPercent: serializer.fromJson<int>(json['memPercent']),
+      highDiskJson: serializer.fromJson<String>(json['highDiskJson']),
+      securityUpdates: serializer.fromJson<int>(json['securityUpdates']),
+      containersDown: serializer.fromJson<int>(json['containersDown']),
+      containersUnhealthy: serializer.fromJson<int>(
+        json['containersUnhealthy'],
+      ),
+      uptimeSeconds: serializer.fromJson<int>(json['uptimeSeconds']),
+      rebootRequired: serializer.fromJson<bool>(json['rebootRequired']),
     );
   }
   @override
@@ -5315,6 +5564,14 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
       'failedUnitCount': serializer.toJson<int>(failedUnitCount),
       'pendingUpdates': serializer.toJson<int>(pendingUpdates),
       'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
+      'nprocCores': serializer.toJson<int?>(nprocCores),
+      'memPercent': serializer.toJson<int>(memPercent),
+      'highDiskJson': serializer.toJson<String>(highDiskJson),
+      'securityUpdates': serializer.toJson<int>(securityUpdates),
+      'containersDown': serializer.toJson<int>(containersDown),
+      'containersUnhealthy': serializer.toJson<int>(containersUnhealthy),
+      'uptimeSeconds': serializer.toJson<int>(uptimeSeconds),
+      'rebootRequired': serializer.toJson<bool>(rebootRequired),
     };
   }
 
@@ -5326,6 +5583,14 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
     int? failedUnitCount,
     int? pendingUpdates,
     DateTime? fetchedAt,
+    Value<int?> nprocCores = const Value.absent(),
+    int? memPercent,
+    String? highDiskJson,
+    int? securityUpdates,
+    int? containersDown,
+    int? containersUnhealthy,
+    int? uptimeSeconds,
+    bool? rebootRequired,
   }) => FleetCacheRow(
     hostId: hostId ?? this.hostId,
     reachable: reachable ?? this.reachable,
@@ -5334,6 +5599,14 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
     failedUnitCount: failedUnitCount ?? this.failedUnitCount,
     pendingUpdates: pendingUpdates ?? this.pendingUpdates,
     fetchedAt: fetchedAt ?? this.fetchedAt,
+    nprocCores: nprocCores.present ? nprocCores.value : this.nprocCores,
+    memPercent: memPercent ?? this.memPercent,
+    highDiskJson: highDiskJson ?? this.highDiskJson,
+    securityUpdates: securityUpdates ?? this.securityUpdates,
+    containersDown: containersDown ?? this.containersDown,
+    containersUnhealthy: containersUnhealthy ?? this.containersUnhealthy,
+    uptimeSeconds: uptimeSeconds ?? this.uptimeSeconds,
+    rebootRequired: rebootRequired ?? this.rebootRequired,
   );
   FleetCacheRow copyWithCompanion(FleetCacheCompanion data) {
     return FleetCacheRow(
@@ -5350,6 +5623,30 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
           ? data.pendingUpdates.value
           : this.pendingUpdates,
       fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+      nprocCores: data.nprocCores.present
+          ? data.nprocCores.value
+          : this.nprocCores,
+      memPercent: data.memPercent.present
+          ? data.memPercent.value
+          : this.memPercent,
+      highDiskJson: data.highDiskJson.present
+          ? data.highDiskJson.value
+          : this.highDiskJson,
+      securityUpdates: data.securityUpdates.present
+          ? data.securityUpdates.value
+          : this.securityUpdates,
+      containersDown: data.containersDown.present
+          ? data.containersDown.value
+          : this.containersDown,
+      containersUnhealthy: data.containersUnhealthy.present
+          ? data.containersUnhealthy.value
+          : this.containersUnhealthy,
+      uptimeSeconds: data.uptimeSeconds.present
+          ? data.uptimeSeconds.value
+          : this.uptimeSeconds,
+      rebootRequired: data.rebootRequired.present
+          ? data.rebootRequired.value
+          : this.rebootRequired,
     );
   }
 
@@ -5362,7 +5659,15 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
           ..write('diskRootPercent: $diskRootPercent, ')
           ..write('failedUnitCount: $failedUnitCount, ')
           ..write('pendingUpdates: $pendingUpdates, ')
-          ..write('fetchedAt: $fetchedAt')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('nprocCores: $nprocCores, ')
+          ..write('memPercent: $memPercent, ')
+          ..write('highDiskJson: $highDiskJson, ')
+          ..write('securityUpdates: $securityUpdates, ')
+          ..write('containersDown: $containersDown, ')
+          ..write('containersUnhealthy: $containersUnhealthy, ')
+          ..write('uptimeSeconds: $uptimeSeconds, ')
+          ..write('rebootRequired: $rebootRequired')
           ..write(')'))
         .toString();
   }
@@ -5376,6 +5681,14 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
     failedUnitCount,
     pendingUpdates,
     fetchedAt,
+    nprocCores,
+    memPercent,
+    highDiskJson,
+    securityUpdates,
+    containersDown,
+    containersUnhealthy,
+    uptimeSeconds,
+    rebootRequired,
   );
   @override
   bool operator ==(Object other) =>
@@ -5387,7 +5700,15 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
           other.diskRootPercent == this.diskRootPercent &&
           other.failedUnitCount == this.failedUnitCount &&
           other.pendingUpdates == this.pendingUpdates &&
-          other.fetchedAt == this.fetchedAt);
+          other.fetchedAt == this.fetchedAt &&
+          other.nprocCores == this.nprocCores &&
+          other.memPercent == this.memPercent &&
+          other.highDiskJson == this.highDiskJson &&
+          other.securityUpdates == this.securityUpdates &&
+          other.containersDown == this.containersDown &&
+          other.containersUnhealthy == this.containersUnhealthy &&
+          other.uptimeSeconds == this.uptimeSeconds &&
+          other.rebootRequired == this.rebootRequired);
 }
 
 class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
@@ -5398,6 +5719,14 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
   final Value<int> failedUnitCount;
   final Value<int> pendingUpdates;
   final Value<DateTime> fetchedAt;
+  final Value<int?> nprocCores;
+  final Value<int> memPercent;
+  final Value<String> highDiskJson;
+  final Value<int> securityUpdates;
+  final Value<int> containersDown;
+  final Value<int> containersUnhealthy;
+  final Value<int> uptimeSeconds;
+  final Value<bool> rebootRequired;
   final Value<int> rowid;
   const FleetCacheCompanion({
     this.hostId = const Value.absent(),
@@ -5407,6 +5736,14 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
     this.failedUnitCount = const Value.absent(),
     this.pendingUpdates = const Value.absent(),
     this.fetchedAt = const Value.absent(),
+    this.nprocCores = const Value.absent(),
+    this.memPercent = const Value.absent(),
+    this.highDiskJson = const Value.absent(),
+    this.securityUpdates = const Value.absent(),
+    this.containersDown = const Value.absent(),
+    this.containersUnhealthy = const Value.absent(),
+    this.uptimeSeconds = const Value.absent(),
+    this.rebootRequired = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FleetCacheCompanion.insert({
@@ -5417,6 +5754,14 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
     required int failedUnitCount,
     required int pendingUpdates,
     required DateTime fetchedAt,
+    this.nprocCores = const Value.absent(),
+    this.memPercent = const Value.absent(),
+    this.highDiskJson = const Value.absent(),
+    this.securityUpdates = const Value.absent(),
+    this.containersDown = const Value.absent(),
+    this.containersUnhealthy = const Value.absent(),
+    this.uptimeSeconds = const Value.absent(),
+    this.rebootRequired = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : hostId = Value(hostId),
        reachable = Value(reachable),
@@ -5433,6 +5778,14 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
     Expression<int>? failedUnitCount,
     Expression<int>? pendingUpdates,
     Expression<DateTime>? fetchedAt,
+    Expression<int>? nprocCores,
+    Expression<int>? memPercent,
+    Expression<String>? highDiskJson,
+    Expression<int>? securityUpdates,
+    Expression<int>? containersDown,
+    Expression<int>? containersUnhealthy,
+    Expression<int>? uptimeSeconds,
+    Expression<bool>? rebootRequired,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5443,6 +5796,15 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
       if (failedUnitCount != null) 'failed_unit_count': failedUnitCount,
       if (pendingUpdates != null) 'pending_updates': pendingUpdates,
       if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (nprocCores != null) 'nproc_cores': nprocCores,
+      if (memPercent != null) 'mem_percent': memPercent,
+      if (highDiskJson != null) 'high_disk_json': highDiskJson,
+      if (securityUpdates != null) 'security_updates': securityUpdates,
+      if (containersDown != null) 'containers_down': containersDown,
+      if (containersUnhealthy != null)
+        'containers_unhealthy': containersUnhealthy,
+      if (uptimeSeconds != null) 'uptime_seconds': uptimeSeconds,
+      if (rebootRequired != null) 'reboot_required': rebootRequired,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5455,6 +5817,14 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
     Value<int>? failedUnitCount,
     Value<int>? pendingUpdates,
     Value<DateTime>? fetchedAt,
+    Value<int?>? nprocCores,
+    Value<int>? memPercent,
+    Value<String>? highDiskJson,
+    Value<int>? securityUpdates,
+    Value<int>? containersDown,
+    Value<int>? containersUnhealthy,
+    Value<int>? uptimeSeconds,
+    Value<bool>? rebootRequired,
     Value<int>? rowid,
   }) {
     return FleetCacheCompanion(
@@ -5465,6 +5835,14 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
       failedUnitCount: failedUnitCount ?? this.failedUnitCount,
       pendingUpdates: pendingUpdates ?? this.pendingUpdates,
       fetchedAt: fetchedAt ?? this.fetchedAt,
+      nprocCores: nprocCores ?? this.nprocCores,
+      memPercent: memPercent ?? this.memPercent,
+      highDiskJson: highDiskJson ?? this.highDiskJson,
+      securityUpdates: securityUpdates ?? this.securityUpdates,
+      containersDown: containersDown ?? this.containersDown,
+      containersUnhealthy: containersUnhealthy ?? this.containersUnhealthy,
+      uptimeSeconds: uptimeSeconds ?? this.uptimeSeconds,
+      rebootRequired: rebootRequired ?? this.rebootRequired,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5493,6 +5871,30 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
     if (fetchedAt.present) {
       map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
     }
+    if (nprocCores.present) {
+      map['nproc_cores'] = Variable<int>(nprocCores.value);
+    }
+    if (memPercent.present) {
+      map['mem_percent'] = Variable<int>(memPercent.value);
+    }
+    if (highDiskJson.present) {
+      map['high_disk_json'] = Variable<String>(highDiskJson.value);
+    }
+    if (securityUpdates.present) {
+      map['security_updates'] = Variable<int>(securityUpdates.value);
+    }
+    if (containersDown.present) {
+      map['containers_down'] = Variable<int>(containersDown.value);
+    }
+    if (containersUnhealthy.present) {
+      map['containers_unhealthy'] = Variable<int>(containersUnhealthy.value);
+    }
+    if (uptimeSeconds.present) {
+      map['uptime_seconds'] = Variable<int>(uptimeSeconds.value);
+    }
+    if (rebootRequired.present) {
+      map['reboot_required'] = Variable<bool>(rebootRequired.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5509,6 +5911,14 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
           ..write('failedUnitCount: $failedUnitCount, ')
           ..write('pendingUpdates: $pendingUpdates, ')
           ..write('fetchedAt: $fetchedAt, ')
+          ..write('nprocCores: $nprocCores, ')
+          ..write('memPercent: $memPercent, ')
+          ..write('highDiskJson: $highDiskJson, ')
+          ..write('securityUpdates: $securityUpdates, ')
+          ..write('containersDown: $containersDown, ')
+          ..write('containersUnhealthy: $containersUnhealthy, ')
+          ..write('uptimeSeconds: $uptimeSeconds, ')
+          ..write('rebootRequired: $rebootRequired, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8113,6 +8523,14 @@ typedef $$FleetCacheTableCreateCompanionBuilder =
       required int failedUnitCount,
       required int pendingUpdates,
       required DateTime fetchedAt,
+      Value<int?> nprocCores,
+      Value<int> memPercent,
+      Value<String> highDiskJson,
+      Value<int> securityUpdates,
+      Value<int> containersDown,
+      Value<int> containersUnhealthy,
+      Value<int> uptimeSeconds,
+      Value<bool> rebootRequired,
       Value<int> rowid,
     });
 typedef $$FleetCacheTableUpdateCompanionBuilder =
@@ -8124,6 +8542,14 @@ typedef $$FleetCacheTableUpdateCompanionBuilder =
       Value<int> failedUnitCount,
       Value<int> pendingUpdates,
       Value<DateTime> fetchedAt,
+      Value<int?> nprocCores,
+      Value<int> memPercent,
+      Value<String> highDiskJson,
+      Value<int> securityUpdates,
+      Value<int> containersDown,
+      Value<int> containersUnhealthy,
+      Value<int> uptimeSeconds,
+      Value<bool> rebootRequired,
       Value<int> rowid,
     });
 
@@ -8168,6 +8594,46 @@ class $$FleetCacheTableFilterComposer
 
   ColumnFilters<DateTime> get fetchedAt => $composableBuilder(
     column: $table.fetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get nprocCores => $composableBuilder(
+    column: $table.nprocCores,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get memPercent => $composableBuilder(
+    column: $table.memPercent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get highDiskJson => $composableBuilder(
+    column: $table.highDiskJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get securityUpdates => $composableBuilder(
+    column: $table.securityUpdates,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get containersDown => $composableBuilder(
+    column: $table.containersDown,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get containersUnhealthy => $composableBuilder(
+    column: $table.containersUnhealthy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get uptimeSeconds => $composableBuilder(
+    column: $table.uptimeSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get rebootRequired => $composableBuilder(
+    column: $table.rebootRequired,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8215,6 +8681,46 @@ class $$FleetCacheTableOrderingComposer
     column: $table.fetchedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get nprocCores => $composableBuilder(
+    column: $table.nprocCores,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get memPercent => $composableBuilder(
+    column: $table.memPercent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get highDiskJson => $composableBuilder(
+    column: $table.highDiskJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get securityUpdates => $composableBuilder(
+    column: $table.securityUpdates,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get containersDown => $composableBuilder(
+    column: $table.containersDown,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get containersUnhealthy => $composableBuilder(
+    column: $table.containersUnhealthy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get uptimeSeconds => $composableBuilder(
+    column: $table.uptimeSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get rebootRequired => $composableBuilder(
+    column: $table.rebootRequired,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$FleetCacheTableAnnotationComposer
@@ -8252,6 +8758,46 @@ class $$FleetCacheTableAnnotationComposer
 
   GeneratedColumn<DateTime> get fetchedAt =>
       $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get nprocCores => $composableBuilder(
+    column: $table.nprocCores,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get memPercent => $composableBuilder(
+    column: $table.memPercent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get highDiskJson => $composableBuilder(
+    column: $table.highDiskJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get securityUpdates => $composableBuilder(
+    column: $table.securityUpdates,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get containersDown => $composableBuilder(
+    column: $table.containersDown,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get containersUnhealthy => $composableBuilder(
+    column: $table.containersUnhealthy,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get uptimeSeconds => $composableBuilder(
+    column: $table.uptimeSeconds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get rebootRequired => $composableBuilder(
+    column: $table.rebootRequired,
+    builder: (column) => column,
+  );
 }
 
 class $$FleetCacheTableTableManager
@@ -8292,6 +8838,14 @@ class $$FleetCacheTableTableManager
                 Value<int> failedUnitCount = const Value.absent(),
                 Value<int> pendingUpdates = const Value.absent(),
                 Value<DateTime> fetchedAt = const Value.absent(),
+                Value<int?> nprocCores = const Value.absent(),
+                Value<int> memPercent = const Value.absent(),
+                Value<String> highDiskJson = const Value.absent(),
+                Value<int> securityUpdates = const Value.absent(),
+                Value<int> containersDown = const Value.absent(),
+                Value<int> containersUnhealthy = const Value.absent(),
+                Value<int> uptimeSeconds = const Value.absent(),
+                Value<bool> rebootRequired = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FleetCacheCompanion(
                 hostId: hostId,
@@ -8301,6 +8855,14 @@ class $$FleetCacheTableTableManager
                 failedUnitCount: failedUnitCount,
                 pendingUpdates: pendingUpdates,
                 fetchedAt: fetchedAt,
+                nprocCores: nprocCores,
+                memPercent: memPercent,
+                highDiskJson: highDiskJson,
+                securityUpdates: securityUpdates,
+                containersDown: containersDown,
+                containersUnhealthy: containersUnhealthy,
+                uptimeSeconds: uptimeSeconds,
+                rebootRequired: rebootRequired,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -8312,6 +8874,14 @@ class $$FleetCacheTableTableManager
                 required int failedUnitCount,
                 required int pendingUpdates,
                 required DateTime fetchedAt,
+                Value<int?> nprocCores = const Value.absent(),
+                Value<int> memPercent = const Value.absent(),
+                Value<String> highDiskJson = const Value.absent(),
+                Value<int> securityUpdates = const Value.absent(),
+                Value<int> containersDown = const Value.absent(),
+                Value<int> containersUnhealthy = const Value.absent(),
+                Value<int> uptimeSeconds = const Value.absent(),
+                Value<bool> rebootRequired = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FleetCacheCompanion.insert(
                 hostId: hostId,
@@ -8321,6 +8891,14 @@ class $$FleetCacheTableTableManager
                 failedUnitCount: failedUnitCount,
                 pendingUpdates: pendingUpdates,
                 fetchedAt: fetchedAt,
+                nprocCores: nprocCores,
+                memPercent: memPercent,
+                highDiskJson: highDiskJson,
+                securityUpdates: securityUpdates,
+                containersDown: containersDown,
+                containersUnhealthy: containersUnhealthy,
+                uptimeSeconds: uptimeSeconds,
+                rebootRequired: rebootRequired,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

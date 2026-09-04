@@ -157,6 +157,16 @@ class FleetCache extends Table {
   IntColumn get failedUnitCount => integer()();
   IntColumn get pendingUpdates => integer()();
   DateTimeColumn get fetchedAt => dateTime()();
+  IntColumn get nprocCores => integer().nullable()();
+  IntColumn get memPercent => integer().withDefault(const Constant(0))();
+  TextColumn get highDiskJson => text().withDefault(const Constant('[]'))();
+  IntColumn get securityUpdates => integer().withDefault(const Constant(0))();
+  IntColumn get containersDown => integer().withDefault(const Constant(0))();
+  IntColumn get containersUnhealthy =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get uptimeSeconds => integer().withDefault(const Constant(0))();
+  BoolColumn get rebootRequired =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {hostId};

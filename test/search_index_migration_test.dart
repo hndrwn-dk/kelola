@@ -63,7 +63,7 @@ void main() {
     expect(tablesAfter, isNotEmpty);
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 9);
+    expect(version.data['user_version'], 10);
 
     final cols = await db.customSelect('PRAGMA table_info(search_index)').get();
     final names = cols.map((r) => r.read<String>('name')).toSet();
@@ -84,5 +84,12 @@ void main() {
       "SELECT name FROM sqlite_master WHERE type='table' AND name='fleet_cache'",
     ).get();
     expect(fleetTable, isNotEmpty);
+
+    final fleetCols =
+        await db.customSelect('PRAGMA table_info(fleet_cache)').get();
+    expect(
+      fleetCols.map((r) => r.read<String>('name')).toSet(),
+      containsAll(['mem_percent', 'security_updates', 'containers_down']),
+    );
   });
 }

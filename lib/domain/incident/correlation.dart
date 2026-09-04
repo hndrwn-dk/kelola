@@ -8,6 +8,7 @@ import 'package:kelola/domain/probes/container_logs_probe.dart';
 import 'package:kelola/domain/probes/journal_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/units/service_unit.dart';
+import 'package:kelola/domain/llm/explain_context.dart';
 
 const cacheMissLookUp = 'not in cache — look up';
 
@@ -195,6 +196,24 @@ class CorrelationStore {
       if (key.isNotEmpty) {
         final next = Map<String, List<JournalEntry>>.from(snap.journalByUnit);
         next[key] = parsed.entries;
+        snap = snap.copyWith(journalByUnit: next);
+      }
+    } else if (parsed is UnitDetail) {
+      final key = parsed.name.trim();
+      if (key.isNotEmpty) {
+        final lines = journalLinesFromUnitDetail(parsed);
+        final entries = [
+          for (var i = 0; i < lines.length; i++)
+            JournalEntry(
+              cursor: 'unit-detail-$i',
+              realtimeUsec: '0',
+              priority: 3,
+              message: lines[i],
+              unit: key,
+            ),
+        ];
+        final next = Map<String, List<JournalEntry>>.from(snap.journalByUnit);
+        next[key] = entries;
         snap = snap.copyWith(journalByUnit: next);
       }
     } else if (parsed is List<String> && probe is ContainerLogsProbe) {

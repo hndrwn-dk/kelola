@@ -88,14 +88,17 @@ void main() {
     }
   });
 
-  test('fleet UI and runner never invoke mutate under fleet scope', () {
+  test('fleet UI keeps read-only gate and tile probe only', () {
     final ui = File('lib/presentation/screens/fleet_screen.dart')
         .readAsStringSync();
     expect(ui, contains('ProbeScope.fleet'));
     expect(ui, contains('assertFleetReadOnly'));
     expect(ui, contains('FleetHealthProbe'));
+    expect(ui, contains('FleetHostTile'));
     expect(ui, isNot(contains('UnitActionProbe')));
     expect(ui, isNot(contains('CommandRunnerProbe')));
     expect(ui, isNot(contains('PackageApplyProbe')));
+    expect(ui, isNot(contains('sleep')));
+    expect(ui, isNot(contains('MetricsProbe')));
   });
 }

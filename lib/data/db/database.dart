@@ -28,7 +28,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -65,6 +65,17 @@ class KelolaDatabase extends _$KelolaDatabase {
           if (from < 9) {
             await m.createTable(hostTags);
             await m.createTable(fleetCache);
+          }
+          // Schema 9 fleet_cache lacked extended columns; fresh <9 createAll already has them.
+          if (from == 9) {
+            await m.addColumn(fleetCache, fleetCache.nprocCores);
+            await m.addColumn(fleetCache, fleetCache.memPercent);
+            await m.addColumn(fleetCache, fleetCache.highDiskJson);
+            await m.addColumn(fleetCache, fleetCache.securityUpdates);
+            await m.addColumn(fleetCache, fleetCache.containersDown);
+            await m.addColumn(fleetCache, fleetCache.containersUnhealthy);
+            await m.addColumn(fleetCache, fleetCache.uptimeSeconds);
+            await m.addColumn(fleetCache, fleetCache.rebootRequired);
           }
         },
       );
