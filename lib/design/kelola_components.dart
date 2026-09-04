@@ -233,22 +233,35 @@ class ToolTile extends StatelessWidget {
   }
 }
 
-/// Dense fleet monitor cell. Severity on the RiskBand edge; metrics are mono.
+/// One compact metric for [FleetHostTile] — mono label above mono value.
+class FleetTileMetricView {
+  const FleetTileMetricView({required this.label, required this.value});
+
+  final String label;
+  final String value;
+}
+
+/// Dense fleet monitor cell (~90–110px). Severity on the RiskBand edge;
+/// metrics are a small labeled grid, not a wrapping sentence.
 class FleetHostTile extends StatelessWidget {
   final String alias;
-  final String summary;
   final RiskLevel risk;
   final HealthStatus? status;
   final bool loading;
+  final bool reachable;
+  final String? downMessage;
+  final List<FleetTileMetricView> metrics;
   final VoidCallback? onTap;
 
   const FleetHostTile({
     super.key,
     required this.alias,
-    required this.summary,
     required this.risk,
     this.status,
     this.loading = false,
+    this.reachable = true,
+    this.downMessage,
+    this.metrics = const [],
     this.onTap,
   });
 
@@ -263,9 +276,10 @@ class FleetHostTile extends StatelessWidget {
         child: RiskBand(
           risk: risk,
           status: status,
-          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+          padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
@@ -274,7 +288,7 @@ class FleetHostTile extends StatelessWidget {
                       alias,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: KelolaType.display(color: c.text, size: 13),
+                      style: KelolaType.display(color: c.text, size: 12),
                     ),
                   ),
                   if (loading)
@@ -289,17 +303,71 @@ class FleetHostTile extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              Text(
-                summary,
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-                style: KelolaType.mono(color: c.muted, size: 9.5)
-                    .copyWith(height: 1.35),
-              ),
+              if (!reachable)
+                Text(
+                  downMessage ?? 'unreachable',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: KelolaType.mono(color: c.muted, size: 9)
+                      .copyWith(height: 1.25),
+                )
+              else
+                _FleetMetricGrid(metrics: metrics),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _FleetMetricGrid extends StatelessWidget {
+  const _FleetMetricGrid({required this.metrics});
+
+  final List<FleetTileMetricView> metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 4.0;
+        final cols = metrics.length <= 4 ? 2 : 3;
+        final cellW = (constraints.maxWidth - gap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final m in metrics)
+              SizedBox(
+                width: cellW,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      m.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: KelolaType.mono(
+                        color: c.dim,
+                        size: 7.5,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    Text(
+                      m.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: KelolaType.mono(color: c.text, size: 10)
+                          .copyWith(height: 1.15),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

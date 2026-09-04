@@ -86,6 +86,8 @@ class IncidentSheetPanel extends StatelessWidget {
     this.onLookUp,
     this.onDiagnostic,
     this.onExplain,
+    this.explainBusy = false,
+    this.explainResult,
     this.error,
     this.status,
   });
@@ -96,18 +98,23 @@ class IncidentSheetPanel extends StatelessWidget {
   final void Function(CorrelationLookUp lookUp)? onLookUp;
   final VoidCallback? onDiagnostic;
   final VoidCallback? onExplain;
+  final bool explainBusy;
+  final String? explainResult;
   final String? error;
   final String? status;
 
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
+    // Pin title + broken objects above the scroll body so expanding Explain
+    // cannot scroll the failed-unit row under the sheet's rounded clip.
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.85,
         ),
+        clipBehavior: Clip.antiAlias,
         padding: const EdgeInsets.fromLTRB(14, 16, 14, 24),
         decoration: BoxDecoration(
           color: c.surface,
@@ -116,8 +123,9 @@ class IncidentSheetPanel extends StatelessWidget {
           ),
           border: Border(top: BorderSide(color: c.line)),
         ),
-        child: ListView(
-          shrinkWrap: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'Incident',
@@ -157,88 +165,119 @@ class IncidentSheetPanel extends StatelessWidget {
               ),
               const SizedBox(height: 6),
             ],
-            if (view.related.title.isNotEmpty || !view.related.cached) ...[
-              const SizedBox(height: 6),
-              Text(
-                'RELATED',
-                style: KelolaType.mono(
-                  color: c.dim,
-                  size: 8.5,
-                  letterSpacing: 0.9,
-                ),
-              ),
-              const SizedBox(height: 6),
-              ServiceRow(
-                risk: RiskLevel.read,
-                name: view.related.title.isEmpty
-                    ? 'Related'
-                    : view.related.title,
-                meta: view.related.meta,
-                onTap: !view.related.cached && view.related.lookUp != null
-                    ? () => onLookUp?.call(view.related.lookUp!)
-                    : null,
-              ),
-            ],
-            const SizedBox(height: 10),
-            Text(
-              'LOGS',
-              style: KelolaType.mono(
-                color: c.dim,
-                size: 8.5,
-                letterSpacing: 0.9,
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                children: [
+                  if (view.related.title.isNotEmpty || !view.related.cached) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'RELATED',
+                      style: KelolaType.mono(
+                        color: c.dim,
+                        size: 8.5,
+                        letterSpacing: 0.9,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ServiceRow(
+                      risk: RiskLevel.read,
+                      name: view.related.title.isEmpty
+                          ? 'Related'
+                          : view.related.title,
+                      meta: view.related.meta,
+                      onTap: !view.related.cached && view.related.lookUp != null
+                          ? () => onLookUp?.call(view.related.lookUp!)
+                          : null,
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Text(
+                    'LOGS',
+                    style: KelolaType.mono(
+                      color: c.dim,
+                      size: 8.5,
+                      letterSpacing: 0.9,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  if (view.logsInCache)
+                    for (final e in view.lines)
+                      JournalLogLine(
+                        timestamp: _ts(e),
+                        message: e.message,
+                        kind: e.isError
+                            ? JournalLineKind.error
+                            : (e.isWarning
+                                ? JournalLineKind.warning
+                                : JournalLineKind.info),
+                      )
+                  else
+                    ServiceRow(
+                      risk: RiskLevel.read,
+                      name: 'Logs',
+                      meta: cacheMissLookUp,
+                      onTap: view.logsLookUp == null
+                          ? null
+                          : () => onLookUp?.call(view.logsLookUp!),
+                    ),
+                  if (view.actions.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    for (final action in view.actions) ...[
+                      ServiceRow(
+                        risk: action.risk,
+                        name: action.label,
+                        meta: view.focus?.name ?? host.alias,
+                        onTap:
+                            onAction == null ? null : () => onAction!(action),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                  ],
+                  if (explainResult != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'EXPLAIN',
+                      style: KelolaType.mono(
+                        color: c.dim,
+                        size: 8.5,
+                        letterSpacing: 0.9,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    SelectionArea(
+                      child: Text(
+                        explainResult!,
+                        style: KelolaType.body(color: c.text, size: 13),
+                      ),
+                    ),
+                  ],
+                  if (onExplain != null) ...[
+                    const SizedBox(height: 6),
+                    ServiceRow(
+                      risk: RiskLevel.read,
+                      name: 'Explain',
+                      meta: explainBusy
+                          ? (status ?? 'working…')
+                          : (explainResult != null
+                              ? 'assist · ask again'
+                              : 'assist · does not run'),
+                      onTap: explainBusy ? null : onExplain,
+                    ),
+                  ],
+                  if (onDiagnostic != null) ...[
+                    const SizedBox(height: 6),
+                    ServiceRow(
+                      risk: RiskLevel.read,
+                      name: 'Diagnostic pack',
+                      meta: 'preview then share',
+                      onTap: onDiagnostic,
+                    ),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(height: 6),
-            if (view.logsInCache)
-              for (final e in view.lines)
-                JournalLogLine(
-                  timestamp: _ts(e),
-                  message: e.message,
-                  kind: e.isError
-                      ? JournalLineKind.error
-                      : (e.isWarning
-                          ? JournalLineKind.warning
-                          : JournalLineKind.info),
-                )
-            else
-              ServiceRow(
-                risk: RiskLevel.read,
-                name: 'Logs',
-                meta: cacheMissLookUp,
-                onTap: view.logsLookUp == null
-                    ? null
-                    : () => onLookUp?.call(view.logsLookUp!),
-              ),
-            if (view.actions.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              for (final action in view.actions) ...[
-                ServiceRow(
-                  risk: action.risk,
-                  name: action.label,
-                  meta: view.focus?.name ?? host.alias,
-                  onTap: onAction == null ? null : () => onAction!(action),
-                ),
-                const SizedBox(height: 6),
-              ],
-            ],
-            if (onExplain != null) ...[
-              const SizedBox(height: 6),
-              ServiceRow(
-                risk: RiskLevel.read,
-                name: 'Explain',
-                meta: 'assist · does not run',
-                onTap: onExplain,
-              ),
-            ],
-            if (onDiagnostic != null) ...[
-              const SizedBox(height: 6),
-              ServiceRow(
-                risk: RiskLevel.read,
-                name: 'Diagnostic pack',
-                meta: 'preview then share',
-                onTap: onDiagnostic,
-              ),
-            ],
           ],
         ),
       ),
@@ -263,6 +302,8 @@ class _LiveIncidentSheet extends ConsumerStatefulWidget {
 class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
   String? _error;
   String? _status;
+  String? _explainResult;
+  var _explainBusy = false;
 
   IncidentSheetView get _view {
     return buildIncidentSheet(
@@ -278,17 +319,23 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
       view: _view,
       error: _error,
       status: _status,
+      explainBusy: _explainBusy,
+      explainResult: _explainResult,
       onAction: _act,
       onLookUp: _lookUp,
       onDiagnostic: () => openDiagnosticPack(context, ref, widget.host),
-      onExplain: _status != null ? null : () => _explain(),
+      onExplain: () => _explain(),
     );
   }
 
   Future<void> _explain() async {
+    if (_explainBusy) {
+      return;
+    }
     final host = widget.host;
     setState(() {
       _error = null;
+      _explainBusy = true;
       _status = 'Preparing context…';
     });
     try {
@@ -310,9 +357,7 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
             .take(50)
             .join('\n');
         request = AssistRequest(
-          system:
-              'Explain what is consuming disk space. '
-              'Say what is conventionally safe to remove. Do not invent paths.',
+          system: AssistService.diskSystemPrompt,
           user: 'Disk attention on ${focus!.name}: ${focus.summary}\n$journal',
           hostnames: hostnames,
           usernames: usernames,
@@ -356,13 +401,12 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
           }
           showOutput = formatUnitShowForAssist(detail);
           journal = journalLinesFromUnitDetail(detail).join('\n');
-          setState(() {}); // refresh sheet from correlation ingest
+          setState(() {});
           view = _view;
           if (journal.trim().isEmpty && view.logsInCache) {
             journal = view.lines.map((e) => e.message).join('\n');
           }
         } else if (showOutput == 'failed' || showOutput.trim().isEmpty) {
-          // Summary alone is too thin — still pull systemctl show.
           if (!mounted) {
             return;
           }
@@ -391,12 +435,9 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
         }
 
         request = AssistRequest(
-          system:
-              'Explain why this systemd unit failed in plain language. '
-              'Ground the answer in the journal and systemctl show fields. '
-              'Quote the concrete error line when present. '
-              'Suggest one next step. Do not invent facts absent from the input.',
-          user: 'Unit: $unit\n\n--- show ---\n$showOutput\n\n--- journal ---\n$journal',
+          system: AssistService.failedUnitSystemPrompt,
+          user:
+              'Unit: $unit\n\n--- show ---\n$showOutput\n\n--- journal ---\n$journal',
           hostnames: hostnames,
           usernames: usernames,
         );
@@ -424,16 +465,20 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
       if (!mounted) {
         return;
       }
-      setState(() => _status = null);
       if (text == null) {
         return;
       }
-      await showAssistResult(context, title: 'Explain', body: text);
+      // Inline on the incident sheet — a second modal often opens behind this one.
+      setState(() => _explainResult = text);
     } catch (e) {
+      if (mounted) {
+        setState(() => _error = describeSshError(e));
+      }
+    } finally {
       if (mounted) {
         setState(() {
           _status = null;
-          _error = describeSshError(e);
+          _explainBusy = false;
         });
       }
     }

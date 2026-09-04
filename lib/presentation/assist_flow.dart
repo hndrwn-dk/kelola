@@ -4,6 +4,7 @@ import 'package:kelola/data/llm/assist_service.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/llm/assist_request.dart';
+import 'package:kelola/domain/llm/provider.dart';
 import 'package:kelola/domain/llm/settings.dart';
 import 'package:kelola/presentation/widgets/assist_preview_sheet.dart';
 import 'package:kelola/providers.dart';
@@ -11,7 +12,11 @@ import 'package:kelola/providers.dart';
 Future<LlmSettings> requireAssistSettings(WidgetRef ref) async {
   final settings = await ref.read(llmSettingsProvider.future);
   if (!settings.provider.enabled || !settings.isConfigured) {
-    throw StateError('Configure Assist first (provider is None).');
+    throw StateError(
+      settings.provider.enabled
+          ? 'Assist provider is not configured. Open Assist and finish base URL / model${settings.provider == LlmProvider.openaiCompatible ? ' / API key' : ''}.'
+          : 'Configure Assist first (provider is None).',
+    );
   }
   return settings;
 }
@@ -54,6 +59,7 @@ Future<void> showAssistResult(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      useRootNavigator: true,
       builder: (ctx) {
         return ValueListenableBuilder<({String title, String body})?>(
           valueListenable: _assistResult,

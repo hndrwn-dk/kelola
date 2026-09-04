@@ -28,7 +28,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -76,6 +76,31 @@ class KelolaDatabase extends _$KelolaDatabase {
             await m.addColumn(fleetCache, fleetCache.containersUnhealthy);
             await m.addColumn(fleetCache, fleetCache.uptimeSeconds);
             await m.addColumn(fleetCache, fleetCache.rebootRequired);
+          }
+          if (from < 11) {
+            await m.addColumn(appSettings, appSettings.llmOllamaBaseUrl);
+            await m.addColumn(appSettings, appSettings.llmOllamaModel);
+            await m.addColumn(appSettings, appSettings.llmOpenaiBaseUrl);
+            await m.addColumn(appSettings, appSettings.llmOpenaiApiKey);
+            await m.addColumn(appSettings, appSettings.llmOpenaiModel);
+            await customStatement('''
+UPDATE app_settings SET
+  llm_ollama_base_url = CASE
+    WHEN llm_provider = 'ollama' THEN llm_base_url
+    ELSE llm_ollama_base_url END,
+  llm_ollama_model = CASE
+    WHEN llm_provider = 'ollama' THEN llm_model
+    ELSE llm_ollama_model END,
+  llm_openai_base_url = CASE
+    WHEN llm_provider IN ('openaiCompatible', 'openai') THEN llm_base_url
+    ELSE llm_openai_base_url END,
+  llm_openai_api_key = CASE
+    WHEN llm_provider IN ('openaiCompatible', 'openai') THEN llm_api_key
+    ELSE llm_openai_api_key END,
+  llm_openai_model = CASE
+    WHEN llm_provider IN ('openaiCompatible', 'openai') THEN llm_model
+    ELSE llm_openai_model END
+''');
           }
         },
       );

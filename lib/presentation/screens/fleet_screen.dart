@@ -13,6 +13,25 @@ import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/fleet_host_sheet.dart';
 import 'package:kelola/providers.dart';
 
+HealthStatus? fleetTileHealthStatus(FleetHostHealth h) {
+  switch (h.severity) {
+    case FleetSeverity.unreachable:
+      return HealthStatus.unknown;
+    case FleetSeverity.failedUnits:
+    case FleetSeverity.badContainers:
+    case FleetSeverity.loadHigh:
+      return HealthStatus.failed;
+    case FleetSeverity.diskHigh:
+    case FleetSeverity.securityUpdates:
+    case FleetSeverity.memHigh:
+    case FleetSeverity.pendingUpdates:
+    case FleetSeverity.rebootRequired:
+      return HealthStatus.warning;
+    case FleetSeverity.healthy:
+      return HealthStatus.healthy;
+  }
+}
+
 class FleetScreen extends ConsumerStatefulWidget {
   const FleetScreen({super.key});
 
@@ -165,44 +184,6 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
     }
   }
 
-  RiskLevel _riskFor(FleetHostHealth h) {
-    switch (h.severity) {
-      case FleetSeverity.unreachable:
-        return RiskLevel.destructive;
-      case FleetSeverity.failedUnits:
-      case FleetSeverity.badContainers:
-      case FleetSeverity.diskHigh:
-        return RiskLevel.mutate;
-      case FleetSeverity.securityUpdates:
-      case FleetSeverity.pendingUpdates:
-      case FleetSeverity.loadHigh:
-      case FleetSeverity.memHigh:
-      case FleetSeverity.rebootRequired:
-      case FleetSeverity.healthy:
-        return RiskLevel.read;
-    }
-  }
-
-  HealthStatus? _statusFor(FleetHostHealth h) {
-    switch (h.severity) {
-      case FleetSeverity.unreachable:
-        return HealthStatus.unknown;
-      case FleetSeverity.failedUnits:
-      case FleetSeverity.badContainers:
-        return HealthStatus.failed;
-      case FleetSeverity.diskHigh:
-      case FleetSeverity.securityUpdates:
-      case FleetSeverity.loadHigh:
-      case FleetSeverity.memHigh:
-        return HealthStatus.warning;
-      case FleetSeverity.pendingUpdates:
-      case FleetSeverity.rebootRequired:
-        return HealthStatus.warning;
-      case FleetSeverity.healthy:
-        return HealthStatus.healthy;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
@@ -229,7 +210,8 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
     final filtered = filterFleetByTag(rows, tagsByHost, _tagFilter);
     final sorted = sortFleetHealth(filtered);
     final width = MediaQuery.sizeOf(context).width;
-    final columns = width >= 720 ? 4 : (width >= 480 ? 3 : 2);
+    // Prefer density: 3 cols on phone, 4 on wide — target 12–16 tiles without scroll.
+    final columns = width >= 700 ? 4 : 3;
 
     return Scaffold(
       backgroundColor: c.ink,
@@ -305,7 +287,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                           crossAxisCount: columns,
                           crossAxisSpacing: 8,
                           mainAxisSpacing: 8,
-                          childAspectRatio: columns >= 3 ? 1.15 : 1.05,
+                          mainAxisExtent: 104,
                         ),
                         itemCount: sorted.length,
                         itemBuilder: (context, i) {
@@ -323,10 +305,18 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                           );
                           return FleetHostTile(
                             alias: row.alias,
-                            summary: row.tileSummary(),
-                            risk: _riskFor(row),
-                            status: _statusFor(row),
+                            risk: row.tileRiskLevel,
+                            status: fleetTileHealthStatus(row),
                             loading: _loading.contains(row.hostId),
+                            reachable: row.reachable,
+                            downMessage: row.reachable ? null : row.tileSummary(),
+                            metrics: [
+                              for (final m in row.tileMetrics())
+                                FleetTileMetricView(
+                                  label: m.label,
+                                  value: m.value,
+                                ),
+                            ],
                             onTap: () => openFleetHostSheet(
                               context,
                               ref,
