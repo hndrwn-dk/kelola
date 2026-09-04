@@ -12,6 +12,7 @@ import 'package:kelola/domain/hosts/host_inventory_view.dart';
 import 'package:kelola/domain/hosts/pooled_run.dart';
 import 'package:kelola/domain/incident/incident_sheet.dart';
 import 'package:kelola/domain/widget/publish_home_widget.dart';
+import 'package:kelola/domain/llm/settings.dart';
 import 'package:kelola/presentation/host_inventory_ping.dart';
 import 'package:kelola/presentation/screens/add_host_screen.dart';
 import 'package:kelola/presentation/screens/audit_screen.dart';
@@ -216,13 +217,18 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                           ServiceRow(
                             risk: RiskLevel.read,
                             name: 'Assist',
-                            meta: 'LLM · default none',
-                            onTap: () {
-                              Navigator.of(context).push(
+                            meta: ref.watch(llmSettingsProvider).when(
+                                  data: llmAssistFooterMeta,
+                                  loading: () => 'LLM · …',
+                                  error: (_, _) => 'LLM · none',
+                                ),
+                            onTap: () async {
+                              await Navigator.of(context).push(
                                 MaterialPageRoute<void>(
                                   builder: (_) => const LlmSettingsScreen(),
                                 ),
                               );
+                              ref.invalidate(llmSettingsProvider);
                             },
                           ),
                           const SizedBox(height: 6),

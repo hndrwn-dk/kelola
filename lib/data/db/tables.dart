@@ -105,9 +105,15 @@ class AppSettings extends Table {
       boolean().withDefault(const Constant(false))();
   TextColumn get llmProvider =>
       text().withDefault(const Constant('none'))();
+  /// Legacy shared fields — no longer written; kept for migration from < 11.
   TextColumn get llmBaseUrl => text().nullable()();
   TextColumn get llmApiKey => text().nullable()();
   TextColumn get llmModel => text().nullable()();
+  TextColumn get llmOllamaBaseUrl => text().nullable()();
+  TextColumn get llmOllamaModel => text().nullable()();
+  TextColumn get llmOpenaiBaseUrl => text().nullable()();
+  TextColumn get llmOpenaiApiKey => text().nullable()();
+  TextColumn get llmOpenaiModel => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

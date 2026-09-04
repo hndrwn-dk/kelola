@@ -1,4 +1,12 @@
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/risk/risk_level.dart';
+
+class FleetTileMetric {
+  const FleetTileMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+}
 
 enum FleetSeverity {
   unreachable,
@@ -111,6 +119,25 @@ class FleetHostHealth {
     return FleetSeverity.healthy;
   }
 
+  /// Band risk for [FleetHostTile]. Load ≥100% is destructive (red).
+  RiskLevel get tileRiskLevel {
+    switch (severity) {
+      case FleetSeverity.unreachable:
+      case FleetSeverity.loadHigh:
+        return RiskLevel.destructive;
+      case FleetSeverity.failedUnits:
+      case FleetSeverity.badContainers:
+      case FleetSeverity.diskHigh:
+        return RiskLevel.mutate;
+      case FleetSeverity.securityUpdates:
+      case FleetSeverity.pendingUpdates:
+      case FleetSeverity.memHigh:
+      case FleetSeverity.rebootRequired:
+      case FleetSeverity.healthy:
+        return RiskLevel.read;
+    }
+  }
+
   bool isStale({DateTime? now}) {
     final n = (now ?? DateTime.now()).toUtc();
     return n.difference(fetchedAt.toUtc()) > Host.attentionFreshFor;
@@ -129,40 +156,52 @@ class FleetHostHealth {
     return '${d.inMinutes}m';
   }
 
+  /// Compact metric cells for the fleet tile. Zero trouble fields omitted.
+  List<FleetTileMetric> tileMetrics({DateTime? now}) {
+    if (!reachable) {
+      return const [];
+    }
+    final ratio = loadRatio;
+    final loadVal = ratio == null
+        ? load1.toStringAsFixed(2)
+        : '${(ratio * 100).round()}%';
+    final cells = <FleetTileMetric>[
+      FleetTileMetric(label: 'load', value: loadVal),
+      FleetTileMetric(label: 'mem', value: '$memPercent%'),
+      FleetTileMetric(label: 'disk', value: '$diskRootPercent%'),
+      FleetTileMetric(label: 'up', value: uptimeLabel()),
+    ];
+    if (failedUnitCount > 0) {
+      cells.add(FleetTileMetric(label: 'fail', value: '$failedUnitCount'));
+    }
+    if (containerTroubleCount > 0) {
+      cells.add(
+        FleetTileMetric(label: 'ctr', value: '$containerTroubleCount'),
+      );
+    }
+    if (securityUpdates > 0) {
+      cells.add(FleetTileMetric(label: 'sec', value: '$securityUpdates'));
+    } else if (pendingUpdates > 0) {
+      cells.add(FleetTileMetric(label: 'upd', value: '$pendingUpdates'));
+    }
+    if (rebootRequired) {
+      cells.add(const FleetTileMetric(label: 'reboot', value: 'yes'));
+    }
+    if (fromCache || isStale(now: now)) {
+      cells.add(FleetTileMetric(label: 'cache', value: ageLabel(now: now)));
+    }
+    return cells;
+  }
+
   String tileSummary({DateTime? now}) {
     if (!reachable) {
       return fromCache || fetchedAt.millisecondsSinceEpoch > 0
           ? 'down · cache ${ageLabel(now: now)}'
           : 'unreachable';
     }
-    final ratio = loadRatio;
-    final loadBit = ratio == null
-        ? 'load ${load1.toStringAsFixed(2)}'
-        : 'load ${(ratio * 100).round()}%';
-    final bits = <String>[
-      loadBit,
-      'mem $memPercent%',
-      'disk $diskRootPercent%',
-    ];
-    if (failedUnitCount > 0) {
-      bits.add('$failedUnitCount failed');
-    }
-    if (containerTroubleCount > 0) {
-      bits.add(containersLabel);
-    }
-    if (securityUpdates > 0) {
-      bits.add('$securityUpdates sec');
-    } else if (pendingUpdates > 0) {
-      bits.add('$pendingUpdates upd');
-    }
-    if (rebootRequired) {
-      bits.add('reboot');
-    }
-    bits.add(uptimeLabel());
-    if (fromCache || isStale(now: now)) {
-      bits.add('cache ${ageLabel(now: now)}');
-    }
-    return bits.join(' · ');
+    return tileMetrics(now: now)
+        .map((m) => '${m.label} ${m.value}')
+        .join(' · ');
   }
 }
 

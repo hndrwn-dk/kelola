@@ -3681,6 +3681,61 @@ class $AppSettingsTable extends AppSettings
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _llmOllamaBaseUrlMeta = const VerificationMeta(
+    'llmOllamaBaseUrl',
+  );
+  @override
+  late final GeneratedColumn<String> llmOllamaBaseUrl = GeneratedColumn<String>(
+    'llm_ollama_base_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _llmOllamaModelMeta = const VerificationMeta(
+    'llmOllamaModel',
+  );
+  @override
+  late final GeneratedColumn<String> llmOllamaModel = GeneratedColumn<String>(
+    'llm_ollama_model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _llmOpenaiBaseUrlMeta = const VerificationMeta(
+    'llmOpenaiBaseUrl',
+  );
+  @override
+  late final GeneratedColumn<String> llmOpenaiBaseUrl = GeneratedColumn<String>(
+    'llm_openai_base_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _llmOpenaiApiKeyMeta = const VerificationMeta(
+    'llmOpenaiApiKey',
+  );
+  @override
+  late final GeneratedColumn<String> llmOpenaiApiKey = GeneratedColumn<String>(
+    'llm_openai_api_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _llmOpenaiModelMeta = const VerificationMeta(
+    'llmOpenaiModel',
+  );
+  @override
+  late final GeneratedColumn<String> llmOpenaiModel = GeneratedColumn<String>(
+    'llm_openai_model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3692,6 +3747,11 @@ class $AppSettingsTable extends AppSettings
     llmBaseUrl,
     llmApiKey,
     llmModel,
+    llmOllamaBaseUrl,
+    llmOllamaModel,
+    llmOpenaiBaseUrl,
+    llmOpenaiApiKey,
+    llmOpenaiModel,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3771,6 +3831,51 @@ class $AppSettingsTable extends AppSettings
         llmModel.isAcceptableOrUnknown(data['llm_model']!, _llmModelMeta),
       );
     }
+    if (data.containsKey('llm_ollama_base_url')) {
+      context.handle(
+        _llmOllamaBaseUrlMeta,
+        llmOllamaBaseUrl.isAcceptableOrUnknown(
+          data['llm_ollama_base_url']!,
+          _llmOllamaBaseUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('llm_ollama_model')) {
+      context.handle(
+        _llmOllamaModelMeta,
+        llmOllamaModel.isAcceptableOrUnknown(
+          data['llm_ollama_model']!,
+          _llmOllamaModelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('llm_openai_base_url')) {
+      context.handle(
+        _llmOpenaiBaseUrlMeta,
+        llmOpenaiBaseUrl.isAcceptableOrUnknown(
+          data['llm_openai_base_url']!,
+          _llmOpenaiBaseUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('llm_openai_api_key')) {
+      context.handle(
+        _llmOpenaiApiKeyMeta,
+        llmOpenaiApiKey.isAcceptableOrUnknown(
+          data['llm_openai_api_key']!,
+          _llmOpenaiApiKeyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('llm_openai_model')) {
+      context.handle(
+        _llmOpenaiModelMeta,
+        llmOpenaiModel.isAcceptableOrUnknown(
+          data['llm_openai_model']!,
+          _llmOpenaiModelMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3816,6 +3921,26 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.string,
         data['${effectivePrefix}llm_model'],
       ),
+      llmOllamaBaseUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}llm_ollama_base_url'],
+      ),
+      llmOllamaModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}llm_ollama_model'],
+      ),
+      llmOpenaiBaseUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}llm_openai_base_url'],
+      ),
+      llmOpenaiApiKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}llm_openai_api_key'],
+      ),
+      llmOpenaiModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}llm_openai_model'],
+      ),
     );
   }
 
@@ -3832,9 +3957,16 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   final String? keyBackend;
   final bool widgetEnabled;
   final String llmProvider;
+
+  /// Legacy shared fields — no longer written; kept for migration from < 11.
   final String? llmBaseUrl;
   final String? llmApiKey;
   final String? llmModel;
+  final String? llmOllamaBaseUrl;
+  final String? llmOllamaModel;
+  final String? llmOpenaiBaseUrl;
+  final String? llmOpenaiApiKey;
+  final String? llmOpenaiModel;
   const AppSettingsRow({
     required this.id,
     this.lastHostId,
@@ -3845,6 +3977,11 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     this.llmBaseUrl,
     this.llmApiKey,
     this.llmModel,
+    this.llmOllamaBaseUrl,
+    this.llmOllamaModel,
+    this.llmOpenaiBaseUrl,
+    this.llmOpenaiApiKey,
+    this.llmOpenaiModel,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3869,6 +4006,21 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     }
     if (!nullToAbsent || llmModel != null) {
       map['llm_model'] = Variable<String>(llmModel);
+    }
+    if (!nullToAbsent || llmOllamaBaseUrl != null) {
+      map['llm_ollama_base_url'] = Variable<String>(llmOllamaBaseUrl);
+    }
+    if (!nullToAbsent || llmOllamaModel != null) {
+      map['llm_ollama_model'] = Variable<String>(llmOllamaModel);
+    }
+    if (!nullToAbsent || llmOpenaiBaseUrl != null) {
+      map['llm_openai_base_url'] = Variable<String>(llmOpenaiBaseUrl);
+    }
+    if (!nullToAbsent || llmOpenaiApiKey != null) {
+      map['llm_openai_api_key'] = Variable<String>(llmOpenaiApiKey);
+    }
+    if (!nullToAbsent || llmOpenaiModel != null) {
+      map['llm_openai_model'] = Variable<String>(llmOpenaiModel);
     }
     return map;
   }
@@ -3896,6 +4048,21 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       llmModel: llmModel == null && nullToAbsent
           ? const Value.absent()
           : Value(llmModel),
+      llmOllamaBaseUrl: llmOllamaBaseUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(llmOllamaBaseUrl),
+      llmOllamaModel: llmOllamaModel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(llmOllamaModel),
+      llmOpenaiBaseUrl: llmOpenaiBaseUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(llmOpenaiBaseUrl),
+      llmOpenaiApiKey: llmOpenaiApiKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(llmOpenaiApiKey),
+      llmOpenaiModel: llmOpenaiModel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(llmOpenaiModel),
     );
   }
 
@@ -3914,6 +4081,11 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       llmBaseUrl: serializer.fromJson<String?>(json['llmBaseUrl']),
       llmApiKey: serializer.fromJson<String?>(json['llmApiKey']),
       llmModel: serializer.fromJson<String?>(json['llmModel']),
+      llmOllamaBaseUrl: serializer.fromJson<String?>(json['llmOllamaBaseUrl']),
+      llmOllamaModel: serializer.fromJson<String?>(json['llmOllamaModel']),
+      llmOpenaiBaseUrl: serializer.fromJson<String?>(json['llmOpenaiBaseUrl']),
+      llmOpenaiApiKey: serializer.fromJson<String?>(json['llmOpenaiApiKey']),
+      llmOpenaiModel: serializer.fromJson<String?>(json['llmOpenaiModel']),
     );
   }
   @override
@@ -3929,6 +4101,11 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       'llmBaseUrl': serializer.toJson<String?>(llmBaseUrl),
       'llmApiKey': serializer.toJson<String?>(llmApiKey),
       'llmModel': serializer.toJson<String?>(llmModel),
+      'llmOllamaBaseUrl': serializer.toJson<String?>(llmOllamaBaseUrl),
+      'llmOllamaModel': serializer.toJson<String?>(llmOllamaModel),
+      'llmOpenaiBaseUrl': serializer.toJson<String?>(llmOpenaiBaseUrl),
+      'llmOpenaiApiKey': serializer.toJson<String?>(llmOpenaiApiKey),
+      'llmOpenaiModel': serializer.toJson<String?>(llmOpenaiModel),
     };
   }
 
@@ -3942,6 +4119,11 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     Value<String?> llmBaseUrl = const Value.absent(),
     Value<String?> llmApiKey = const Value.absent(),
     Value<String?> llmModel = const Value.absent(),
+    Value<String?> llmOllamaBaseUrl = const Value.absent(),
+    Value<String?> llmOllamaModel = const Value.absent(),
+    Value<String?> llmOpenaiBaseUrl = const Value.absent(),
+    Value<String?> llmOpenaiApiKey = const Value.absent(),
+    Value<String?> llmOpenaiModel = const Value.absent(),
   }) => AppSettingsRow(
     id: id ?? this.id,
     lastHostId: lastHostId.present ? lastHostId.value : this.lastHostId,
@@ -3954,6 +4136,21 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     llmBaseUrl: llmBaseUrl.present ? llmBaseUrl.value : this.llmBaseUrl,
     llmApiKey: llmApiKey.present ? llmApiKey.value : this.llmApiKey,
     llmModel: llmModel.present ? llmModel.value : this.llmModel,
+    llmOllamaBaseUrl: llmOllamaBaseUrl.present
+        ? llmOllamaBaseUrl.value
+        : this.llmOllamaBaseUrl,
+    llmOllamaModel: llmOllamaModel.present
+        ? llmOllamaModel.value
+        : this.llmOllamaModel,
+    llmOpenaiBaseUrl: llmOpenaiBaseUrl.present
+        ? llmOpenaiBaseUrl.value
+        : this.llmOpenaiBaseUrl,
+    llmOpenaiApiKey: llmOpenaiApiKey.present
+        ? llmOpenaiApiKey.value
+        : this.llmOpenaiApiKey,
+    llmOpenaiModel: llmOpenaiModel.present
+        ? llmOpenaiModel.value
+        : this.llmOpenaiModel,
   );
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
@@ -3978,6 +4175,21 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           : this.llmBaseUrl,
       llmApiKey: data.llmApiKey.present ? data.llmApiKey.value : this.llmApiKey,
       llmModel: data.llmModel.present ? data.llmModel.value : this.llmModel,
+      llmOllamaBaseUrl: data.llmOllamaBaseUrl.present
+          ? data.llmOllamaBaseUrl.value
+          : this.llmOllamaBaseUrl,
+      llmOllamaModel: data.llmOllamaModel.present
+          ? data.llmOllamaModel.value
+          : this.llmOllamaModel,
+      llmOpenaiBaseUrl: data.llmOpenaiBaseUrl.present
+          ? data.llmOpenaiBaseUrl.value
+          : this.llmOpenaiBaseUrl,
+      llmOpenaiApiKey: data.llmOpenaiApiKey.present
+          ? data.llmOpenaiApiKey.value
+          : this.llmOpenaiApiKey,
+      llmOpenaiModel: data.llmOpenaiModel.present
+          ? data.llmOpenaiModel.value
+          : this.llmOpenaiModel,
     );
   }
 
@@ -3992,7 +4204,12 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('llmProvider: $llmProvider, ')
           ..write('llmBaseUrl: $llmBaseUrl, ')
           ..write('llmApiKey: $llmApiKey, ')
-          ..write('llmModel: $llmModel')
+          ..write('llmModel: $llmModel, ')
+          ..write('llmOllamaBaseUrl: $llmOllamaBaseUrl, ')
+          ..write('llmOllamaModel: $llmOllamaModel, ')
+          ..write('llmOpenaiBaseUrl: $llmOpenaiBaseUrl, ')
+          ..write('llmOpenaiApiKey: $llmOpenaiApiKey, ')
+          ..write('llmOpenaiModel: $llmOpenaiModel')
           ..write(')'))
         .toString();
   }
@@ -4008,6 +4225,11 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     llmBaseUrl,
     llmApiKey,
     llmModel,
+    llmOllamaBaseUrl,
+    llmOllamaModel,
+    llmOpenaiBaseUrl,
+    llmOpenaiApiKey,
+    llmOpenaiModel,
   );
   @override
   bool operator ==(Object other) =>
@@ -4021,7 +4243,12 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.llmProvider == this.llmProvider &&
           other.llmBaseUrl == this.llmBaseUrl &&
           other.llmApiKey == this.llmApiKey &&
-          other.llmModel == this.llmModel);
+          other.llmModel == this.llmModel &&
+          other.llmOllamaBaseUrl == this.llmOllamaBaseUrl &&
+          other.llmOllamaModel == this.llmOllamaModel &&
+          other.llmOpenaiBaseUrl == this.llmOpenaiBaseUrl &&
+          other.llmOpenaiApiKey == this.llmOpenaiApiKey &&
+          other.llmOpenaiModel == this.llmOpenaiModel);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
@@ -4034,6 +4261,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<String?> llmBaseUrl;
   final Value<String?> llmApiKey;
   final Value<String?> llmModel;
+  final Value<String?> llmOllamaBaseUrl;
+  final Value<String?> llmOllamaModel;
+  final Value<String?> llmOpenaiBaseUrl;
+  final Value<String?> llmOpenaiApiKey;
+  final Value<String?> llmOpenaiModel;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.lastHostId = const Value.absent(),
@@ -4044,6 +4276,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.llmBaseUrl = const Value.absent(),
     this.llmApiKey = const Value.absent(),
     this.llmModel = const Value.absent(),
+    this.llmOllamaBaseUrl = const Value.absent(),
+    this.llmOllamaModel = const Value.absent(),
+    this.llmOpenaiBaseUrl = const Value.absent(),
+    this.llmOpenaiApiKey = const Value.absent(),
+    this.llmOpenaiModel = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -4055,6 +4292,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.llmBaseUrl = const Value.absent(),
     this.llmApiKey = const Value.absent(),
     this.llmModel = const Value.absent(),
+    this.llmOllamaBaseUrl = const Value.absent(),
+    this.llmOllamaModel = const Value.absent(),
+    this.llmOpenaiBaseUrl = const Value.absent(),
+    this.llmOpenaiApiKey = const Value.absent(),
+    this.llmOpenaiModel = const Value.absent(),
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
@@ -4066,6 +4308,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Expression<String>? llmBaseUrl,
     Expression<String>? llmApiKey,
     Expression<String>? llmModel,
+    Expression<String>? llmOllamaBaseUrl,
+    Expression<String>? llmOllamaModel,
+    Expression<String>? llmOpenaiBaseUrl,
+    Expression<String>? llmOpenaiApiKey,
+    Expression<String>? llmOpenaiModel,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4077,6 +4324,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (llmBaseUrl != null) 'llm_base_url': llmBaseUrl,
       if (llmApiKey != null) 'llm_api_key': llmApiKey,
       if (llmModel != null) 'llm_model': llmModel,
+      if (llmOllamaBaseUrl != null) 'llm_ollama_base_url': llmOllamaBaseUrl,
+      if (llmOllamaModel != null) 'llm_ollama_model': llmOllamaModel,
+      if (llmOpenaiBaseUrl != null) 'llm_openai_base_url': llmOpenaiBaseUrl,
+      if (llmOpenaiApiKey != null) 'llm_openai_api_key': llmOpenaiApiKey,
+      if (llmOpenaiModel != null) 'llm_openai_model': llmOpenaiModel,
     });
   }
 
@@ -4090,6 +4342,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<String?>? llmBaseUrl,
     Value<String?>? llmApiKey,
     Value<String?>? llmModel,
+    Value<String?>? llmOllamaBaseUrl,
+    Value<String?>? llmOllamaModel,
+    Value<String?>? llmOpenaiBaseUrl,
+    Value<String?>? llmOpenaiApiKey,
+    Value<String?>? llmOpenaiModel,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -4101,6 +4358,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       llmBaseUrl: llmBaseUrl ?? this.llmBaseUrl,
       llmApiKey: llmApiKey ?? this.llmApiKey,
       llmModel: llmModel ?? this.llmModel,
+      llmOllamaBaseUrl: llmOllamaBaseUrl ?? this.llmOllamaBaseUrl,
+      llmOllamaModel: llmOllamaModel ?? this.llmOllamaModel,
+      llmOpenaiBaseUrl: llmOpenaiBaseUrl ?? this.llmOpenaiBaseUrl,
+      llmOpenaiApiKey: llmOpenaiApiKey ?? this.llmOpenaiApiKey,
+      llmOpenaiModel: llmOpenaiModel ?? this.llmOpenaiModel,
     );
   }
 
@@ -4134,6 +4396,21 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     if (llmModel.present) {
       map['llm_model'] = Variable<String>(llmModel.value);
     }
+    if (llmOllamaBaseUrl.present) {
+      map['llm_ollama_base_url'] = Variable<String>(llmOllamaBaseUrl.value);
+    }
+    if (llmOllamaModel.present) {
+      map['llm_ollama_model'] = Variable<String>(llmOllamaModel.value);
+    }
+    if (llmOpenaiBaseUrl.present) {
+      map['llm_openai_base_url'] = Variable<String>(llmOpenaiBaseUrl.value);
+    }
+    if (llmOpenaiApiKey.present) {
+      map['llm_openai_api_key'] = Variable<String>(llmOpenaiApiKey.value);
+    }
+    if (llmOpenaiModel.present) {
+      map['llm_openai_model'] = Variable<String>(llmOpenaiModel.value);
+    }
     return map;
   }
 
@@ -4148,7 +4425,12 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('llmProvider: $llmProvider, ')
           ..write('llmBaseUrl: $llmBaseUrl, ')
           ..write('llmApiKey: $llmApiKey, ')
-          ..write('llmModel: $llmModel')
+          ..write('llmModel: $llmModel, ')
+          ..write('llmOllamaBaseUrl: $llmOllamaBaseUrl, ')
+          ..write('llmOllamaModel: $llmOllamaModel, ')
+          ..write('llmOpenaiBaseUrl: $llmOpenaiBaseUrl, ')
+          ..write('llmOpenaiApiKey: $llmOpenaiApiKey, ')
+          ..write('llmOpenaiModel: $llmOpenaiModel')
           ..write(')'))
         .toString();
   }
@@ -7713,6 +7995,11 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<String?> llmBaseUrl,
       Value<String?> llmApiKey,
       Value<String?> llmModel,
+      Value<String?> llmOllamaBaseUrl,
+      Value<String?> llmOllamaModel,
+      Value<String?> llmOpenaiBaseUrl,
+      Value<String?> llmOpenaiApiKey,
+      Value<String?> llmOpenaiModel,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -7725,6 +8012,11 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<String?> llmBaseUrl,
       Value<String?> llmApiKey,
       Value<String?> llmModel,
+      Value<String?> llmOllamaBaseUrl,
+      Value<String?> llmOllamaModel,
+      Value<String?> llmOpenaiBaseUrl,
+      Value<String?> llmOpenaiApiKey,
+      Value<String?> llmOpenaiModel,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -7778,6 +8070,31 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<String> get llmModel => $composableBuilder(
     column: $table.llmModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get llmOllamaBaseUrl => $composableBuilder(
+    column: $table.llmOllamaBaseUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get llmOllamaModel => $composableBuilder(
+    column: $table.llmOllamaModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get llmOpenaiBaseUrl => $composableBuilder(
+    column: $table.llmOpenaiBaseUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get llmOpenaiApiKey => $composableBuilder(
+    column: $table.llmOpenaiApiKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get llmOpenaiModel => $composableBuilder(
+    column: $table.llmOpenaiModel,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -7835,6 +8152,31 @@ class $$AppSettingsTableOrderingComposer
     column: $table.llmModel,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get llmOllamaBaseUrl => $composableBuilder(
+    column: $table.llmOllamaBaseUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get llmOllamaModel => $composableBuilder(
+    column: $table.llmOllamaModel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get llmOpenaiBaseUrl => $composableBuilder(
+    column: $table.llmOpenaiBaseUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get llmOpenaiApiKey => $composableBuilder(
+    column: $table.llmOpenaiApiKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get llmOpenaiModel => $composableBuilder(
+    column: $table.llmOpenaiModel,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -7884,6 +8226,31 @@ class $$AppSettingsTableAnnotationComposer
 
   GeneratedColumn<String> get llmModel =>
       $composableBuilder(column: $table.llmModel, builder: (column) => column);
+
+  GeneratedColumn<String> get llmOllamaBaseUrl => $composableBuilder(
+    column: $table.llmOllamaBaseUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get llmOllamaModel => $composableBuilder(
+    column: $table.llmOllamaModel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get llmOpenaiBaseUrl => $composableBuilder(
+    column: $table.llmOpenaiBaseUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get llmOpenaiApiKey => $composableBuilder(
+    column: $table.llmOpenaiApiKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get llmOpenaiModel => $composableBuilder(
+    column: $table.llmOpenaiModel,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -7926,6 +8293,11 @@ class $$AppSettingsTableTableManager
                 Value<String?> llmBaseUrl = const Value.absent(),
                 Value<String?> llmApiKey = const Value.absent(),
                 Value<String?> llmModel = const Value.absent(),
+                Value<String?> llmOllamaBaseUrl = const Value.absent(),
+                Value<String?> llmOllamaModel = const Value.absent(),
+                Value<String?> llmOpenaiBaseUrl = const Value.absent(),
+                Value<String?> llmOpenaiApiKey = const Value.absent(),
+                Value<String?> llmOpenaiModel = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 lastHostId: lastHostId,
@@ -7936,6 +8308,11 @@ class $$AppSettingsTableTableManager
                 llmBaseUrl: llmBaseUrl,
                 llmApiKey: llmApiKey,
                 llmModel: llmModel,
+                llmOllamaBaseUrl: llmOllamaBaseUrl,
+                llmOllamaModel: llmOllamaModel,
+                llmOpenaiBaseUrl: llmOpenaiBaseUrl,
+                llmOpenaiApiKey: llmOpenaiApiKey,
+                llmOpenaiModel: llmOpenaiModel,
               ),
           createCompanionCallback:
               ({
@@ -7948,6 +8325,11 @@ class $$AppSettingsTableTableManager
                 Value<String?> llmBaseUrl = const Value.absent(),
                 Value<String?> llmApiKey = const Value.absent(),
                 Value<String?> llmModel = const Value.absent(),
+                Value<String?> llmOllamaBaseUrl = const Value.absent(),
+                Value<String?> llmOllamaModel = const Value.absent(),
+                Value<String?> llmOpenaiBaseUrl = const Value.absent(),
+                Value<String?> llmOpenaiApiKey = const Value.absent(),
+                Value<String?> llmOpenaiModel = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 lastHostId: lastHostId,
@@ -7958,6 +8340,11 @@ class $$AppSettingsTableTableManager
                 llmBaseUrl: llmBaseUrl,
                 llmApiKey: llmApiKey,
                 llmModel: llmModel,
+                llmOllamaBaseUrl: llmOllamaBaseUrl,
+                llmOllamaModel: llmOllamaModel,
+                llmOpenaiBaseUrl: llmOpenaiBaseUrl,
+                llmOpenaiApiKey: llmOpenaiApiKey,
+                llmOpenaiModel: llmOpenaiModel,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

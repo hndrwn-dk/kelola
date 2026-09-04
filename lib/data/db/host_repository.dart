@@ -296,16 +296,10 @@ class HostRepository {
   }) async {
     final existing = await _settings();
     await _db.into(_db.appSettings).insertOnConflictUpdate(
-          AppSettingsCompanion(
-            id: const Value(1),
-            lastHostId: Value(existing?.lastHostId),
+          _appSettingsWrite(
+            existing,
             publicKeySpkiB64: Value(blobB64),
             keyBackend: Value(backend),
-            widgetEnabled: Value(existing?.widgetEnabled ?? false),
-            llmProvider: Value(existing?.llmProvider ?? 'none'),
-            llmBaseUrl: Value(existing?.llmBaseUrl),
-            llmApiKey: Value(existing?.llmApiKey),
-            llmModel: Value(existing?.llmModel),
           ),
         );
   }
@@ -322,16 +316,10 @@ class HostRepository {
   Future<void> clearDeviceKey() async {
     final existing = await _settings();
     await _db.into(_db.appSettings).insertOnConflictUpdate(
-          AppSettingsCompanion(
-            id: const Value(1),
-            lastHostId: Value(existing?.lastHostId),
+          _appSettingsWrite(
+            existing,
             publicKeySpkiB64: const Value(null),
             keyBackend: const Value(null),
-            widgetEnabled: Value(existing?.widgetEnabled ?? false),
-            llmProvider: Value(existing?.llmProvider ?? 'none'),
-            llmBaseUrl: Value(existing?.llmBaseUrl),
-            llmApiKey: Value(existing?.llmApiKey),
-            llmModel: Value(existing?.llmModel),
           ),
         );
   }
@@ -840,45 +828,114 @@ class HostRepository {
   Future<void> setWidgetEnabled(bool value) async {
     final existing = await _settings();
     await _db.into(_db.appSettings).insertOnConflictUpdate(
-          AppSettingsCompanion(
-            id: const Value(1),
-            lastHostId: Value(existing?.lastHostId),
-            publicKeySpkiB64: Value(existing?.publicKeySpkiB64),
-            keyBackend: Value(existing?.keyBackend),
+          _appSettingsWrite(
+            existing,
             widgetEnabled: Value(value),
-            llmProvider: Value(existing?.llmProvider ?? 'none'),
-            llmBaseUrl: Value(existing?.llmBaseUrl),
-            llmApiKey: Value(existing?.llmApiKey),
-            llmModel: Value(existing?.llmModel),
           ),
         );
   }
 
   Future<LlmSettings> loadLlmSettings() async {
+    return (await loadLlmSettingsBundle()).resolved;
+  }
+
+  Future<LlmSettingsBundle> loadLlmSettingsBundle() async {
     final row = await _settings();
-    return LlmSettings(
-      provider: LlmProvider.parse(row?.llmProvider),
-      baseUrl: row?.llmBaseUrl,
-      apiKey: row?.llmApiKey,
-      model: row?.llmModel,
+    return LlmSettingsBundle(
+      activeProvider: LlmProvider.parse(row?.llmProvider),
+      ollama: LlmEndpointConfig(
+        baseUrl: row?.llmOllamaBaseUrl,
+        model: row?.llmOllamaModel,
+      ),
+      openaiCompatible: LlmEndpointConfig(
+        baseUrl: row?.llmOpenaiBaseUrl,
+        apiKey: row?.llmOpenaiApiKey,
+        model: row?.llmOpenaiModel,
+      ),
     );
   }
 
   Future<void> saveLlmSettings(LlmSettings settings) async {
+    // Legacy single-slot API: write into the active provider's slot only.
+    final existing = await loadLlmSettingsBundle();
+    final draft = LlmEndpointConfig(
+      baseUrl: settings.baseUrl,
+      apiKey: settings.apiKey,
+      model: settings.model,
+    );
+    await saveLlmSettingsBundle(
+      existing.persistEdit(
+        draftProvider: settings.provider,
+        draftConfig: draft,
+      ),
+    );
+  }
+
+  Future<void> saveLlmSettingsBundle(LlmSettingsBundle bundle) async {
     final existing = await _settings();
     await _db.into(_db.appSettings).insertOnConflictUpdate(
-          AppSettingsCompanion(
-            id: const Value(1),
-            lastHostId: Value(existing?.lastHostId),
-            publicKeySpkiB64: Value(existing?.publicKeySpkiB64),
-            keyBackend: Value(existing?.keyBackend),
-            widgetEnabled: Value(existing?.widgetEnabled ?? false),
-            llmProvider: Value(settings.provider.storageName),
-            llmBaseUrl: Value(settings.baseUrl),
-            llmApiKey: Value(settings.apiKey),
-            llmModel: Value(settings.model),
+          _appSettingsWrite(
+            existing,
+            llmProvider: Value(bundle.activeProvider.storageName),
+            llmOllamaBaseUrl: Value(bundle.ollama.baseUrl),
+            llmOllamaModel: Value(bundle.ollama.model),
+            llmOpenaiBaseUrl: Value(bundle.openaiCompatible.baseUrl),
+            llmOpenaiApiKey: Value(bundle.openaiCompatible.apiKey),
+            llmOpenaiModel: Value(bundle.openaiCompatible.model),
           ),
         );
+  }
+
+  /// Upsert app_settings row 1, preserving any field not explicitly overridden.
+  AppSettingsCompanion _appSettingsWrite(
+    AppSettingsRow? existing, {
+    Value<String?> lastHostId = const Value.absent(),
+    Value<String?> publicKeySpkiB64 = const Value.absent(),
+    Value<String?> keyBackend = const Value.absent(),
+    Value<bool> widgetEnabled = const Value.absent(),
+    Value<String> llmProvider = const Value.absent(),
+    Value<String?> llmOllamaBaseUrl = const Value.absent(),
+    Value<String?> llmOllamaModel = const Value.absent(),
+    Value<String?> llmOpenaiBaseUrl = const Value.absent(),
+    Value<String?> llmOpenaiApiKey = const Value.absent(),
+    Value<String?> llmOpenaiModel = const Value.absent(),
+  }) {
+    return AppSettingsCompanion(
+      id: const Value(1),
+      lastHostId: lastHostId.present
+          ? lastHostId
+          : Value(existing?.lastHostId),
+      publicKeySpkiB64: publicKeySpkiB64.present
+          ? publicKeySpkiB64
+          : Value(existing?.publicKeySpkiB64),
+      keyBackend:
+          keyBackend.present ? keyBackend : Value(existing?.keyBackend),
+      widgetEnabled: widgetEnabled.present
+          ? widgetEnabled
+          : Value(existing?.widgetEnabled ?? false),
+      llmProvider: llmProvider.present
+          ? llmProvider
+          : Value(existing?.llmProvider ?? 'none'),
+      // Legacy shared columns: preserve only; new writes go to per-provider cols.
+      llmBaseUrl: Value(existing?.llmBaseUrl),
+      llmApiKey: Value(existing?.llmApiKey),
+      llmModel: Value(existing?.llmModel),
+      llmOllamaBaseUrl: llmOllamaBaseUrl.present
+          ? llmOllamaBaseUrl
+          : Value(existing?.llmOllamaBaseUrl),
+      llmOllamaModel: llmOllamaModel.present
+          ? llmOllamaModel
+          : Value(existing?.llmOllamaModel),
+      llmOpenaiBaseUrl: llmOpenaiBaseUrl.present
+          ? llmOpenaiBaseUrl
+          : Value(existing?.llmOpenaiBaseUrl),
+      llmOpenaiApiKey: llmOpenaiApiKey.present
+          ? llmOpenaiApiKey
+          : Value(existing?.llmOpenaiApiKey),
+      llmOpenaiModel: llmOpenaiModel.present
+          ? llmOpenaiModel
+          : Value(existing?.llmOpenaiModel),
+    );
   }
 
   Future<List<Snippet>> listSnippets() async {

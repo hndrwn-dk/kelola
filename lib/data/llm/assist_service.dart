@@ -24,6 +24,21 @@ class AssistService {
   })  : _http = http,
         gate = gate ?? AssistPreviewGate();
 
+  /// Mobile incident sheet: keep replies scannable.
+  static const failedUnitSystemPrompt =
+      'Explain why this systemd unit failed in plain language. '
+      'Reply with at most 3 short paragraphs: (1) the cause, '
+      '(2) quote the concrete error line when present, '
+      '(3) one next step. '
+      'Ground the answer in the journal and systemctl show fields. '
+      'Do not invent facts absent from the input. Do not repeat yourself.';
+
+  static const diskSystemPrompt =
+      'Explain what is consuming disk space. '
+      'Reply with at most 3 short paragraphs: (1) what is large, '
+      '(2) evidence from df/du, (3) one conventionally safe next step. '
+      'Do not invent paths.';
+
   final LlmHttpClient _http;
   final AssistPreviewGate gate;
 
@@ -48,11 +63,7 @@ class AssistService {
     return _complete(
       settings: settings,
       request: AssistRequest(
-        system:
-            'Explain why this systemd unit failed in plain language. '
-            'Ground the answer in the journal and systemctl show fields. '
-            'Quote the concrete error line when present. '
-            'Suggest one next step. Do not invent facts absent from the input.',
+        system: failedUnitSystemPrompt,
         user:
             'Unit: $unitName\n\n--- show ---\n$showOutput\n\n--- journal ---\n$journal',
         hostnames: hostnames,
@@ -71,9 +82,7 @@ class AssistService {
     return _complete(
       settings: settings,
       request: AssistRequest(
-        system:
-            'Explain what is consuming disk space. '
-            'Say what is conventionally safe to remove. Do not invent paths.',
+        system: diskSystemPrompt,
         user: '--- df ---\n$dfOutput\n\n--- du ---\n$duOutput',
         hostnames: hostnames,
         usernames: usernames,
