@@ -17,9 +17,12 @@ import 'package:kelola/domain/probes/process_list_probe.dart';
 import 'package:kelola/domain/probes/unit_action_probe.dart';
 import 'package:kelola/domain/probes/unit_list_probe.dart';
 import 'package:kelola/domain/units/service_unit.dart';
+import 'package:kelola/data/llm/assist_service.dart';
+import 'package:kelola/presentation/assist_flow.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/confirm_unit_action.dart';
 import 'package:kelola/presentation/widgets/diagnostic_pack_sheet.dart';
+import 'package:kelola/domain/llm/assist_request.dart';
 import 'package:kelola/providers.dart';
 
 Future<void> showIncidentSheet(
@@ -80,6 +83,7 @@ class IncidentSheetPanel extends StatelessWidget {
     this.onAction,
     this.onLookUp,
     this.onDiagnostic,
+    this.onExplain,
     this.error,
   });
 
@@ -88,6 +92,7 @@ class IncidentSheetPanel extends StatelessWidget {
   final void Function(IncidentAction action)? onAction;
   final void Function(CorrelationLookUp lookUp)? onLookUp;
   final VoidCallback? onDiagnostic;
+  final VoidCallback? onExplain;
   final String? error;
 
   @override
@@ -205,6 +210,15 @@ class IncidentSheetPanel extends StatelessWidget {
                 const SizedBox(height: 6),
               ],
             ],
+            if (onExplain != null) ...[
+              const SizedBox(height: 6),
+              ServiceRow(
+                risk: RiskLevel.read,
+                name: 'Explain',
+                meta: 'assist · does not run',
+                onTap: onExplain,
+              ),
+            ],
             if (onDiagnostic != null) ...[
               const SizedBox(height: 6),
               ServiceRow(
@@ -254,7 +268,79 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
       onAction: _act,
       onLookUp: _lookUp,
       onDiagnostic: () => openDiagnosticPack(context, ref, widget.host),
+      onExplain: () => _explain(),
     );
+  }
+
+  Future<void> _explain() async {
+    final host = widget.host;
+    final view = _view;
+    final focus = view.focus;
+    try {
+      final settings = await requireAssistSettings(ref);
+      if (!mounted) {
+        return;
+      }
+      final journal = view.lines
+          .map((e) => e.message)
+          .where((m) => m.trim().isNotEmpty)
+          .take(50)
+          .join('\n');
+      final hostnames = [host.alias, host.address];
+      final usernames = [host.username];
+      late final AssistRequest request;
+      late final Future<String> Function(AssistService service) run;
+      if (focus?.kind == IncidentObjectKind.disk) {
+        request = AssistRequest(
+          system:
+              'Explain what is consuming disk space. '
+              'Say what is conventionally safe to remove. Do not invent paths.',
+          user: 'Disk attention on ${focus!.name}: ${focus.summary}\n$journal',
+          hostnames: hostnames,
+          usernames: usernames,
+        );
+        run = (s) => s.explainDisk(
+              settings: settings,
+              dfOutput: focus.summary,
+              duOutput: journal,
+              hostnames: hostnames,
+              usernames: usernames,
+            );
+      } else {
+        final unit = focus?.name ?? 'unknown.unit';
+        request = AssistRequest(
+          system:
+              'Explain why this systemd unit failed in plain language. '
+              'Suggest one next step. Do not invent facts absent from the input.',
+          user: 'Unit: $unit\n\n--- journal ---\n$journal',
+          hostnames: hostnames,
+          usernames: usernames,
+        );
+        run = (s) => s.explainFailedUnit(
+              settings: settings,
+              unitName: unit,
+              showOutput: focus?.summary ?? '',
+              journal: journal,
+              hostnames: hostnames,
+              usernames: usernames,
+            );
+      }
+      final text = await runAssistWithPreview(
+        context: context,
+        ref: ref,
+        settings: settings,
+        request: request,
+        run: run,
+      );
+      if (!mounted || text == null) {
+        return;
+      }
+      await showAssistResult(context, title: 'Explain', body: text);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = describeSshError(e));
+      }
+    }
   }
 
   Future<void> _lookUp(CorrelationLookUp lookUp) async {

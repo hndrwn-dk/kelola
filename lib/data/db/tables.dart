@@ -103,6 +103,11 @@ class AppSettings extends Table {
   TextColumn get keyBackend => text().nullable()();
   BoolColumn get widgetEnabled =>
       boolean().withDefault(const Constant(false))();
+  TextColumn get llmProvider =>
+      text().withDefault(const Constant('none'))();
+  TextColumn get llmBaseUrl => text().nullable()();
+  TextColumn get llmApiKey => text().nullable()();
+  TextColumn get llmModel => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -132,4 +137,27 @@ class Snippets extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {id};
+}
+
+@DataClassName('HostTagRow')
+class HostTags extends Table {
+  TextColumn get hostId => text().references(Hosts, #id)();
+  TextColumn get tag => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {hostId, tag};
+}
+
+@DataClassName('FleetCacheRow')
+class FleetCache extends Table {
+  TextColumn get hostId => text().references(Hosts, #id)();
+  BoolColumn get reachable => boolean()();
+  RealColumn get load1 => real()();
+  IntColumn get diskRootPercent => integer()();
+  IntColumn get failedUnitCount => integer()();
+  IntColumn get pendingUpdates => integer()();
+  DateTimeColumn get fetchedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {hostId};
 }

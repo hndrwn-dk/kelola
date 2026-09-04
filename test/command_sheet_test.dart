@@ -34,6 +34,7 @@ void main() {
     expect(find.text(commandRunnerEmptyCopy), findsOneWidget);
     expect(find.text('connected…'), findsNothing);
     expect(find.text('SSH'), findsNothing);
-    expect(find.text('one command'), findsOneWidget);
+    expect(find.textContaining('one command'), findsOneWidget);
+    expect(find.text('Propose'), findsOneWidget);
   });
 }

@@ -20,6 +20,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
   final _address = TextEditingController();
   final _port = TextEditingController();
   final _user = TextEditingController();
+  final _tags = TextEditingController();
   Host? _host;
   List<Host> _others = const [];
   String? _jumpHostId;
@@ -38,6 +39,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
     _address.dispose();
     _port.dispose();
     _user.dispose();
+    _tags.dispose();
     super.dispose();
   }
 
@@ -55,6 +57,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
       _address.text = host?.address ?? '';
       _port.text = '${host?.port ?? 22}';
       _user.text = host?.username ?? '';
+      _tags.text = host?.tags.join(', ') ?? '';
       _jumpHostId = host?.jumpHostId;
       _readOnly = host?.readOnly ?? false;
       _loading = false;
@@ -116,6 +119,10 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
       return;
     }
     await _saveAlias();
+    await ref.read(hostRepositoryProvider).setHostTags(
+          host.id,
+          _tags.text.split(RegExp(r'[,;\s]+')),
+        );
 
     final address = _address.text.trim();
     final user = _user.text.trim();
@@ -143,6 +150,15 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
     final portChanged = port != host.port;
     final jumpChanged = _jumpHostId != host.jumpHostId;
     if (!addressChanged && !userChanged && !portChanged && !jumpChanged) {
+      final updated = await ref.read(hostRepositoryProvider).get(host.id);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _host = updated ?? host;
+        _tags.text = (updated ?? host).tags.join(', ');
+      });
+      ref.invalidate(hostsProvider);
       return;
     }
 
@@ -257,6 +273,13 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 14),
+                    KelolaInput(
+                      key: const Key('edit-host-tags'),
+                      label: 'Tags',
+                      controller: _tags,
+                      hint: 'prod, staging, homelab',
                     ),
                     const SizedBox(height: 16),
                     Text(

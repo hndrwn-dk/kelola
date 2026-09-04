@@ -1,8 +1,9 @@
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/domain/probes/snippet_probe.dart';
 
-enum ProbeScope { host, fleet }
+export 'package:kelola/domain/probes/probe_scope.dart' show ProbeScope;
 
 class SnippetFleetForbidden implements Exception {
   @override

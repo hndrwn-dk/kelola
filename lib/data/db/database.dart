@@ -16,6 +16,8 @@ part 'database.g.dart';
     AppSettings,
     SearchIndexCache,
     Snippets,
+    HostTags,
+    FleetCache,
   ],
 )
 class KelolaDatabase extends _$KelolaDatabase {
@@ -26,7 +28,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -53,6 +55,16 @@ class KelolaDatabase extends _$KelolaDatabase {
           }
           if (from < 7) {
             await m.addColumn(appSettings, appSettings.widgetEnabled);
+          }
+          if (from < 8) {
+            await m.addColumn(appSettings, appSettings.llmProvider);
+            await m.addColumn(appSettings, appSettings.llmBaseUrl);
+            await m.addColumn(appSettings, appSettings.llmApiKey);
+            await m.addColumn(appSettings, appSettings.llmModel);
+          }
+          if (from < 9) {
+            await m.createTable(hostTags);
+            await m.createTable(fleetCache);
           }
         },
       );

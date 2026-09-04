@@ -63,7 +63,7 @@ void main() {
     expect(tablesAfter, isNotEmpty);
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 7);
+    expect(version.data['user_version'], 9);
 
     final cols = await db.customSelect('PRAGMA table_info(search_index)').get();
     final names = cols.map((r) => r.read<String>('name')).toSet();
@@ -75,5 +75,14 @@ void main() {
       settingsCols.map((r) => r.read<String>('name')).toSet(),
       contains('widget_enabled'),
     );
+
+    final tagTable = await db.customSelect(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='host_tags'",
+    ).get();
+    expect(tagTable, isNotEmpty);
+    final fleetTable = await db.customSelect(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='fleet_cache'",
+    ).get();
+    expect(fleetTable, isNotEmpty);
   });
 }

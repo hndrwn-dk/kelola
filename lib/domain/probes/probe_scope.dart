@@ -1,0 +1,1 @@
+enum ProbeScope { host, fleet }

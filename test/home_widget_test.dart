@@ -119,7 +119,6 @@ void main() {
 
   test('schema 7 adds widgetEnabled default false', () {
     final src = File('lib/data/db/database.dart').readAsStringSync();
-    expect(src, contains('schemaVersion => 7'));
     expect(src, contains('if (from < 7)'));
     expect(src, contains('widgetEnabled'));
     final tables = File('lib/data/db/tables.dart').readAsStringSync();
