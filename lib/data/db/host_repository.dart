@@ -4,12 +4,15 @@ import 'package:kelola/domain/audit/audit_event.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/containers/container_row.dart';
+import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_edit.dart';
 import 'package:kelola/domain/hosts/ssh_config_import.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
 import 'package:kelola/domain/snippets/starters.dart';
+import 'package:kelola/domain/llm/provider.dart';
+import 'package:kelola/domain/llm/settings.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:uuid/uuid.dart';
 
@@ -24,7 +27,15 @@ class HostRepository {
   Future<List<Host>> list() async {
     final rows = await _db.select(_db.hosts).get();
     final facts = await _db.select(_db.cachedFacts).get();
+    final tags = await _db.select(_db.hostTags).get();
     final byHost = {for (final f in facts) f.hostId: f};
+    final tagsByHost = <String, List<String>>{};
+    for (final t in tags) {
+      tagsByHost.putIfAbsent(t.hostId, () => []).add(t.tag);
+    }
+    for (final list in tagsByHost.values) {
+      list.sort();
+    }
     return rows
         .map((r) {
           final fact = byHost[r.id];
@@ -32,6 +43,7 @@ class HostRepository {
             r,
             prettyName: fact?.prettyName ?? fact?.osId,
             osId: fact?.osId,
+            tags: tagsByHost[r.id] ?? const [],
           );
         })
         .toList();
@@ -46,10 +58,15 @@ class HostRepository {
     final fact = await (_db.select(_db.cachedFacts)
           ..where((t) => t.hostId.equals(id)))
         .getSingleOrNull();
+    final tags = await (_db.select(_db.hostTags)
+          ..where((t) => t.hostId.equals(id)))
+        .get();
+    final tagList = tags.map((t) => t.tag).toList()..sort();
     return _toHost(
       row,
       prettyName: fact?.prettyName ?? fact?.osId,
       osId: fact?.osId,
+      tags: tagList,
     );
   }
 
@@ -122,6 +139,8 @@ class HostRepository {
           .go();
       await (_db.delete(_db.searchIndexCache)..where((t) => t.hostId.equals(id)))
           .go();
+      await (_db.delete(_db.hostTags)..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(_db.fleetCache)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.recents)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.pins)..where((t) => t.hostId.equals(id))).go();
       final last = await lastHostId();
@@ -280,6 +299,11 @@ class HostRepository {
             lastHostId: Value(existing?.lastHostId),
             publicKeySpkiB64: Value(blobB64),
             keyBackend: Value(backend),
+            widgetEnabled: Value(existing?.widgetEnabled ?? false),
+            llmProvider: Value(existing?.llmProvider ?? 'none'),
+            llmBaseUrl: Value(existing?.llmBaseUrl),
+            llmApiKey: Value(existing?.llmApiKey),
+            llmModel: Value(existing?.llmModel),
           ),
         );
   }
@@ -301,6 +325,11 @@ class HostRepository {
             lastHostId: Value(existing?.lastHostId),
             publicKeySpkiB64: const Value(null),
             keyBackend: const Value(null),
+            widgetEnabled: Value(existing?.widgetEnabled ?? false),
+            llmProvider: Value(existing?.llmProvider ?? 'none'),
+            llmBaseUrl: Value(existing?.llmBaseUrl),
+            llmApiKey: Value(existing?.llmApiKey),
+            llmModel: Value(existing?.llmModel),
           ),
         );
   }
@@ -688,7 +717,12 @@ class HostRepository {
     return {for (final r in rows) r.id: r.alias};
   }
 
-  Host _toHost(HostRow row, {String? prettyName, String? osId}) {
+  Host _toHost(
+    HostRow row, {
+    String? prettyName,
+    String? osId,
+    List<String> tags = const [],
+  }) {
     return Host(
       id: row.id,
       alias: row.alias,
@@ -709,7 +743,66 @@ class HostRepository {
       prettyName: prettyName,
       osId: osId,
       sudoNeedsPassword: row.sudoNeedsPassword,
+      tags: tags,
     );
+  }
+
+  Future<void> setHostTags(String hostId, List<String> tags) async {
+    final cleaned = tags
+        .map((t) => t.trim().toLowerCase())
+        .where((t) => t.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    await _db.transaction(() async {
+      await (_db.delete(_db.hostTags)..where((t) => t.hostId.equals(hostId)))
+          .go();
+      for (final tag in cleaned) {
+        await _db.into(_db.hostTags).insert(
+              HostTagsCompanion.insert(hostId: hostId, tag: tag),
+            );
+      }
+    });
+  }
+
+  Future<List<String>> listAllTags() async {
+    final rows = await _db.select(_db.hostTags).get();
+    final set = rows.map((r) => r.tag).toSet().toList()..sort();
+    return set;
+  }
+
+  Future<void> saveFleetCache(FleetHostHealth health) async {
+    await _db.into(_db.fleetCache).insertOnConflictUpdate(
+          FleetCacheCompanion.insert(
+            hostId: health.hostId,
+            reachable: health.reachable,
+            load1: health.load1,
+            diskRootPercent: health.diskRootPercent,
+            failedUnitCount: health.failedUnitCount,
+            pendingUpdates: health.pendingUpdates,
+            fetchedAt: health.fetchedAt.toUtc(),
+          ),
+        );
+  }
+
+  Future<Map<String, FleetHostHealth>> loadFleetCacheByHost() async {
+    final rows = await _db.select(_db.fleetCache).get();
+    final hosts = await _db.select(_db.hosts).get();
+    final aliasById = {for (final h in hosts) h.id: h.alias};
+    return {
+      for (final r in rows)
+        r.hostId: FleetHostHealth(
+          hostId: r.hostId,
+          alias: aliasById[r.hostId] ?? r.hostId,
+          reachable: r.reachable,
+          load1: r.load1,
+          diskRootPercent: r.diskRootPercent,
+          failedUnitCount: r.failedUnitCount,
+          pendingUpdates: r.pendingUpdates,
+          fetchedAt: r.fetchedAt,
+          fromCache: true,
+        ),
+    };
   }
 
   Future<bool> widgetEnabled() async {
@@ -725,6 +818,37 @@ class HostRepository {
             publicKeySpkiB64: Value(existing?.publicKeySpkiB64),
             keyBackend: Value(existing?.keyBackend),
             widgetEnabled: Value(value),
+            llmProvider: Value(existing?.llmProvider ?? 'none'),
+            llmBaseUrl: Value(existing?.llmBaseUrl),
+            llmApiKey: Value(existing?.llmApiKey),
+            llmModel: Value(existing?.llmModel),
+          ),
+        );
+  }
+
+  Future<LlmSettings> loadLlmSettings() async {
+    final row = await _settings();
+    return LlmSettings(
+      provider: LlmProvider.parse(row?.llmProvider),
+      baseUrl: row?.llmBaseUrl,
+      apiKey: row?.llmApiKey,
+      model: row?.llmModel,
+    );
+  }
+
+  Future<void> saveLlmSettings(LlmSettings settings) async {
+    final existing = await _settings();
+    await _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion(
+            id: const Value(1),
+            lastHostId: Value(existing?.lastHostId),
+            publicKeySpkiB64: Value(existing?.publicKeySpkiB64),
+            keyBackend: Value(existing?.keyBackend),
+            widgetEnabled: Value(existing?.widgetEnabled ?? false),
+            llmProvider: Value(settings.provider.storageName),
+            llmBaseUrl: Value(settings.baseUrl),
+            llmApiKey: Value(settings.apiKey),
+            llmModel: Value(settings.model),
           ),
         );
   }

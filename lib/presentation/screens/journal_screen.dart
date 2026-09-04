@@ -10,7 +10,9 @@ import 'package:kelola/domain/journal/journal_follow.dart';
 import 'package:kelola/domain/journal/journal_view.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/journal_probe.dart';
+import 'package:kelola/presentation/assist_flow.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/domain/llm/assist_request.dart';
 import 'package:kelola/presentation/ssh_host_key_flow.dart';
 import 'package:kelola/providers.dart';
 
@@ -45,6 +47,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
   bool _lastHour = false;
   bool _live = false;
   bool _gone = false;
+  bool _busySummarise = false;
   String? _older;
   JournalFollowHandle? _follow;
   final _scroll = ScrollController();
@@ -354,6 +357,15 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
                     ),
                   ],
                 ),
+                if (_entries.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ServiceRow(
+                    risk: RiskLevel.read,
+                    name: 'Summarise',
+                    meta: 'assist · visible lines',
+                    onTap: _busySummarise ? null : _summarise,
+                  ),
+                ],
               ],
             ),
           ),
@@ -361,6 +373,53 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _summarise() async {
+    final host = _host;
+    if (host == null || _entries.isEmpty) {
+      return;
+    }
+    setState(() => _busySummarise = true);
+    try {
+      final settings = await requireAssistSettings(ref);
+      if (!mounted) {
+        return;
+      }
+      final logs = _entries.take(80).map((e) => e.message).join('\n');
+      final hostnames = [host.alias, host.address];
+      final usernames = [host.username];
+      final request = AssistRequest(
+        system: 'Summarise these journal lines briefly. Do not invent events.',
+        user: logs,
+        hostnames: hostnames,
+        usernames: usernames,
+      );
+      final text = await runAssistWithPreview(
+        context: context,
+        ref: ref,
+        settings: settings,
+        request: request,
+        run: (s) => s.summariseLogs(
+              settings: settings,
+              logs: logs,
+              hostnames: hostnames,
+              usernames: usernames,
+            ),
+      );
+      if (!mounted || text == null) {
+        return;
+      }
+      await showAssistResult(context, title: 'Summary', body: text);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = describeSshError(e));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busySummarise = false);
+      }
+    }
   }
 
   Widget _body(KelolaColors c) {

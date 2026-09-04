@@ -17,6 +17,8 @@ import 'package:kelola/presentation/screens/add_host_screen.dart';
 import 'package:kelola/presentation/screens/audit_screen.dart';
 import 'package:kelola/presentation/screens/edit_host_screen.dart';
 import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
+import 'package:kelola/presentation/screens/fleet_screen.dart';
+import 'package:kelola/presentation/screens/llm_settings_screen.dart';
 import 'package:kelola/presentation/screens/search_screen.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
 import 'package:kelola/presentation/widgets/host_list_actions.dart';
@@ -196,13 +198,43 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-                      child: ServiceRow(
-                        risk: RiskLevel.read,
-                        name: 'Home widget',
-                        meta: _widgetOn
-                            ? 'on · last refresh only'
-                            : 'off · last refresh only',
-                        onTap: _toggleWidget,
+                      child: Column(
+                        children: [
+                          ServiceRow(
+                            risk: RiskLevel.read,
+                            name: 'Fleet',
+                            meta: 'health grid · read only',
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const FleetScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 6),
+                          ServiceRow(
+                            risk: RiskLevel.read,
+                            name: 'Assist',
+                            meta: 'LLM · default none',
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const LlmSettingsScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 6),
+                          ServiceRow(
+                            risk: RiskLevel.read,
+                            name: 'Home widget',
+                            meta: _widgetOn
+                                ? 'on · last refresh only'
+                                : 'off · last refresh only',
+                            onTap: _toggleWidget,
+                          ),
+                        ],
                       ),
                     ),
                     const HostsColophon(version: kelolaAppVersion),

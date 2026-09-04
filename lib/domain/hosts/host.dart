@@ -21,6 +21,7 @@ class Host {
     this.prettyName,
     this.osId,
     this.sudoNeedsPassword = false,
+    this.tags = const [],
   });
 
   final String id;
@@ -42,6 +43,7 @@ class Host {
   final String? prettyName;
   final String? osId;
   final bool sudoNeedsPassword;
+  final List<String> tags;
 
   /// Last dashboard snapshot older than this is labelled stale, never current.
   static const attentionFreshFor = Duration(minutes: 15);

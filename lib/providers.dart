@@ -10,8 +10,12 @@ import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/openssh_ecdsa.dart';
 import 'package:kelola/data/ssh/session_pool.dart';
 import 'package:kelola/data/widget/home_widget_bridge.dart';
+import 'package:kelola/data/llm/assist_service.dart';
+import 'package:kelola/data/llm/dart_io_llm_http.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/incident/correlation.dart';
+import 'package:kelola/domain/llm/preview_gate.dart';
+import 'package:kelola/domain/llm/settings.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
 
 final databaseProvider = Provider<KelolaDatabase>((ref) {
@@ -119,6 +123,21 @@ final correlationStoreProvider = Provider<CorrelationStore>((ref) {
 
 final homeWidgetBridgeProvider = Provider<HomeWidgetBridge>((ref) {
   return const MethodChannelHomeWidgetBridge();
+});
+
+final llmSettingsProvider = FutureProvider<LlmSettings>((ref) {
+  return ref.watch(hostRepositoryProvider).loadLlmSettings();
+});
+
+final assistPreviewGateProvider = Provider<AssistPreviewGate>((ref) {
+  return AssistPreviewGate();
+});
+
+final assistServiceProvider = Provider<AssistService>((ref) {
+  return AssistService(
+    http: DartIoLlmHttpClient(),
+    gate: ref.watch(assistPreviewGateProvider),
+  );
 });
 
 final sessionPoolProvider = Provider<SshSessionPool>((ref) {

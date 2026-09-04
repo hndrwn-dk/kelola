@@ -3636,6 +3636,51 @@ class $AppSettingsTable extends AppSettings
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _llmProviderMeta = const VerificationMeta(
+    'llmProvider',
+  );
+  @override
+  late final GeneratedColumn<String> llmProvider = GeneratedColumn<String>(
+    'llm_provider',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('none'),
+  );
+  static const VerificationMeta _llmBaseUrlMeta = const VerificationMeta(
+    'llmBaseUrl',
+  );
+  @override
+  late final GeneratedColumn<String> llmBaseUrl = GeneratedColumn<String>(
+    'llm_base_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _llmApiKeyMeta = const VerificationMeta(
+    'llmApiKey',
+  );
+  @override
+  late final GeneratedColumn<String> llmApiKey = GeneratedColumn<String>(
+    'llm_api_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _llmModelMeta = const VerificationMeta(
+    'llmModel',
+  );
+  @override
+  late final GeneratedColumn<String> llmModel = GeneratedColumn<String>(
+    'llm_model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3643,6 +3688,10 @@ class $AppSettingsTable extends AppSettings
     publicKeySpkiB64,
     keyBackend,
     widgetEnabled,
+    llmProvider,
+    llmBaseUrl,
+    llmApiKey,
+    llmModel,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3692,6 +3741,36 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('llm_provider')) {
+      context.handle(
+        _llmProviderMeta,
+        llmProvider.isAcceptableOrUnknown(
+          data['llm_provider']!,
+          _llmProviderMeta,
+        ),
+      );
+    }
+    if (data.containsKey('llm_base_url')) {
+      context.handle(
+        _llmBaseUrlMeta,
+        llmBaseUrl.isAcceptableOrUnknown(
+          data['llm_base_url']!,
+          _llmBaseUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('llm_api_key')) {
+      context.handle(
+        _llmApiKeyMeta,
+        llmApiKey.isAcceptableOrUnknown(data['llm_api_key']!, _llmApiKeyMeta),
+      );
+    }
+    if (data.containsKey('llm_model')) {
+      context.handle(
+        _llmModelMeta,
+        llmModel.isAcceptableOrUnknown(data['llm_model']!, _llmModelMeta),
+      );
+    }
     return context;
   }
 
@@ -3721,6 +3800,22 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.bool,
         data['${effectivePrefix}widget_enabled'],
       )!,
+      llmProvider: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}llm_provider'],
+      )!,
+      llmBaseUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}llm_base_url'],
+      ),
+      llmApiKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}llm_api_key'],
+      ),
+      llmModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}llm_model'],
+      ),
     );
   }
 
@@ -3736,12 +3831,20 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   final String? publicKeySpkiB64;
   final String? keyBackend;
   final bool widgetEnabled;
+  final String llmProvider;
+  final String? llmBaseUrl;
+  final String? llmApiKey;
+  final String? llmModel;
   const AppSettingsRow({
     required this.id,
     this.lastHostId,
     this.publicKeySpkiB64,
     this.keyBackend,
     required this.widgetEnabled,
+    required this.llmProvider,
+    this.llmBaseUrl,
+    this.llmApiKey,
+    this.llmModel,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3757,6 +3860,16 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       map['key_backend'] = Variable<String>(keyBackend);
     }
     map['widget_enabled'] = Variable<bool>(widgetEnabled);
+    map['llm_provider'] = Variable<String>(llmProvider);
+    if (!nullToAbsent || llmBaseUrl != null) {
+      map['llm_base_url'] = Variable<String>(llmBaseUrl);
+    }
+    if (!nullToAbsent || llmApiKey != null) {
+      map['llm_api_key'] = Variable<String>(llmApiKey);
+    }
+    if (!nullToAbsent || llmModel != null) {
+      map['llm_model'] = Variable<String>(llmModel);
+    }
     return map;
   }
 
@@ -3773,6 +3886,16 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ? const Value.absent()
           : Value(keyBackend),
       widgetEnabled: Value(widgetEnabled),
+      llmProvider: Value(llmProvider),
+      llmBaseUrl: llmBaseUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(llmBaseUrl),
+      llmApiKey: llmApiKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(llmApiKey),
+      llmModel: llmModel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(llmModel),
     );
   }
 
@@ -3787,6 +3910,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       publicKeySpkiB64: serializer.fromJson<String?>(json['publicKeySpkiB64']),
       keyBackend: serializer.fromJson<String?>(json['keyBackend']),
       widgetEnabled: serializer.fromJson<bool>(json['widgetEnabled']),
+      llmProvider: serializer.fromJson<String>(json['llmProvider']),
+      llmBaseUrl: serializer.fromJson<String?>(json['llmBaseUrl']),
+      llmApiKey: serializer.fromJson<String?>(json['llmApiKey']),
+      llmModel: serializer.fromJson<String?>(json['llmModel']),
     );
   }
   @override
@@ -3798,6 +3925,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       'publicKeySpkiB64': serializer.toJson<String?>(publicKeySpkiB64),
       'keyBackend': serializer.toJson<String?>(keyBackend),
       'widgetEnabled': serializer.toJson<bool>(widgetEnabled),
+      'llmProvider': serializer.toJson<String>(llmProvider),
+      'llmBaseUrl': serializer.toJson<String?>(llmBaseUrl),
+      'llmApiKey': serializer.toJson<String?>(llmApiKey),
+      'llmModel': serializer.toJson<String?>(llmModel),
     };
   }
 
@@ -3807,6 +3938,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     Value<String?> publicKeySpkiB64 = const Value.absent(),
     Value<String?> keyBackend = const Value.absent(),
     bool? widgetEnabled,
+    String? llmProvider,
+    Value<String?> llmBaseUrl = const Value.absent(),
+    Value<String?> llmApiKey = const Value.absent(),
+    Value<String?> llmModel = const Value.absent(),
   }) => AppSettingsRow(
     id: id ?? this.id,
     lastHostId: lastHostId.present ? lastHostId.value : this.lastHostId,
@@ -3815,6 +3950,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
         : this.publicKeySpkiB64,
     keyBackend: keyBackend.present ? keyBackend.value : this.keyBackend,
     widgetEnabled: widgetEnabled ?? this.widgetEnabled,
+    llmProvider: llmProvider ?? this.llmProvider,
+    llmBaseUrl: llmBaseUrl.present ? llmBaseUrl.value : this.llmBaseUrl,
+    llmApiKey: llmApiKey.present ? llmApiKey.value : this.llmApiKey,
+    llmModel: llmModel.present ? llmModel.value : this.llmModel,
   );
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
@@ -3831,6 +3970,14 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       widgetEnabled: data.widgetEnabled.present
           ? data.widgetEnabled.value
           : this.widgetEnabled,
+      llmProvider: data.llmProvider.present
+          ? data.llmProvider.value
+          : this.llmProvider,
+      llmBaseUrl: data.llmBaseUrl.present
+          ? data.llmBaseUrl.value
+          : this.llmBaseUrl,
+      llmApiKey: data.llmApiKey.present ? data.llmApiKey.value : this.llmApiKey,
+      llmModel: data.llmModel.present ? data.llmModel.value : this.llmModel,
     );
   }
 
@@ -3841,14 +3988,27 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('lastHostId: $lastHostId, ')
           ..write('publicKeySpkiB64: $publicKeySpkiB64, ')
           ..write('keyBackend: $keyBackend, ')
-          ..write('widgetEnabled: $widgetEnabled')
+          ..write('widgetEnabled: $widgetEnabled, ')
+          ..write('llmProvider: $llmProvider, ')
+          ..write('llmBaseUrl: $llmBaseUrl, ')
+          ..write('llmApiKey: $llmApiKey, ')
+          ..write('llmModel: $llmModel')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, lastHostId, publicKeySpkiB64, keyBackend, widgetEnabled);
+  int get hashCode => Object.hash(
+    id,
+    lastHostId,
+    publicKeySpkiB64,
+    keyBackend,
+    widgetEnabled,
+    llmProvider,
+    llmBaseUrl,
+    llmApiKey,
+    llmModel,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3857,7 +4017,11 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.lastHostId == this.lastHostId &&
           other.publicKeySpkiB64 == this.publicKeySpkiB64 &&
           other.keyBackend == this.keyBackend &&
-          other.widgetEnabled == this.widgetEnabled);
+          other.widgetEnabled == this.widgetEnabled &&
+          other.llmProvider == this.llmProvider &&
+          other.llmBaseUrl == this.llmBaseUrl &&
+          other.llmApiKey == this.llmApiKey &&
+          other.llmModel == this.llmModel);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
@@ -3866,12 +4030,20 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<String?> publicKeySpkiB64;
   final Value<String?> keyBackend;
   final Value<bool> widgetEnabled;
+  final Value<String> llmProvider;
+  final Value<String?> llmBaseUrl;
+  final Value<String?> llmApiKey;
+  final Value<String?> llmModel;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.lastHostId = const Value.absent(),
     this.publicKeySpkiB64 = const Value.absent(),
     this.keyBackend = const Value.absent(),
     this.widgetEnabled = const Value.absent(),
+    this.llmProvider = const Value.absent(),
+    this.llmBaseUrl = const Value.absent(),
+    this.llmApiKey = const Value.absent(),
+    this.llmModel = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -3879,6 +4051,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.publicKeySpkiB64 = const Value.absent(),
     this.keyBackend = const Value.absent(),
     this.widgetEnabled = const Value.absent(),
+    this.llmProvider = const Value.absent(),
+    this.llmBaseUrl = const Value.absent(),
+    this.llmApiKey = const Value.absent(),
+    this.llmModel = const Value.absent(),
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
@@ -3886,6 +4062,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Expression<String>? publicKeySpkiB64,
     Expression<String>? keyBackend,
     Expression<bool>? widgetEnabled,
+    Expression<String>? llmProvider,
+    Expression<String>? llmBaseUrl,
+    Expression<String>? llmApiKey,
+    Expression<String>? llmModel,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3893,6 +4073,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (publicKeySpkiB64 != null) 'public_key_spki_b64': publicKeySpkiB64,
       if (keyBackend != null) 'key_backend': keyBackend,
       if (widgetEnabled != null) 'widget_enabled': widgetEnabled,
+      if (llmProvider != null) 'llm_provider': llmProvider,
+      if (llmBaseUrl != null) 'llm_base_url': llmBaseUrl,
+      if (llmApiKey != null) 'llm_api_key': llmApiKey,
+      if (llmModel != null) 'llm_model': llmModel,
     });
   }
 
@@ -3902,6 +4086,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<String?>? publicKeySpkiB64,
     Value<String?>? keyBackend,
     Value<bool>? widgetEnabled,
+    Value<String>? llmProvider,
+    Value<String?>? llmBaseUrl,
+    Value<String?>? llmApiKey,
+    Value<String?>? llmModel,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -3909,6 +4097,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       publicKeySpkiB64: publicKeySpkiB64 ?? this.publicKeySpkiB64,
       keyBackend: keyBackend ?? this.keyBackend,
       widgetEnabled: widgetEnabled ?? this.widgetEnabled,
+      llmProvider: llmProvider ?? this.llmProvider,
+      llmBaseUrl: llmBaseUrl ?? this.llmBaseUrl,
+      llmApiKey: llmApiKey ?? this.llmApiKey,
+      llmModel: llmModel ?? this.llmModel,
     );
   }
 
@@ -3930,6 +4122,18 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     if (widgetEnabled.present) {
       map['widget_enabled'] = Variable<bool>(widgetEnabled.value);
     }
+    if (llmProvider.present) {
+      map['llm_provider'] = Variable<String>(llmProvider.value);
+    }
+    if (llmBaseUrl.present) {
+      map['llm_base_url'] = Variable<String>(llmBaseUrl.value);
+    }
+    if (llmApiKey.present) {
+      map['llm_api_key'] = Variable<String>(llmApiKey.value);
+    }
+    if (llmModel.present) {
+      map['llm_model'] = Variable<String>(llmModel.value);
+    }
     return map;
   }
 
@@ -3940,7 +4144,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('lastHostId: $lastHostId, ')
           ..write('publicKeySpkiB64: $publicKeySpkiB64, ')
           ..write('keyBackend: $keyBackend, ')
-          ..write('widgetEnabled: $widgetEnabled')
+          ..write('widgetEnabled: $widgetEnabled, ')
+          ..write('llmProvider: $llmProvider, ')
+          ..write('llmBaseUrl: $llmBaseUrl, ')
+          ..write('llmApiKey: $llmApiKey, ')
+          ..write('llmModel: $llmModel')
           ..write(')'))
         .toString();
   }
@@ -4616,6 +4824,697 @@ class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
   }
 }
 
+class $HostTagsTable extends HostTags
+    with TableInfo<$HostTagsTable, HostTagRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HostTagsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tagMeta = const VerificationMeta('tag');
+  @override
+  late final GeneratedColumn<String> tag = GeneratedColumn<String>(
+    'tag',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [hostId, tag];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'host_tags';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HostTagRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('tag')) {
+      context.handle(
+        _tagMeta,
+        tag.isAcceptableOrUnknown(data['tag']!, _tagMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tagMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {hostId, tag};
+  @override
+  HostTagRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HostTagRow(
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      tag: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tag'],
+      )!,
+    );
+  }
+
+  @override
+  $HostTagsTable createAlias(String alias) {
+    return $HostTagsTable(attachedDatabase, alias);
+  }
+}
+
+class HostTagRow extends DataClass implements Insertable<HostTagRow> {
+  final String hostId;
+  final String tag;
+  const HostTagRow({required this.hostId, required this.tag});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['host_id'] = Variable<String>(hostId);
+    map['tag'] = Variable<String>(tag);
+    return map;
+  }
+
+  HostTagsCompanion toCompanion(bool nullToAbsent) {
+    return HostTagsCompanion(hostId: Value(hostId), tag: Value(tag));
+  }
+
+  factory HostTagRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HostTagRow(
+      hostId: serializer.fromJson<String>(json['hostId']),
+      tag: serializer.fromJson<String>(json['tag']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'hostId': serializer.toJson<String>(hostId),
+      'tag': serializer.toJson<String>(tag),
+    };
+  }
+
+  HostTagRow copyWith({String? hostId, String? tag}) =>
+      HostTagRow(hostId: hostId ?? this.hostId, tag: tag ?? this.tag);
+  HostTagRow copyWithCompanion(HostTagsCompanion data) {
+    return HostTagRow(
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      tag: data.tag.present ? data.tag.value : this.tag,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HostTagRow(')
+          ..write('hostId: $hostId, ')
+          ..write('tag: $tag')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(hostId, tag);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HostTagRow &&
+          other.hostId == this.hostId &&
+          other.tag == this.tag);
+}
+
+class HostTagsCompanion extends UpdateCompanion<HostTagRow> {
+  final Value<String> hostId;
+  final Value<String> tag;
+  final Value<int> rowid;
+  const HostTagsCompanion({
+    this.hostId = const Value.absent(),
+    this.tag = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HostTagsCompanion.insert({
+    required String hostId,
+    required String tag,
+    this.rowid = const Value.absent(),
+  }) : hostId = Value(hostId),
+       tag = Value(tag);
+  static Insertable<HostTagRow> custom({
+    Expression<String>? hostId,
+    Expression<String>? tag,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (hostId != null) 'host_id': hostId,
+      if (tag != null) 'tag': tag,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HostTagsCompanion copyWith({
+    Value<String>? hostId,
+    Value<String>? tag,
+    Value<int>? rowid,
+  }) {
+    return HostTagsCompanion(
+      hostId: hostId ?? this.hostId,
+      tag: tag ?? this.tag,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (tag.present) {
+      map['tag'] = Variable<String>(tag.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HostTagsCompanion(')
+          ..write('hostId: $hostId, ')
+          ..write('tag: $tag, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $FleetCacheTable extends FleetCache
+    with TableInfo<$FleetCacheTable, FleetCacheRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FleetCacheTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reachableMeta = const VerificationMeta(
+    'reachable',
+  );
+  @override
+  late final GeneratedColumn<bool> reachable = GeneratedColumn<bool>(
+    'reachable',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("reachable" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _load1Meta = const VerificationMeta('load1');
+  @override
+  late final GeneratedColumn<double> load1 = GeneratedColumn<double>(
+    'load1',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _diskRootPercentMeta = const VerificationMeta(
+    'diskRootPercent',
+  );
+  @override
+  late final GeneratedColumn<int> diskRootPercent = GeneratedColumn<int>(
+    'disk_root_percent',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _failedUnitCountMeta = const VerificationMeta(
+    'failedUnitCount',
+  );
+  @override
+  late final GeneratedColumn<int> failedUnitCount = GeneratedColumn<int>(
+    'failed_unit_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pendingUpdatesMeta = const VerificationMeta(
+    'pendingUpdates',
+  );
+  @override
+  late final GeneratedColumn<int> pendingUpdates = GeneratedColumn<int>(
+    'pending_updates',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
+    'fetchedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
+    'fetched_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    hostId,
+    reachable,
+    load1,
+    diskRootPercent,
+    failedUnitCount,
+    pendingUpdates,
+    fetchedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'fleet_cache';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FleetCacheRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('reachable')) {
+      context.handle(
+        _reachableMeta,
+        reachable.isAcceptableOrUnknown(data['reachable']!, _reachableMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reachableMeta);
+    }
+    if (data.containsKey('load1')) {
+      context.handle(
+        _load1Meta,
+        load1.isAcceptableOrUnknown(data['load1']!, _load1Meta),
+      );
+    } else if (isInserting) {
+      context.missing(_load1Meta);
+    }
+    if (data.containsKey('disk_root_percent')) {
+      context.handle(
+        _diskRootPercentMeta,
+        diskRootPercent.isAcceptableOrUnknown(
+          data['disk_root_percent']!,
+          _diskRootPercentMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_diskRootPercentMeta);
+    }
+    if (data.containsKey('failed_unit_count')) {
+      context.handle(
+        _failedUnitCountMeta,
+        failedUnitCount.isAcceptableOrUnknown(
+          data['failed_unit_count']!,
+          _failedUnitCountMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_failedUnitCountMeta);
+    }
+    if (data.containsKey('pending_updates')) {
+      context.handle(
+        _pendingUpdatesMeta,
+        pendingUpdates.isAcceptableOrUnknown(
+          data['pending_updates']!,
+          _pendingUpdatesMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_pendingUpdatesMeta);
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(
+        _fetchedAtMeta,
+        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fetchedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {hostId};
+  @override
+  FleetCacheRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FleetCacheRow(
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      reachable: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}reachable'],
+      )!,
+      load1: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}load1'],
+      )!,
+      diskRootPercent: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}disk_root_percent'],
+      )!,
+      failedUnitCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}failed_unit_count'],
+      )!,
+      pendingUpdates: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pending_updates'],
+      )!,
+      fetchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}fetched_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FleetCacheTable createAlias(String alias) {
+    return $FleetCacheTable(attachedDatabase, alias);
+  }
+}
+
+class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
+  final String hostId;
+  final bool reachable;
+  final double load1;
+  final int diskRootPercent;
+  final int failedUnitCount;
+  final int pendingUpdates;
+  final DateTime fetchedAt;
+  const FleetCacheRow({
+    required this.hostId,
+    required this.reachable,
+    required this.load1,
+    required this.diskRootPercent,
+    required this.failedUnitCount,
+    required this.pendingUpdates,
+    required this.fetchedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['host_id'] = Variable<String>(hostId);
+    map['reachable'] = Variable<bool>(reachable);
+    map['load1'] = Variable<double>(load1);
+    map['disk_root_percent'] = Variable<int>(diskRootPercent);
+    map['failed_unit_count'] = Variable<int>(failedUnitCount);
+    map['pending_updates'] = Variable<int>(pendingUpdates);
+    map['fetched_at'] = Variable<DateTime>(fetchedAt);
+    return map;
+  }
+
+  FleetCacheCompanion toCompanion(bool nullToAbsent) {
+    return FleetCacheCompanion(
+      hostId: Value(hostId),
+      reachable: Value(reachable),
+      load1: Value(load1),
+      diskRootPercent: Value(diskRootPercent),
+      failedUnitCount: Value(failedUnitCount),
+      pendingUpdates: Value(pendingUpdates),
+      fetchedAt: Value(fetchedAt),
+    );
+  }
+
+  factory FleetCacheRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FleetCacheRow(
+      hostId: serializer.fromJson<String>(json['hostId']),
+      reachable: serializer.fromJson<bool>(json['reachable']),
+      load1: serializer.fromJson<double>(json['load1']),
+      diskRootPercent: serializer.fromJson<int>(json['diskRootPercent']),
+      failedUnitCount: serializer.fromJson<int>(json['failedUnitCount']),
+      pendingUpdates: serializer.fromJson<int>(json['pendingUpdates']),
+      fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'hostId': serializer.toJson<String>(hostId),
+      'reachable': serializer.toJson<bool>(reachable),
+      'load1': serializer.toJson<double>(load1),
+      'diskRootPercent': serializer.toJson<int>(diskRootPercent),
+      'failedUnitCount': serializer.toJson<int>(failedUnitCount),
+      'pendingUpdates': serializer.toJson<int>(pendingUpdates),
+      'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
+    };
+  }
+
+  FleetCacheRow copyWith({
+    String? hostId,
+    bool? reachable,
+    double? load1,
+    int? diskRootPercent,
+    int? failedUnitCount,
+    int? pendingUpdates,
+    DateTime? fetchedAt,
+  }) => FleetCacheRow(
+    hostId: hostId ?? this.hostId,
+    reachable: reachable ?? this.reachable,
+    load1: load1 ?? this.load1,
+    diskRootPercent: diskRootPercent ?? this.diskRootPercent,
+    failedUnitCount: failedUnitCount ?? this.failedUnitCount,
+    pendingUpdates: pendingUpdates ?? this.pendingUpdates,
+    fetchedAt: fetchedAt ?? this.fetchedAt,
+  );
+  FleetCacheRow copyWithCompanion(FleetCacheCompanion data) {
+    return FleetCacheRow(
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      reachable: data.reachable.present ? data.reachable.value : this.reachable,
+      load1: data.load1.present ? data.load1.value : this.load1,
+      diskRootPercent: data.diskRootPercent.present
+          ? data.diskRootPercent.value
+          : this.diskRootPercent,
+      failedUnitCount: data.failedUnitCount.present
+          ? data.failedUnitCount.value
+          : this.failedUnitCount,
+      pendingUpdates: data.pendingUpdates.present
+          ? data.pendingUpdates.value
+          : this.pendingUpdates,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FleetCacheRow(')
+          ..write('hostId: $hostId, ')
+          ..write('reachable: $reachable, ')
+          ..write('load1: $load1, ')
+          ..write('diskRootPercent: $diskRootPercent, ')
+          ..write('failedUnitCount: $failedUnitCount, ')
+          ..write('pendingUpdates: $pendingUpdates, ')
+          ..write('fetchedAt: $fetchedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    hostId,
+    reachable,
+    load1,
+    diskRootPercent,
+    failedUnitCount,
+    pendingUpdates,
+    fetchedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FleetCacheRow &&
+          other.hostId == this.hostId &&
+          other.reachable == this.reachable &&
+          other.load1 == this.load1 &&
+          other.diskRootPercent == this.diskRootPercent &&
+          other.failedUnitCount == this.failedUnitCount &&
+          other.pendingUpdates == this.pendingUpdates &&
+          other.fetchedAt == this.fetchedAt);
+}
+
+class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
+  final Value<String> hostId;
+  final Value<bool> reachable;
+  final Value<double> load1;
+  final Value<int> diskRootPercent;
+  final Value<int> failedUnitCount;
+  final Value<int> pendingUpdates;
+  final Value<DateTime> fetchedAt;
+  final Value<int> rowid;
+  const FleetCacheCompanion({
+    this.hostId = const Value.absent(),
+    this.reachable = const Value.absent(),
+    this.load1 = const Value.absent(),
+    this.diskRootPercent = const Value.absent(),
+    this.failedUnitCount = const Value.absent(),
+    this.pendingUpdates = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FleetCacheCompanion.insert({
+    required String hostId,
+    required bool reachable,
+    required double load1,
+    required int diskRootPercent,
+    required int failedUnitCount,
+    required int pendingUpdates,
+    required DateTime fetchedAt,
+    this.rowid = const Value.absent(),
+  }) : hostId = Value(hostId),
+       reachable = Value(reachable),
+       load1 = Value(load1),
+       diskRootPercent = Value(diskRootPercent),
+       failedUnitCount = Value(failedUnitCount),
+       pendingUpdates = Value(pendingUpdates),
+       fetchedAt = Value(fetchedAt);
+  static Insertable<FleetCacheRow> custom({
+    Expression<String>? hostId,
+    Expression<bool>? reachable,
+    Expression<double>? load1,
+    Expression<int>? diskRootPercent,
+    Expression<int>? failedUnitCount,
+    Expression<int>? pendingUpdates,
+    Expression<DateTime>? fetchedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (hostId != null) 'host_id': hostId,
+      if (reachable != null) 'reachable': reachable,
+      if (load1 != null) 'load1': load1,
+      if (diskRootPercent != null) 'disk_root_percent': diskRootPercent,
+      if (failedUnitCount != null) 'failed_unit_count': failedUnitCount,
+      if (pendingUpdates != null) 'pending_updates': pendingUpdates,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FleetCacheCompanion copyWith({
+    Value<String>? hostId,
+    Value<bool>? reachable,
+    Value<double>? load1,
+    Value<int>? diskRootPercent,
+    Value<int>? failedUnitCount,
+    Value<int>? pendingUpdates,
+    Value<DateTime>? fetchedAt,
+    Value<int>? rowid,
+  }) {
+    return FleetCacheCompanion(
+      hostId: hostId ?? this.hostId,
+      reachable: reachable ?? this.reachable,
+      load1: load1 ?? this.load1,
+      diskRootPercent: diskRootPercent ?? this.diskRootPercent,
+      failedUnitCount: failedUnitCount ?? this.failedUnitCount,
+      pendingUpdates: pendingUpdates ?? this.pendingUpdates,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (reachable.present) {
+      map['reachable'] = Variable<bool>(reachable.value);
+    }
+    if (load1.present) {
+      map['load1'] = Variable<double>(load1.value);
+    }
+    if (diskRootPercent.present) {
+      map['disk_root_percent'] = Variable<int>(diskRootPercent.value);
+    }
+    if (failedUnitCount.present) {
+      map['failed_unit_count'] = Variable<int>(failedUnitCount.value);
+    }
+    if (pendingUpdates.present) {
+      map['pending_updates'] = Variable<int>(pendingUpdates.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FleetCacheCompanion(')
+          ..write('hostId: $hostId, ')
+          ..write('reachable: $reachable, ')
+          ..write('load1: $load1, ')
+          ..write('diskRootPercent: $diskRootPercent, ')
+          ..write('failedUnitCount: $failedUnitCount, ')
+          ..write('pendingUpdates: $pendingUpdates, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$KelolaDatabase extends GeneratedDatabase {
   _$KelolaDatabase(QueryExecutor e) : super(e);
   $KelolaDatabaseManager get managers => $KelolaDatabaseManager(this);
@@ -4630,6 +5529,8 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     this,
   );
   late final $SnippetsTable snippets = $SnippetsTable(this);
+  late final $HostTagsTable hostTags = $HostTagsTable(this);
+  late final $FleetCacheTable fleetCache = $FleetCacheTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4644,6 +5545,8 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     appSettings,
     searchIndexCache,
     snippets,
+    hostTags,
+    fleetCache,
   ];
 }
 
@@ -6396,6 +7299,10 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<String?> publicKeySpkiB64,
       Value<String?> keyBackend,
       Value<bool> widgetEnabled,
+      Value<String> llmProvider,
+      Value<String?> llmBaseUrl,
+      Value<String?> llmApiKey,
+      Value<String?> llmModel,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -6404,6 +7311,10 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<String?> publicKeySpkiB64,
       Value<String?> keyBackend,
       Value<bool> widgetEnabled,
+      Value<String> llmProvider,
+      Value<String?> llmBaseUrl,
+      Value<String?> llmApiKey,
+      Value<String?> llmModel,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -6437,6 +7348,26 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<bool> get widgetEnabled => $composableBuilder(
     column: $table.widgetEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get llmProvider => $composableBuilder(
+    column: $table.llmProvider,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get llmBaseUrl => $composableBuilder(
+    column: $table.llmBaseUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get llmApiKey => $composableBuilder(
+    column: $table.llmApiKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get llmModel => $composableBuilder(
+    column: $table.llmModel,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6474,6 +7405,26 @@ class $$AppSettingsTableOrderingComposer
     column: $table.widgetEnabled,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get llmProvider => $composableBuilder(
+    column: $table.llmProvider,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get llmBaseUrl => $composableBuilder(
+    column: $table.llmBaseUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get llmApiKey => $composableBuilder(
+    column: $table.llmApiKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get llmModel => $composableBuilder(
+    column: $table.llmModel,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -6507,6 +7458,22 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.widgetEnabled,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get llmProvider => $composableBuilder(
+    column: $table.llmProvider,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get llmBaseUrl => $composableBuilder(
+    column: $table.llmBaseUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get llmApiKey =>
+      $composableBuilder(column: $table.llmApiKey, builder: (column) => column);
+
+  GeneratedColumn<String> get llmModel =>
+      $composableBuilder(column: $table.llmModel, builder: (column) => column);
 }
 
 class $$AppSettingsTableTableManager
@@ -6545,12 +7512,20 @@ class $$AppSettingsTableTableManager
                 Value<String?> publicKeySpkiB64 = const Value.absent(),
                 Value<String?> keyBackend = const Value.absent(),
                 Value<bool> widgetEnabled = const Value.absent(),
+                Value<String> llmProvider = const Value.absent(),
+                Value<String?> llmBaseUrl = const Value.absent(),
+                Value<String?> llmApiKey = const Value.absent(),
+                Value<String?> llmModel = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 lastHostId: lastHostId,
                 publicKeySpkiB64: publicKeySpkiB64,
                 keyBackend: keyBackend,
                 widgetEnabled: widgetEnabled,
+                llmProvider: llmProvider,
+                llmBaseUrl: llmBaseUrl,
+                llmApiKey: llmApiKey,
+                llmModel: llmModel,
               ),
           createCompanionCallback:
               ({
@@ -6559,12 +7534,20 @@ class $$AppSettingsTableTableManager
                 Value<String?> publicKeySpkiB64 = const Value.absent(),
                 Value<String?> keyBackend = const Value.absent(),
                 Value<bool> widgetEnabled = const Value.absent(),
+                Value<String> llmProvider = const Value.absent(),
+                Value<String?> llmBaseUrl = const Value.absent(),
+                Value<String?> llmApiKey = const Value.absent(),
+                Value<String?> llmModel = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 lastHostId: lastHostId,
                 publicKeySpkiB64: publicKeySpkiB64,
                 keyBackend: keyBackend,
                 widgetEnabled: widgetEnabled,
+                llmProvider: llmProvider,
+                llmBaseUrl: llmBaseUrl,
+                llmApiKey: llmApiKey,
+                llmModel: llmModel,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -6982,6 +7965,389 @@ typedef $$SnippetsTableProcessedTableManager =
       SnippetRow,
       PrefetchHooks Function()
     >;
+typedef $$HostTagsTableCreateCompanionBuilder =
+    HostTagsCompanion Function({
+      required String hostId,
+      required String tag,
+      Value<int> rowid,
+    });
+typedef $$HostTagsTableUpdateCompanionBuilder =
+    HostTagsCompanion Function({
+      Value<String> hostId,
+      Value<String> tag,
+      Value<int> rowid,
+    });
+
+class $$HostTagsTableFilterComposer
+    extends Composer<_$KelolaDatabase, $HostTagsTable> {
+  $$HostTagsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tag => $composableBuilder(
+    column: $table.tag,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HostTagsTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $HostTagsTable> {
+  $$HostTagsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tag => $composableBuilder(
+    column: $table.tag,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HostTagsTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $HostTagsTable> {
+  $$HostTagsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get tag =>
+      $composableBuilder(column: $table.tag, builder: (column) => column);
+}
+
+class $$HostTagsTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $HostTagsTable,
+          HostTagRow,
+          $$HostTagsTableFilterComposer,
+          $$HostTagsTableOrderingComposer,
+          $$HostTagsTableAnnotationComposer,
+          $$HostTagsTableCreateCompanionBuilder,
+          $$HostTagsTableUpdateCompanionBuilder,
+          (
+            HostTagRow,
+            BaseReferences<_$KelolaDatabase, $HostTagsTable, HostTagRow>,
+          ),
+          HostTagRow,
+          PrefetchHooks Function()
+        > {
+  $$HostTagsTableTableManager(_$KelolaDatabase db, $HostTagsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HostTagsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HostTagsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HostTagsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> hostId = const Value.absent(),
+                Value<String> tag = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HostTagsCompanion(hostId: hostId, tag: tag, rowid: rowid),
+          createCompanionCallback:
+              ({
+                required String hostId,
+                required String tag,
+                Value<int> rowid = const Value.absent(),
+              }) => HostTagsCompanion.insert(
+                hostId: hostId,
+                tag: tag,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HostTagsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $HostTagsTable,
+      HostTagRow,
+      $$HostTagsTableFilterComposer,
+      $$HostTagsTableOrderingComposer,
+      $$HostTagsTableAnnotationComposer,
+      $$HostTagsTableCreateCompanionBuilder,
+      $$HostTagsTableUpdateCompanionBuilder,
+      (
+        HostTagRow,
+        BaseReferences<_$KelolaDatabase, $HostTagsTable, HostTagRow>,
+      ),
+      HostTagRow,
+      PrefetchHooks Function()
+    >;
+typedef $$FleetCacheTableCreateCompanionBuilder =
+    FleetCacheCompanion Function({
+      required String hostId,
+      required bool reachable,
+      required double load1,
+      required int diskRootPercent,
+      required int failedUnitCount,
+      required int pendingUpdates,
+      required DateTime fetchedAt,
+      Value<int> rowid,
+    });
+typedef $$FleetCacheTableUpdateCompanionBuilder =
+    FleetCacheCompanion Function({
+      Value<String> hostId,
+      Value<bool> reachable,
+      Value<double> load1,
+      Value<int> diskRootPercent,
+      Value<int> failedUnitCount,
+      Value<int> pendingUpdates,
+      Value<DateTime> fetchedAt,
+      Value<int> rowid,
+    });
+
+class $$FleetCacheTableFilterComposer
+    extends Composer<_$KelolaDatabase, $FleetCacheTable> {
+  $$FleetCacheTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get reachable => $composableBuilder(
+    column: $table.reachable,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get load1 => $composableBuilder(
+    column: $table.load1,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get diskRootPercent => $composableBuilder(
+    column: $table.diskRootPercent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get failedUnitCount => $composableBuilder(
+    column: $table.failedUnitCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pendingUpdates => $composableBuilder(
+    column: $table.pendingUpdates,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FleetCacheTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $FleetCacheTable> {
+  $$FleetCacheTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get reachable => $composableBuilder(
+    column: $table.reachable,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get load1 => $composableBuilder(
+    column: $table.load1,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get diskRootPercent => $composableBuilder(
+    column: $table.diskRootPercent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get failedUnitCount => $composableBuilder(
+    column: $table.failedUnitCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pendingUpdates => $composableBuilder(
+    column: $table.pendingUpdates,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FleetCacheTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $FleetCacheTable> {
+  $$FleetCacheTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<bool> get reachable =>
+      $composableBuilder(column: $table.reachable, builder: (column) => column);
+
+  GeneratedColumn<double> get load1 =>
+      $composableBuilder(column: $table.load1, builder: (column) => column);
+
+  GeneratedColumn<int> get diskRootPercent => $composableBuilder(
+    column: $table.diskRootPercent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get failedUnitCount => $composableBuilder(
+    column: $table.failedUnitCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get pendingUpdates => $composableBuilder(
+    column: $table.pendingUpdates,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get fetchedAt =>
+      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+}
+
+class $$FleetCacheTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $FleetCacheTable,
+          FleetCacheRow,
+          $$FleetCacheTableFilterComposer,
+          $$FleetCacheTableOrderingComposer,
+          $$FleetCacheTableAnnotationComposer,
+          $$FleetCacheTableCreateCompanionBuilder,
+          $$FleetCacheTableUpdateCompanionBuilder,
+          (
+            FleetCacheRow,
+            BaseReferences<_$KelolaDatabase, $FleetCacheTable, FleetCacheRow>,
+          ),
+          FleetCacheRow,
+          PrefetchHooks Function()
+        > {
+  $$FleetCacheTableTableManager(_$KelolaDatabase db, $FleetCacheTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FleetCacheTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FleetCacheTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FleetCacheTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> hostId = const Value.absent(),
+                Value<bool> reachable = const Value.absent(),
+                Value<double> load1 = const Value.absent(),
+                Value<int> diskRootPercent = const Value.absent(),
+                Value<int> failedUnitCount = const Value.absent(),
+                Value<int> pendingUpdates = const Value.absent(),
+                Value<DateTime> fetchedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FleetCacheCompanion(
+                hostId: hostId,
+                reachable: reachable,
+                load1: load1,
+                diskRootPercent: diskRootPercent,
+                failedUnitCount: failedUnitCount,
+                pendingUpdates: pendingUpdates,
+                fetchedAt: fetchedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String hostId,
+                required bool reachable,
+                required double load1,
+                required int diskRootPercent,
+                required int failedUnitCount,
+                required int pendingUpdates,
+                required DateTime fetchedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => FleetCacheCompanion.insert(
+                hostId: hostId,
+                reachable: reachable,
+                load1: load1,
+                diskRootPercent: diskRootPercent,
+                failedUnitCount: failedUnitCount,
+                pendingUpdates: pendingUpdates,
+                fetchedAt: fetchedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FleetCacheTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $FleetCacheTable,
+      FleetCacheRow,
+      $$FleetCacheTableFilterComposer,
+      $$FleetCacheTableOrderingComposer,
+      $$FleetCacheTableAnnotationComposer,
+      $$FleetCacheTableCreateCompanionBuilder,
+      $$FleetCacheTableUpdateCompanionBuilder,
+      (
+        FleetCacheRow,
+        BaseReferences<_$KelolaDatabase, $FleetCacheTable, FleetCacheRow>,
+      ),
+      FleetCacheRow,
+      PrefetchHooks Function()
+    >;
 
 class $KelolaDatabaseManager {
   final _$KelolaDatabase _db;
@@ -7003,4 +8369,8 @@ class $KelolaDatabaseManager {
       $$SearchIndexCacheTableTableManager(_db, _db.searchIndexCache);
   $$SnippetsTableTableManager get snippets =>
       $$SnippetsTableTableManager(_db, _db.snippets);
+  $$HostTagsTableTableManager get hostTags =>
+      $$HostTagsTableTableManager(_db, _db.hostTags);
+  $$FleetCacheTableTableManager get fleetCache =>
+      $$FleetCacheTableTableManager(_db, _db.fleetCache);
 }
