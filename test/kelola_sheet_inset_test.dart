@@ -11,7 +11,7 @@ void main() {
         data: const MediaQueryData(
           padding: EdgeInsets.only(bottom: 48),
           viewInsets: EdgeInsets.only(bottom: 300),
-          viewPadding: EdgeInsets.only(bottom: 48),
+          viewPadding: EdgeInsets.only(top: 44, bottom: 48),
           size: Size(400, 800),
         ),
         child: Builder(
@@ -22,10 +22,9 @@ void main() {
         ),
       ),
     );
-    // padding.bottom stays available when we sum with viewInsets in helper;
-    // with keyboard up Flutter often zeros padding — either way helper must
-    // include viewInsets.
     expect(inset.bottom, greaterThanOrEqualTo(300));
+    // Keyboard open → protect status bar.
+    expect(inset.top, 44);
   });
 
   testWidgets('kelolaSheetInset without keyboard uses nav padding only',
@@ -35,7 +34,7 @@ void main() {
       MediaQuery(
         data: const MediaQueryData(
           padding: EdgeInsets.only(bottom: 48),
-          viewPadding: EdgeInsets.only(bottom: 48),
+          viewPadding: EdgeInsets.only(top: 44, bottom: 48),
           size: Size(400, 800),
         ),
         child: Builder(
@@ -47,6 +46,47 @@ void main() {
       ),
     );
     expect(inset.bottom, 48);
+    expect(inset.top, 0);
+  });
+
+  testWidgets('kelolaSheetInset pads top when child is near full viewport',
+      (tester) async {
+    late EdgeInsets inset;
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          padding: EdgeInsets.only(bottom: 48),
+          viewPadding: EdgeInsets.only(top: 44, bottom: 48),
+          size: Size(400, 800),
+        ),
+        child: Builder(
+          builder: (context) {
+            inset = kelolaSheetInset(context, childHeight: 720);
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    expect(inset.top, 44);
+  });
+
+  testWidgets('kelolaSheetInset skips top for short sheets', (tester) async {
+    late EdgeInsets inset;
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          viewPadding: EdgeInsets.only(top: 44, bottom: 48),
+          size: Size(400, 800),
+        ),
+        child: Builder(
+          builder: (context) {
+            inset = kelolaSheetInset(context, childHeight: 220);
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    expect(inset.top, 0);
   });
 
   testWidgets('kelolaScrollPadding uses viewPadding.bottom plus extra',
@@ -78,32 +118,30 @@ void main() {
     expect(pad.bottom, 56);
   });
 
-  testWidgets('KelolaSheet applies sheet inset around child', (tester) async {
+  testWidgets('kelolaSheetBodyHeight shrinks when keyboard is open',
+      (tester) async {
+    late double bodyH;
+    late double maxH;
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(
-          padding: EdgeInsets.only(bottom: 24),
-          viewPadding: EdgeInsets.only(bottom: 24),
+          padding: EdgeInsets.only(bottom: 48),
+          viewInsets: EdgeInsets.only(bottom: 300),
+          viewPadding: EdgeInsets.only(top: 44, bottom: 48),
           size: Size(400, 800),
         ),
-        child: const MaterialApp(
-          home: Scaffold(
-            body: KelolaSheet(
-              child: SizedBox(key: Key('body'), height: 80),
-            ),
-          ),
+        child: Builder(
+          builder: (context) {
+            bodyH = kelolaSheetBodyHeight(context);
+            maxH = kelolaSheetMaxBodyHeight(context);
+            return const SizedBox();
+          },
         ),
       ),
     );
-    final sheet = tester.widget<Padding>(
-      find
-          .descendant(
-            of: find.byType(KelolaSheet),
-            matching: find.byType(Padding),
-          )
-          .first,
-    );
-    expect(sheet.padding, const EdgeInsets.only(bottom: 24));
-    expect(find.byKey(const Key('body')), findsOneWidget);
+    // 800 - 44 top - 300 keyboard - 48 nav = 408 usable; body is 82% of that.
+    expect(maxH, 408);
+    expect(bodyH, closeTo(408 * 0.82, 0.01));
+    expect(bodyH, lessThan(800 * 0.82));
   });
 }

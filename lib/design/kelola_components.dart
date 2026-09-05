@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:kelola/domain/audit/audit_view.dart';
 import 'package:kelola/domain/hosts/dashboard_status.dart';
@@ -812,9 +813,54 @@ class _SparkPainter extends CustomPainter {
 /// Bottom inset for modal sheets: keyboard ([MediaQuery.viewInsets]) plus
 /// system nav/home indicator ([MediaQuery.padding]). When the keyboard is
 /// open Flutter typically zeros [padding.bottom], so this does not double-count.
-EdgeInsets kelolaSheetInset(BuildContext context) {
+///
+/// Top inset ([MediaQuery.viewPadding.top]) applies when the keyboard is open
+/// or when [childHeight] fills most of the visible viewport — so full-height
+/// sheets clear the status bar without padding short confirm sheets.
+EdgeInsets kelolaSheetInset(
+  BuildContext context, {
+  double? childHeight,
+}) {
   final mq = MediaQuery.of(context);
-  return EdgeInsets.only(bottom: mq.viewInsets.bottom + mq.padding.bottom);
+  final bottom = mq.viewInsets.bottom + mq.padding.bottom;
+  final topInset = mq.viewPadding.top;
+  var top = 0.0;
+  if (topInset > 0) {
+    if (mq.viewInsets.bottom > 0) {
+      top = topInset;
+    } else if (childHeight != null) {
+      final available = mq.size.height - mq.viewInsets.bottom;
+      if (available > 0 && childHeight >= available * 0.8) {
+        top = topInset;
+      }
+    }
+  }
+  return EdgeInsets.only(top: top, bottom: bottom);
+}
+
+/// Max height for content inside [KelolaSheet] after applying [kelolaSheetInset].
+/// Tall children (e.g. `SizedBox(height: 0.82 * screen)`) must not exceed this
+/// or the bottom-aligned sheet overflows upward under the status bar and clips
+/// the top inset away.
+double kelolaSheetMaxBodyHeight(
+  BuildContext context, {
+  double? childHeight,
+}) {
+  final mq = MediaQuery.of(context);
+  final inset = kelolaSheetInset(context, childHeight: childHeight);
+  final maxH = mq.size.height - inset.top - inset.bottom;
+  return maxH < 0 ? 0 : maxH;
+}
+
+/// Preferred body height for tall sheets (Terminal, snippet run, …), as a
+/// fraction of the inset-safe viewport — not the raw screen height.
+double kelolaSheetBodyHeight(
+  BuildContext context, {
+  double fraction = 0.82,
+  double? childHeight,
+}) {
+  final maxH = kelolaSheetMaxBodyHeight(context, childHeight: childHeight);
+  return (maxH * fraction).clamp(0.0, maxH);
 }
 
 /// Scrollable list/grid padding. Bottom uses [MediaQuery.viewPadding] so the
@@ -835,18 +881,79 @@ EdgeInsets kelolaScrollPadding(
 }
 
 /// Wraps every Kelola modal bottom sheet body. Applies [kelolaSheetInset]
-/// so Confirm actions and inputs clear the keyboard and system nav.
-class KelolaSheet extends StatelessWidget {
+/// so Confirm actions and inputs clear the keyboard and system nav, and so
+/// full-height sheets clear the status bar. Oversized children are capped to
+/// [kelolaSheetMaxBodyHeight] so top inset is not clipped away.
+class KelolaSheet extends StatefulWidget {
   const KelolaSheet({super.key, required this.child});
 
   final Widget child;
 
   @override
+  State<KelolaSheet> createState() => _KelolaSheetState();
+}
+
+class _KelolaSheetState extends State<KelolaSheet> {
+  double? _childHeight;
+
+  @override
   Widget build(BuildContext context) {
+    final inset = kelolaSheetInset(context, childHeight: _childHeight);
+    final maxBody = kelolaSheetMaxBodyHeight(context, childHeight: _childHeight);
     return Padding(
-      padding: kelolaSheetInset(context),
-      child: child,
+      padding: inset,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxBody),
+        child: _MeasureHeight(
+          onHeight: (h) {
+            if (_childHeight == h) {
+              return;
+            }
+            setState(() => _childHeight = h);
+          },
+          child: widget.child,
+        ),
+      ),
     );
+  }
+}
+
+class _MeasureHeight extends SingleChildRenderObjectWidget {
+  const _MeasureHeight({required this.onHeight, required super.child});
+
+  final ValueChanged<double> onHeight;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderMeasureHeight(onHeight);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderMeasureHeight renderObject,
+  ) {
+    renderObject.onHeight = onHeight;
+  }
+}
+
+class _RenderMeasureHeight extends RenderProxyBox {
+  _RenderMeasureHeight(this.onHeight);
+
+  ValueChanged<double> onHeight;
+  double? _last;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final h = size.height;
+    if (_last == h) {
+      return;
+    }
+    _last = h;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      onHeight(h);
+    });
   }
 }
 

@@ -606,7 +606,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
               const SizedBox(height: 8),
                 ServiceRow(
                 risk: RiskLevel.mutate,
-                name: 'Command',
+                name: 'Terminal',
                 meta: 'no PTY · audited',
                 onTap: () => openCommandSheet(context, ref, host),
               ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/fleet/fleet_gate.dart';
@@ -44,7 +43,6 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
   final Set<String> _loading = {};
   List<String> _allTags = const [];
   String? _tagFilter;
-  String? _error;
   bool _refreshing = false;
 
   @override
@@ -83,7 +81,6 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
     }
     setState(() {
       _refreshing = true;
-      _error = null;
       _loading
         ..clear()
         ..addAll(hosts.map((h) => h.id));
@@ -174,7 +171,6 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
         setState(() {
           _byId[host.id] = unreachable;
           _loading.remove(host.id);
-          _error ??= describeSshError(error);
         });
       },
     );
@@ -260,11 +256,6 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                     ),
                 ],
               ),
-            ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-              child: KelolaError(message: _error!),
             ),
           Expanded(
             child: hosts.isEmpty

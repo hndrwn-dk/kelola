@@ -15,9 +15,9 @@ Future<void> openCommandSheet(BuildContext context, WidgetRef ref, Host host) {
     context: context,
     isScrollControlled: true,
     backgroundColor: context.kc.ink,
-    builder: (_) => KelolaSheet(
+    builder: (ctx) => KelolaSheet(
       child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.82,
+        height: kelolaSheetBodyHeight(ctx),
         child: CommandSheet(host: host),
       ),
     ),
@@ -201,7 +201,7 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Command', style: KelolaType.display(color: c.text, size: 18)),
+            Text('Terminal', style: KelolaType.display(color: c.text, size: 18)),
             const SizedBox(height: 4),
             Text(
               '${widget.host.alias} · NO PTY · AUDITED',
