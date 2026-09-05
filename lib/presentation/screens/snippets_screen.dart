@@ -163,9 +163,9 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: context.kc.ink,
-      builder: (_) => KelolaSheet(
+      builder: (ctx) => KelolaSheet(
         child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.82,
+          height: kelolaSheetBodyHeight(ctx),
           child: _SnippetRunSheet(host: widget.host, snippet: snippet),
         ),
       ),
