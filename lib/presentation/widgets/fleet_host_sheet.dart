@@ -27,7 +27,9 @@ Future<void> openFleetHostSheet(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (_) => FleetHostSheet(host: host, health: health),
+    builder: (_) => KelolaSheet(
+      child: FleetHostSheet(host: host, health: health),
+    ),
   );
 }
 
@@ -180,23 +182,21 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
     final more = fleetMoreIssuesLabel(health);
     final metrics = _metrics;
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
         ),
-        padding: const EdgeInsets.fromLTRB(14, 16, 14, 24),
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(KelolaRadii.lg),
-          ),
-          border: Border(top: BorderSide(color: c.line)),
-        ),
-        child: ListView(
-          shrinkWrap: true,
-          children: [
+        border: Border(top: BorderSide(color: c.line)),
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        children: [
             Text('Fleet', style: KelolaType.display(color: c.text, size: 16)),
             Text(
               widget.host.alias,
@@ -289,7 +289,6 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }

@@ -50,7 +50,7 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
     return KelolaPage(
       title: 'Host details',
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 32),
+        padding: kelolaScrollPadding(context, top: 8),
         children: [
           HostHeroCard(
             alias: host.alias,

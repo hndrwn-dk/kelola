@@ -67,41 +67,43 @@ Future<void> showAssistResult(
             final c = context.kc;
             final titleText = data?.title ?? title;
             final bodyText = data?.body ?? body;
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(14, 24, 14, 28),
-              child: RiskBand(
-                risk: RiskLevel.read,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(ctx).height * 0.7,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        titleText,
-                        style: KelolaType.display(color: c.text, size: 16),
-                      ),
-                      const SizedBox(height: 10),
-                      Flexible(
-                        child: SingleChildScrollView(
-                          child: SelectionArea(
-                            child: Text(
-                              bodyText,
-                              style: KelolaType.body(color: c.text, size: 13),
+            return KelolaSheet(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 24, 14, 0),
+                child: RiskBand(
+                  risk: RiskLevel.read,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.sizeOf(ctx).height * 0.7,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          titleText,
+                          style: KelolaType.display(color: c.text, size: 16),
+                        ),
+                        const SizedBox(height: 10),
+                        Flexible(
+                          child: SingleChildScrollView(
+                            child: SelectionArea(
+                              child: Text(
+                                bodyText,
+                                style: KelolaType.body(color: c.text, size: 13),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      ServiceRow(
-                        risk: RiskLevel.read,
-                        name: 'Close',
-                        meta: 'assist only · nothing ran',
-                        onTap: () => Navigator.of(ctx).pop(),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        ServiceRow(
+                          risk: RiskLevel.read,
+                          name: 'Close',
+                          meta: 'assist only · nothing ran',
+                          onTap: () => Navigator.of(ctx).pop(),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

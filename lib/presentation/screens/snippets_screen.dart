@@ -92,7 +92,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                     ),
                   )
                 : ListView(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+                    padding: kelolaScrollPadding(context),
                     children: [
                       if (_error != null) ...[
                         KelolaError(
@@ -163,9 +163,11 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: context.kc.ink,
-      builder: (_) => SizedBox(
-        height: MediaQuery.of(context).size.height * 0.82,
-        child: _SnippetRunSheet(host: widget.host, snippet: snippet),
+      builder: (_) => KelolaSheet(
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.82,
+          child: _SnippetRunSheet(host: widget.host, snippet: snippet),
+        ),
       ),
     );
   }
@@ -281,7 +283,7 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+        padding: kelolaScrollPadding(context),
         children: [
           if (_needed.contains('unit')) ...[
             KelolaInput(
@@ -430,10 +432,7 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-          ),
+        return KelolaSheet(
           child: DestructiveConfirmSheet(
             title: 'Run ${probe.name}?',
             consequence:
@@ -459,33 +458,30 @@ Future<Snippet?> _editSnippet(BuildContext context, Snippet current) async {
     isScrollControlled: true,
     backgroundColor: c.ink,
     builder: (ctx) {
-      return Padding(
-        padding: EdgeInsets.only(
-          left: 14,
-          right: 14,
-          top: 16,
-          bottom: MediaQuery.viewInsetsOf(ctx).bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            KelolaInput(label: 'Name', controller: name),
-            const SizedBox(height: 10),
-            KelolaInput(
-              label: 'Template',
-              controller: template,
-              mono: true,
-              hint: 'systemctl status {{unit}}',
-            ),
-            const SizedBox(height: 12),
-            ServiceRow(
-              risk: RiskLevel.read,
-              name: 'Save',
-              meta: 'library only · not run',
-              onTap: () => Navigator.of(ctx).pop(true),
-            ),
-          ],
+      return KelolaSheet(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              KelolaInput(label: 'Name', controller: name),
+              const SizedBox(height: 10),
+              KelolaInput(
+                label: 'Template',
+                controller: template,
+                mono: true,
+                hint: 'systemctl status {{unit}}',
+              ),
+              const SizedBox(height: 12),
+              ServiceRow(
+                risk: RiskLevel.read,
+                name: 'Save',
+                meta: 'library only · not run',
+                onTap: () => Navigator.of(ctx).pop(true),
+              ),
+            ],
+          ),
         ),
       );
     },
@@ -514,30 +510,27 @@ Future<String?> _promptJson(BuildContext context) async {
     isScrollControlled: true,
     backgroundColor: c.ink,
     builder: (ctx) {
-      return Padding(
-        padding: EdgeInsets.only(
-          left: 14,
-          right: 14,
-          top: 16,
-          bottom: MediaQuery.viewInsetsOf(ctx).bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            KelolaInput(
-              label: 'JSON',
-              controller: raw,
-              mono: true,
-            ),
-            const SizedBox(height: 12),
-            ServiceRow(
-              risk: RiskLevel.read,
-              name: 'Import',
-              meta: 'does not run snippets',
-              onTap: () => Navigator.of(ctx).pop(true),
-            ),
-          ],
+      return KelolaSheet(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              KelolaInput(
+                label: 'JSON',
+                controller: raw,
+                mono: true,
+              ),
+              const SizedBox(height: 12),
+              ServiceRow(
+                risk: RiskLevel.read,
+                name: 'Import',
+                meta: 'does not run snippets',
+                onTap: () => Navigator.of(ctx).pop(true),
+              ),
+            ],
+          ),
         ),
       );
     },

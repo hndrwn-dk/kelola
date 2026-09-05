@@ -56,7 +56,7 @@ app.*.map.json
 # Private / local-only (do not publish)
 readiness/
 .cursor/
-.cursorrules
+# .cursorrules is tracked — design-system hard bans for agents/humans.
 
 # Secrets, credentials, and signing artifacts
 .env

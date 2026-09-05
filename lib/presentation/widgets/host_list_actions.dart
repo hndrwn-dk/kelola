@@ -19,32 +19,34 @@ Future<void> showHostListActions(
       side: BorderSide(color: c.line),
     ),
     builder: (ctx) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(14, 16, 14, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ServiceRow(
-              risk: RiskLevel.mutate,
-              name: 'Edit host',
-              meta: alias,
-              onTap: () {
-                Navigator.of(ctx).pop();
-                onEdit();
-              },
-            ),
-            const SizedBox(height: 6),
-            ServiceRow(
-              risk: RiskLevel.destructive,
-              name: 'Remove',
-              meta: alias,
-              onTap: () {
-                Navigator.of(ctx).pop();
-                onRemove();
-              },
-            ),
-          ],
+      return KelolaSheet(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ServiceRow(
+                risk: RiskLevel.mutate,
+                name: 'Edit host',
+                meta: alias,
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  onEdit();
+                },
+              ),
+              const SizedBox(height: 6),
+              ServiceRow(
+                risk: RiskLevel.destructive,
+                name: 'Remove',
+                meta: alias,
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  onRemove();
+                },
+              ),
+            ],
+          ),
         ),
       );
     },

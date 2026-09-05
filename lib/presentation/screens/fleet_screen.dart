@@ -282,7 +282,13 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                         ),
                       )
                     : GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 28),
+                        padding: kelolaScrollPadding(
+                          context,
+                          left: 14,
+                          top: 0,
+                          right: 14,
+                          extraBottom: 16,
+                        ),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: columns,
                           crossAxisSpacing: 8,

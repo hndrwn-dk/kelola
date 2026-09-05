@@ -256,7 +256,7 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
       );
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+        padding: kelolaScrollPadding(context),
         children: children,
       );
     }
@@ -276,7 +276,7 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+      padding: kelolaScrollPadding(context),
       children: children,
     );
   }

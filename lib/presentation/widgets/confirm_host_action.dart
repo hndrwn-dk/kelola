@@ -20,10 +20,7 @@ Future<bool> confirmHostAction(
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-          ),
+        return KelolaSheet(
           child: DestructiveConfirmSheet(
             title: title,
             consequence: body,

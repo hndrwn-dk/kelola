@@ -66,13 +66,13 @@ class _KelolaAppState extends State<KelolaApp> {
   @override
   Widget build(BuildContext context) {
     final theme = _theme();
-    final ink = KelolaColors.dark.ink;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
+      value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
         statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: ink,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarContrastEnforced: false,
         systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: MaterialApp(

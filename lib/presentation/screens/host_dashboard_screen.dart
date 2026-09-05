@@ -334,7 +334,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 32),
+          padding: kelolaScrollPadding(context, top: 8),
           children: [
             if (_error != null)
               Padding(

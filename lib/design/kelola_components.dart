@@ -809,6 +809,47 @@ class _SparkPainter extends CustomPainter {
       oldDelegate.values != values || oldDelegate.color != color;
 }
 
+/// Bottom inset for modal sheets: keyboard ([MediaQuery.viewInsets]) plus
+/// system nav/home indicator ([MediaQuery.padding]). When the keyboard is
+/// open Flutter typically zeros [padding.bottom], so this does not double-count.
+EdgeInsets kelolaSheetInset(BuildContext context) {
+  final mq = MediaQuery.of(context);
+  return EdgeInsets.only(bottom: mq.viewInsets.bottom + mq.padding.bottom);
+}
+
+/// Scrollable list/grid padding. Bottom uses [MediaQuery.viewPadding] so the
+/// last row clears the nav bar — never a fixed 24/28/32.
+EdgeInsets kelolaScrollPadding(
+  BuildContext context, {
+  double left = 14,
+  double top = 10,
+  double right = 14,
+  double extraBottom = 16,
+}) {
+  return EdgeInsets.fromLTRB(
+    left,
+    top,
+    right,
+    MediaQuery.viewPaddingOf(context).bottom + extraBottom,
+  );
+}
+
+/// Wraps every Kelola modal bottom sheet body. Applies [kelolaSheetInset]
+/// so Confirm actions and inputs clear the keyboard and system nav.
+class KelolaSheet extends StatelessWidget {
+  const KelolaSheet({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: kelolaSheetInset(context),
+      child: child,
+    );
+  }
+}
+
 /// Destructive confirmation sheet — hazard-striped top edge, plain
 /// statement of consequence, type-to-confirm gate. This is the ONLY
 /// pattern for any RiskLevel.destructive action. Never a plain
@@ -1228,9 +1269,11 @@ Future<void> showSudoHintSheet(
       side: BorderSide(color: c.line),
     ),
     builder: (ctx) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
-        child: ActionableError.sudo(user: user),
+      return KelolaSheet(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+          child: ActionableError.sudo(user: user),
+        ),
       );
     },
   );

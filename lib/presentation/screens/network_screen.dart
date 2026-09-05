@@ -148,7 +148,7 @@ class _NetworkScreenState extends ConsumerState<NetworkScreen> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+        padding: kelolaScrollPadding(context),
         children: [
           _heading(c, 'INTERFACES'),
           const SizedBox(height: 8),

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
-import 'package:kelola/design/kelola_components.dart' show KelolaError;
+import 'package:kelola/design/kelola_components.dart'
+    show KelolaError, kelolaScrollPadding;
 import 'package:kelola/domain/disk/disk_snapshot.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -130,7 +131,12 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          padding: kelolaScrollPadding(
+            context,
+            left: 16,
+            top: 8,
+            right: 16,
+          ),
           children: [
             if (_error != null)
               KelolaError(

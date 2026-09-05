@@ -166,7 +166,7 @@ class _LlmSettingsScreenState extends ConsumerState<LlmSettingsScreen> {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+        padding: kelolaScrollPadding(context),
         children: [
           Text(
             'PROVIDER',

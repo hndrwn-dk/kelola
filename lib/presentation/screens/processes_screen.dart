@@ -224,7 +224,7 @@ class _ProcessesScreenState extends ConsumerState<ProcessesScreen> {
                       ],
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+                      padding: kelolaScrollPadding(context),
                       itemCount: visible.length + 1,
                       itemBuilder: (context, i) {
                         if (i == visible.length) {
@@ -287,67 +287,69 @@ class _ProcessesScreenState extends ConsumerState<ProcessesScreen> {
       backgroundColor: c.surface2,
       builder: (ctx) {
         final protected = isProtectedProcess(row);
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(14, 16, 14, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(row.command, style: KelolaType.display(color: c.text, size: 16)),
-              const SizedBox(height: 4),
-              Text(
-                processListMeta(row),
-                style: KelolaType.mono(color: c.dim, size: 9.5),
-              ),
-              if (inspect != null && inspect.exe.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(inspect.exe, style: KelolaType.mono(color: c.muted, size: 10.5)),
-              ],
-              if (children.isNotEmpty) ...[
-                const SizedBox(height: 14),
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(row.command, style: KelolaType.display(color: c.text, size: 16)),
+                const SizedBox(height: 4),
                 Text(
-                  'TREE',
-                  style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+                  processListMeta(row),
+                  style: KelolaType.mono(color: c.dim, size: 9.5),
                 ),
-                for (final child in children.take(12))
+                if (inspect != null && inspect.exe.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(inspect.exe, style: KelolaType.mono(color: c.muted, size: 10.5)),
+                ],
+                if (children.isNotEmpty) ...[
+                  const SizedBox(height: 14),
                   Text(
-                    '${child.pid}  ${child.command}',
+                    'TREE',
+                    style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+                  ),
+                  for (final child in children.take(12))
+                    Text(
+                      '${child.pid}  ${child.command}',
+                      style: KelolaType.mono(color: c.muted, size: 10.5),
+                    ),
+                ],
+                if (inspect != null && inspect.fds.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    'FILE DESCRIPTORS',
+                    style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+                  ),
+                  SelectableText(
+                    inspect.fds,
                     style: KelolaType.mono(color: c.muted, size: 10.5),
                   ),
+                ],
+                const SizedBox(height: 16),
+                if (protected)
+                  Text(
+                    'PID 1 and sshd cannot be signaled from Kelola.',
+                    style: KelolaType.body(color: c.dim, size: 12),
+                  )
+                else ...[
+                  ServiceRow(
+                    risk: RiskLevel.mutate,
+                    name: 'SIGTERM',
+                    meta: 'mutate · one confirmation',
+                    onTap: () => _signal(ctx, row, ProcessSignal.term),
+                  ),
+                  const SizedBox(height: 6),
+                  ServiceRow(
+                    risk: RiskLevel.destructive,
+                    name: 'SIGKILL',
+                    meta: 'destructive · immediate',
+                    onTap: () => _signal(ctx, row, ProcessSignal.kill),
+                  ),
+                ],
               ],
-              if (inspect != null && inspect.fds.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                Text(
-                  'FILE DESCRIPTORS',
-                  style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
-                ),
-                SelectableText(
-                  inspect.fds,
-                  style: KelolaType.mono(color: c.muted, size: 10.5),
-                ),
-              ],
-              const SizedBox(height: 16),
-              if (protected)
-                Text(
-                  'PID 1 and sshd cannot be signaled from Kelola.',
-                  style: KelolaType.body(color: c.dim, size: 12),
-                )
-              else ...[
-                ServiceRow(
-                  risk: RiskLevel.mutate,
-                  name: 'SIGTERM',
-                  meta: 'mutate · one confirmation',
-                  onTap: () => _signal(ctx, row, ProcessSignal.term),
-                ),
-                const SizedBox(height: 6),
-                ServiceRow(
-                  risk: RiskLevel.destructive,
-                  name: 'SIGKILL',
-                  meta: 'destructive · immediate',
-                  onTap: () => _signal(ctx, row, ProcessSignal.kill),
-                ),
-              ],
-            ],
+            ),
           ),
         );
       },

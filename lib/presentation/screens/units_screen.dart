@@ -240,7 +240,7 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
       );
     }
     return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+      padding: kelolaScrollPadding(context),
       children: [
         for (final unit in view.failed) _row(unit),
         if (view.showRunningSlab) _slab(c, 'Running'),

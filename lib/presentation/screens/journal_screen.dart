@@ -484,7 +484,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
       onRefresh: () => _load(reset: true),
       child: ListView.builder(
         controller: _scroll,
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 24),
+        padding: kelolaScrollPadding(context, left: 0, top: 10, right: 0),
         itemCount: _entries.length + 1,
         itemBuilder: (context, i) {
           if (i == _entries.length) {
