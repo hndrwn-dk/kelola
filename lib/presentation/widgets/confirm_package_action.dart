@@ -71,11 +71,8 @@ Future<bool> _sheet(
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (ctx) {
-      return Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-        ),
-        child: DestructiveConfirmSheet(
+      return KelolaSheet(
+          child: DestructiveConfirmSheet(
           title: title,
           consequence: consequence,
           warning: warning,

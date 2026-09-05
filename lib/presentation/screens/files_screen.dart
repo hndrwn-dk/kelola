@@ -271,7 +271,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                     )
                   : ListView.builder(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+                      padding: kelolaScrollPadding(context),
                       itemCount: view.rows.length,
                       itemBuilder: (context, i) {
                         final e = view.rows[i];
@@ -319,72 +319,74 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!e.isDirectory)
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!e.isDirectory)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: ServiceRow(
+                      risk: RiskLevel.read,
+                      name: 'View / edit',
+                      meta: 'text files only',
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _edit(e);
+                      },
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: ServiceRow(
                     risk: RiskLevel.read,
-                    name: 'View / edit',
-                    meta: 'text files only',
+                    name: 'Download',
+                    meta: 'stream to this device',
                     onTap: () {
                       Navigator.pop(ctx);
-                      _edit(e);
+                      _download(e);
                     },
                   ),
                 ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: ServiceRow(
-                  risk: RiskLevel.read,
-                  name: 'Download',
-                  meta: 'stream to this device',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _download(e);
-                  },
-                ),
-              ),
-              if (!readOnly) ...[
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: ServiceRow(
-                    risk: RiskLevel.mutate,
-                    name: 'Rename',
+                if (!readOnly) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: ServiceRow(
+                      risk: RiskLevel.mutate,
+                      name: 'Rename',
+                      meta: e.name,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _rename(e);
+                      },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: ServiceRow(
+                      risk: RiskLevel.mutate,
+                      name: 'chmod',
+                      meta: e.permissions,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _chmod(e);
+                      },
+                    ),
+                  ),
+                  ServiceRow(
+                    risk: RiskLevel.destructive,
+                    name: 'Delete',
                     meta: e.name,
                     onTap: () {
                       Navigator.pop(ctx);
-                      _rename(e);
+                      _delete(e);
                     },
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: ServiceRow(
-                    risk: RiskLevel.mutate,
-                    name: 'chmod',
-                    meta: e.permissions,
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _chmod(e);
-                    },
-                  ),
-                ),
-                ServiceRow(
-                  risk: RiskLevel.destructive,
-                  name: 'Delete',
-                  meta: e.name,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _delete(e);
-                  },
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         );
       },
@@ -626,22 +628,24 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              for (final f in files)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: ServiceRow(
-                    risk: RiskLevel.mutate,
-                    name: f.uri.pathSegments.last,
-                    meta: f.path,
-                    onTap: () => Navigator.pop(ctx, f),
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final f in files)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: ServiceRow(
+                      risk: RiskLevel.mutate,
+                      name: f.uri.pathSegments.last,
+                      meta: f.path,
+                      onTap: () => Navigator.pop(ctx, f),
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         );
       },

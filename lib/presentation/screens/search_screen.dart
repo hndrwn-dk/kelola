@@ -107,7 +107,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
+                    padding: kelolaScrollPadding(context),
                     itemCount: view.hits.length,
                     itemBuilder: (context, i) {
                       final hit = view.hits[i];

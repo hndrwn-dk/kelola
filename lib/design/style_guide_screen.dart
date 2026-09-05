@@ -30,7 +30,7 @@ class StyleGuideScreen extends StatelessWidget {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 32),
+        padding: kelolaScrollPadding(context, left: 14, top: 8, right: 14, extraBottom: 16),
         children: [
           Text(
             'RISKBAND',

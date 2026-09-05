@@ -268,7 +268,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
       );
     }
     return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+      padding: kelolaScrollPadding(context),
       children: [
         if (snap != null && snap.rebootRequired)
           Padding(

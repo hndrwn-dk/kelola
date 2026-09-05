@@ -103,7 +103,7 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 32),
+          padding: kelolaScrollPadding(context, top: 12),
           children: [
             if (hosts.isNotEmpty && widget.hostId == null) ...[
               Wrap(
@@ -191,30 +191,32 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
         side: BorderSide(color: c.line),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                auditDisplayTitle(e),
-                style: KelolaType.display(color: c.text, size: 16),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _metaLine(e),
-                style: KelolaType.mono(
-                  color: failed ? c.red : c.muted,
-                  size: 11,
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  auditDisplayTitle(e),
+                  style: KelolaType.display(color: c.text, size: 16),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                e.command,
-                style: KelolaType.mono(color: c.text, size: 11),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  _metaLine(e),
+                  style: KelolaType.mono(
+                    color: failed ? c.red : c.muted,
+                    size: 11,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  e.command,
+                  style: KelolaType.mono(color: c.text, size: 11),
+                ),
+              ],
+            ),
           ),
         );
       },

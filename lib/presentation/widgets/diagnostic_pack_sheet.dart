@@ -26,10 +26,12 @@ Future<void> showDiagnosticPackPreview(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     builder: (ctx) {
-      return _DiagnosticPackPanel(
-        pack: pack,
-        error: error,
-        share: share ?? _shareViaOs,
+      return KelolaSheet(
+        child: _DiagnosticPackPanel(
+          pack: pack,
+          error: error,
+          share: share ?? _shareViaOs,
+        ),
       );
     },
   );
@@ -109,23 +111,21 @@ class _DiagnosticPackPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
         ),
-        padding: const EdgeInsets.fromLTRB(14, 16, 14, 24),
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(KelolaRadii.lg),
-          ),
-          border: Border(top: BorderSide(color: c.line)),
-        ),
-        child: ListView(
-          shrinkWrap: true,
-          children: [
+        border: Border(top: BorderSide(color: c.line)),
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        children: [
             Text(
               'Diagnostic pack',
               style: KelolaType.display(color: c.text, size: 16),
@@ -170,7 +170,6 @@ class _DiagnosticPackPanel extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }

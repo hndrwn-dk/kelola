@@ -1,0 +1,75 @@
+# Kelola — design system rules for Cursor
+
+These rules are not suggestions. If a change violates one, stop and
+use the existing component instead of inventing a new pattern.
+
+## Source of truth
+
+`lib/design/kelola_theme.dart` and `lib/design/kelola_components.dart`
+are the ONLY source of visual truth. `DESIGN.html` and any screenshots
+in `/design-reference/` are references for what these components
+should look like once composed — they are not themselves the
+implementation target.
+
+Before building ANY screen or widget:
+1. Read `lib/design/kelola_theme.dart` and `lib/design/kelola_components.dart` in full.
+2. Check whether `RiskBand`, `StatCard`, `ServiceRow`, `Sparkline`,
+   or `DestructiveConfirmSheet` already covers this UI need.
+3. If it does, compose with it. Do not rebuild an equivalent.
+4. If it genuinely doesn't, propose the new component as an addition
+   to `kelola_components.dart` — do not inline a one-off widget in a
+   screen file.
+
+## Hard bans
+
+These patterns must NEVER appear anywhere in this codebase, even if
+they seem like a reasonable interpretation of "dashboard" or
+"system stats":
+
+- Radial gauges / dial / speedometer widgets, for ANY metric
+  (CPU, memory, disk, load). Use `StatCard` + `Sparkline` only.
+- Floating action buttons (FAB). Actions live inline in the
+  relevant screen, not in a floating global button.
+- Plain `Card`, `ListTile`, or Material default list rows for
+  anything representing a host, service, container, or action.
+  Use `RiskBand` / `ServiceRow`.
+- `AlertDialog` for any `RiskLevel.destructive` action. Use
+  `DestructiveConfirmSheet`.
+- Any hardcoded `Color(0x...)` outside `kelola_theme.dart`. Always
+  go through `context.kc.<token>` or `context.kc.forRisk(risk)`.
+- Any font family other than SpaceGrotesk / IBMPlexSans / IBMPlexMono.
+- Green used for anything other than "healthy". Red used for
+  anything other than destructive/error. Amber is the only
+  decorative accent color in the app — do not introduce a second
+  accent color for visual variety.
+- Bottom sheets must always wrap their body in `KelolaSheet` (from
+  `kelola_components.dart`). Do not call `showModalBottomSheet` with
+  a raw column that only pads `viewInsets` or a fixed bottom number.
+- List/grid bottom padding must use `kelolaScrollPadding(...)` (or
+  `MediaQuery.viewPadding.bottom + extra`). Never hardcode 16/24/28/32
+  as the sole bottom inset for scrollable content.
+
+## The type rule
+
+If a string came from the server (a command, a log line, a PID, a
+path, an exit code, a timestamp) → `KelolaType.mono`.
+If a human or Kelola wrote the string (a screen title, a button
+label, a description) → `KelolaType.display` or `KelolaType.body`.
+Never mix these up for "visual balance."
+
+## Workflow
+
+- Build `lib/design/style_guide_screen.dart` FIRST — a single screen
+  rendering every component in `kelola_components.dart` in isolation
+  with sample data. Reference it constantly.
+- After building each real screen, compare it side-by-side against
+  the matching frame in `DESIGN.html` before moving to the next
+  screen. Do not batch multiple screens before review.
+- If a screen doesn't match, fix it before proceeding — do not
+  accumulate drift across screens.
+
+## Dark theme only
+
+Do not build or scaffold a light theme in v1. `buildKelolaDarkTheme()`
+is the only theme. If asked to add light mode, decline and note it's
+deferred per spec.

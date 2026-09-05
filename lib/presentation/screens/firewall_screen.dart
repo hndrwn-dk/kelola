@@ -347,7 +347,7 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
     }
     final rules = snap?.rules ?? const <FirewallRule>[];
     return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+      padding: kelolaScrollPadding(context),
       children: [
         if (facts?.fw == FirewallBackend.iptables)
           const Padding(

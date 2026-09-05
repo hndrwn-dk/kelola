@@ -230,7 +230,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 32),
+                  padding: kelolaScrollPadding(context, top: 8),
                   children: [
                     KelolaInput(
                       key: const Key('edit-host-alias'),

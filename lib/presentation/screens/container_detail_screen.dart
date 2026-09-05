@@ -158,7 +158,7 @@ class _ContainerDetailScreenState extends ConsumerState<ContainerDetailScreen> {
             child: RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+                padding: kelolaScrollPadding(context),
                 children: [
                   if (_error != null) ...[
                     KelolaError(

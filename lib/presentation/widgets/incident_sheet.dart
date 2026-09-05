@@ -39,11 +39,13 @@ Future<void> showIncidentSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     builder: (ctx) {
-      return IncidentSheetPanel(
-        host: host,
-        view: view,
-        onAction: onAction,
-        onLookUp: onLookUp,
+      return KelolaSheet(
+        child: IncidentSheetPanel(
+          host: host,
+          view: view,
+          onAction: onAction,
+          onLookUp: onLookUp,
+        ),
       );
     },
   );
@@ -72,7 +74,7 @@ Future<void> openHostIncident(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     builder: (ctx) {
-      return _LiveIncidentSheet(host: host);
+      return KelolaSheet(child: _LiveIncidentSheet(host: host));
     },
   );
 }
@@ -108,22 +110,21 @@ class IncidentSheetPanel extends StatelessWidget {
     final c = context.kc;
     // Pin title + broken objects above the scroll body so expanding Explain
     // cannot scroll the failed-unit row under the sheet's rounded clip.
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+    // System/keyboard insets come from [KelolaSheet] at the call site.
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+      ),
+      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
         ),
-        clipBehavior: Clip.antiAlias,
-        padding: const EdgeInsets.fromLTRB(14, 16, 14, 24),
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(KelolaRadii.lg),
-          ),
-          border: Border(top: BorderSide(color: c.line)),
-        ),
-        child: Column(
+        border: Border(top: BorderSide(color: c.line)),
+      ),
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -280,8 +281,7 @@ class IncidentSheetPanel extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   String _ts(JournalEntry e) {

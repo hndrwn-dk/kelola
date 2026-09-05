@@ -233,7 +233,7 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
             child: RefreshIndicator(
               onRefresh: _tick,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 32),
+                padding: kelolaScrollPadding(context, top: 12),
                 children: [
                   if (_error != null)
                     Padding(

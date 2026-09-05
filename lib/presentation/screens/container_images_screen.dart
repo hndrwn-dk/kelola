@@ -150,7 +150,7 @@ class _ContainerImagesScreenState extends ConsumerState<ContainerImagesScreen> {
               onRefresh: _load,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+                padding: kelolaScrollPadding(context),
                 children: [
                   if (_error != null) ...[
                     KelolaError(
