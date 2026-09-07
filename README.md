@@ -32,9 +32,6 @@ One hardware key per phone, reused for every host. That is intentional.
 | Local audit log (write-before-exec, JSON copy) | Working |
 | Read-only host switch | Enforced at the SSH dispatcher |
 
-Still ahead: tunnels, terminal PTY, cron/users, fleet, NAT, LLM. See [`readiness/MILESTONES.md`](readiness/MILESTONES.md).
-
-Specs: [`readiness/SPEC.md`](readiness/SPEC.md) · design: [`readiness/DESIGN.html`](readiness/DESIGN.html) · M0 decision: [`readiness/M0-GO-NO-GO.md`](readiness/M0-GO-NO-GO.md).
 
 ## Screenshots
 
