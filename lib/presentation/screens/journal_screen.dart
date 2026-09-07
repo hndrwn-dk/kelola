@@ -244,12 +244,31 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
               }
               _stopFollow();
             },
-            onNoSyslog: () {
+            onNoSyslog: (learned) {
               if (!mounted) {
                 return;
               }
+              final current = _facts;
+              if (learned != null &&
+                  current != null &&
+                  learned != current.journalAccess) {
+                final updated = current.copyWith(
+                  journalAccess: learned,
+                  journalReadable: learned == JournalAccess.plain ||
+                      learned == JournalAccess.sudo,
+                );
+                _facts = updated;
+                unawaited(
+                  ref.read(hostRepositoryProvider).saveFacts(host.id, updated),
+                );
+              }
               setState(() {
                 _noReadableLogSource = true;
+                if (learned == JournalAccess.denied) {
+                  _permissionDenied = true;
+                  _emptyHint =
+                      'Log files are not readable without a password. Kelola will not retry sudo.';
+                }
                 _live = false;
               });
               _stopFollow();

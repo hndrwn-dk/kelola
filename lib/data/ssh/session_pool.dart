@@ -244,7 +244,7 @@ class SshSessionPool {
     String? grep,
     JournalScope scope = JournalScope.all,
     void Function()? onDenied,
-    void Function()? onNoSyslog,
+    void Function(JournalAccess? learnedAccess)? onNoSyslog,
     void Function(Object error)? onError,
     void Function()? onClosed,
     UnknownHostKeyHandler? onUnknownHostKey,

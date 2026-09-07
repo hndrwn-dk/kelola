@@ -77,13 +77,15 @@ void main() {
     ];
 
     final sorted = sortFleetHealth(rows).map((h) => h.alias).toList();
+    // Severity: unreachable → failedUnits → diskHigh → loadHigh → pending → healthy.
+    // golf (load) sorts before foxtrot (pending updates).
     expect(sorted, [
       'bravo',
       'delta',
       'charlie',
       'echo',
-      'foxtrot',
       'golf',
+      'foxtrot',
       'alpha',
     ]);
   });

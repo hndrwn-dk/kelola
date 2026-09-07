@@ -51,11 +51,22 @@ void main() {
     expect(commandRunnerEmptyCopy.toLowerCase(), isNot(contains('connected')));
   });
 
-  test('session pool no longer requests a PTY or interactive shell', () {
+  // Command runner must stay exec-only (no PTY). Journal follow is the one
+  // exception: without a PTY, journalctl -f gets EPOLLHUP on a pipe and exits
+  // immediately (0b5b269). Counting SSHPtyConfig == 1 catches a second,
+  // ungated allocation elsewhere in session_pool.
+  test('session pool allocates a PTY only for journal follow', () {
     final src = File('lib/data/ssh/session_pool.dart').readAsStringSync();
-    expect(src, isNot(contains('SSHPtyConfig')));
     expect(src, isNot(contains('.shell(')));
     expect(src, isNot(contains('openShell')));
     expect(src, isNot(contains('interactive shell')));
+
+    final ptyMatches = RegExp(r'SSHPtyConfig').allMatches(src);
+    expect(ptyMatches.length, 1);
+
+    final gated = RegExp(
+      r'journalFollowRequiresPty\s*\?\s*const\s+SSHPtyConfig\s*\(\s*\)\s*:\s*null',
+    );
+    expect(gated.hasMatch(src), isTrue);
   });
 }

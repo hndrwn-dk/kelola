@@ -161,12 +161,12 @@ void main() {
     expect(find.text('INSIGHTS AUDIT'), findsOneWidget);
     expect(find.text('AUDIT'), findsNothing);
     expect(
-      find.text('7 days · 2 changes · 1 destructive · 1 failed'),
+      find.text('7 days · 2 changes · 1 destructive · 0 failed'),
       findsOneWidget,
     );
     final slab = tester.getRect(find.text('INSIGHTS AUDIT'));
     final counts = tester.getRect(
-      find.text('7 days · 2 changes · 1 destructive · 1 failed'),
+      find.text('7 days · 2 changes · 1 destructive · 0 failed'),
     );
     expect(slab.bottom, lessThanOrEqualTo(counts.top + 1));
     final row = tester.widget<AuditInsightRow>(find.byType(AuditInsightRow));

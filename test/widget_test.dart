@@ -40,9 +40,17 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('nas-01'), findsOneWidget);
-    expect(find.byType(ServiceRow), findsOneWidget);
     expect(find.byType(HostCard), findsNothing);
     expect(find.byTooltip('Remove host'), findsNothing);
+    // Host row plus Fleet / Assist / Home widget footers.
+    expect(find.byType(ServiceRow), findsNWidgets(4));
+    expect(
+      find.descendant(
+        of: find.byType(ServiceRow),
+        matching: find.text('nas-01'),
+      ),
+      findsOneWidget,
+    );
 
     await tester.fling(find.text('nas-01'), const Offset(-500, 0), 1000);
     await tester.pumpAndSettle();

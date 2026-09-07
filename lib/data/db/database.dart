@@ -66,7 +66,7 @@ class KelolaDatabase extends _$KelolaDatabase {
             await m.createTable(hostTags);
             await m.createTable(fleetCache);
           }
-          // Schema 9 fleet_cache lacked extended columns; fresh <9 createAll already has them.
+          // Only exact-9 needs ALTER: from < 9 createTable(fleet_cache) already emits the wide table.
           if (from == 9) {
             await m.addColumn(fleetCache, fleetCache.nprocCores);
             await m.addColumn(fleetCache, fleetCache.memPercent);

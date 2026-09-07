@@ -11,9 +11,12 @@ import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/session_pool.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/domain/containers/container_row.dart';
+import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
 import 'package:kelola/domain/search/search_index_write.dart';
 import 'package:kelola/domain/units/service_unit.dart';
@@ -64,7 +67,14 @@ class _NoSshPool extends SshSessionPool {
     Probe<T> probe, {
     HostFacts? facts,
     UnknownHostKeyHandler? onUnknownHostKey,
+    void Function(int done, int? total)? onProgress,
+    TransferCancel? cancel,
+    ProbeScope scope = ProbeScope.host,
   }) {
+    // Match real SFTP path: cancelled transfers abort before any work.
+    if (cancel?.isCancelled == true) {
+      throw const TransferCancelledException();
+    }
     executeCalls++;
     throw StateError('search must not open SSH');
   }

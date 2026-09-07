@@ -94,6 +94,13 @@ readiness/         product spec and milestone plan
 - Private keys never appear in logs, backups, or the UI. Restoring inventory on a new phone means re-enrollment.
 - Report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
 
+## Support
+
+Kelola is free and open source, with no accounts, no telemetry, and no
+paywalled features. If it saves you time, you can support development:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/hendrawandaryonokarso)
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
