@@ -18,17 +18,21 @@ class FleetHealthProbe extends Probe<FleetHostHealth> {
 
   @override
   String command(HostFacts facts) {
-    final failed = facts.init == InitSystem.systemd
+    // Treat unknown init as systemd-capable: Fleet refresh often runs without
+    // cached HostFacts (undiscovered), and skipping systemctl here made tiles
+    // stay green while the host dashboard correctly showed failed units.
+    final failed = facts.init == InitSystem.openrc ||
+            facts.init == InitSystem.sysvinit
         ? r'''
+echo "---FAILED---"
+echo 0
+echo "---FAILED_NAMES---"
+'''
+        : r'''
 echo "---FAILED---"
 systemctl list-units --type=service --state=failed --no-legend --plain --no-pager 2>/dev/null | wc -l
 echo "---FAILED_NAMES---"
 systemctl list-units --type=service --state=failed --no-legend --plain --no-pager 2>/dev/null | awk '{print $1}'
-'''
-        : r'''
-echo "---FAILED---"
-echo 0
-echo "---FAILED_NAMES---"
 ''';
     final pending = facts.pkg == PackageManager.unknown
         ? r'''
@@ -63,14 +67,11 @@ df -PT
 $failed
 $pending
 echo "---CONTAINERS---"
+# Unprivileged docker/podman only; never escalate on fleet refresh.
 if command -v docker >/dev/null 2>&1; then
-  docker ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null \\
-    || sudo -n docker ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null \\
-    || true
+  docker ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null || true
 elif command -v podman >/dev/null 2>&1; then
-  podman ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null \\
-    || sudo -n podman ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null \\
-    || true
+  podman ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null || true
 fi
 echo "---REBOOT---"
 if [ -f /var/run/reboot-required ]; then echo 1; else echo 0; fi

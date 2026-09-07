@@ -1,3 +1,5 @@
+import 'package:kelola/domain/facts/host_facts.dart';
+
 class JournalEntry {
   const JournalEntry({
     required this.cursor,
@@ -32,13 +34,29 @@ class JournalPage {
     required this.entries,
     required this.permissionDenied,
     this.hasJournald = true,
+    this.usedSyslog = false,
+    this.noReadableLogSource = false,
     this.emptyHint,
+    this.skippedLines = 0,
+    this.learnedAccess,
   });
 
   final List<JournalEntry> entries;
   final bool permissionDenied;
   final bool hasJournald;
+
+  /// Historical/live came from syslog because journald is absent.
+  final bool usedSyslog;
+
+  /// Neither journald nor a readable syslog/messages file.
+  final bool noReadableLogSource;
   final String? emptyHint;
+
+  /// Non-empty stdout lines the parser could not turn into [JournalEntry]s.
+  final int skippedLines;
+
+  /// Outcome to persist on the host so sudo is not retried next open.
+  final JournalAccess? learnedAccess;
 
   String? get olderThanUsec {
     if (entries.isEmpty) {

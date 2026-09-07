@@ -159,6 +159,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
         _tags.text = (updated ?? host).tags.join(', ');
       });
       ref.invalidate(hostsProvider);
+      Navigator.of(context).pop();
       return;
     }
 
@@ -203,6 +204,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
     }
     setState(() => _host = updated ?? host);
     ref.invalidate(hostsProvider);
+    Navigator.of(context).pop();
   }
 
   @override

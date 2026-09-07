@@ -1460,6 +1460,18 @@ class $CachedFactsTable extends CachedFacts
       'CHECK ("journal_readable" IN (0, 1))',
     ),
   );
+  static const VerificationMeta _journalAccessMeta = const VerificationMeta(
+    'journalAccess',
+  );
+  @override
+  late final GeneratedColumn<String> journalAccess = GeneratedColumn<String>(
+    'journal_access',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('unknown'),
+  );
   static const VerificationMeta _archMeta = const VerificationMeta('arch');
   @override
   late final GeneratedColumn<String> arch = GeneratedColumn<String>(
@@ -1492,6 +1504,7 @@ class $CachedFactsTable extends CachedFacts
     fw,
     hasJournald,
     journalReadable,
+    journalAccess,
     arch,
     discoveredAt,
   ];
@@ -1592,6 +1605,15 @@ class $CachedFactsTable extends CachedFacts
     } else if (isInserting) {
       context.missing(_journalReadableMeta);
     }
+    if (data.containsKey('journal_access')) {
+      context.handle(
+        _journalAccessMeta,
+        journalAccess.isAcceptableOrUnknown(
+          data['journal_access']!,
+          _journalAccessMeta,
+        ),
+      );
+    }
     if (data.containsKey('arch')) {
       context.handle(
         _archMeta,
@@ -1660,6 +1682,10 @@ class $CachedFactsTable extends CachedFacts
         DriftSqlType.bool,
         data['${effectivePrefix}journal_readable'],
       )!,
+      journalAccess: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}journal_access'],
+      )!,
       arch: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}arch'],
@@ -1688,6 +1714,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
   final String fw;
   final bool hasJournald;
   final bool journalReadable;
+  final String journalAccess;
   final String arch;
   final DateTime discoveredAt;
   const CachedFactsRow({
@@ -1701,6 +1728,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
     required this.fw,
     required this.hasJournald,
     required this.journalReadable,
+    required this.journalAccess,
     required this.arch,
     required this.discoveredAt,
   });
@@ -1721,6 +1749,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
     map['fw'] = Variable<String>(fw);
     map['has_journald'] = Variable<bool>(hasJournald);
     map['journal_readable'] = Variable<bool>(journalReadable);
+    map['journal_access'] = Variable<String>(journalAccess);
     map['arch'] = Variable<String>(arch);
     map['discovered_at'] = Variable<DateTime>(discoveredAt);
     return map;
@@ -1742,6 +1771,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
       fw: Value(fw),
       hasJournald: Value(hasJournald),
       journalReadable: Value(journalReadable),
+      journalAccess: Value(journalAccess),
       arch: Value(arch),
       discoveredAt: Value(discoveredAt),
     );
@@ -1763,6 +1793,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
       fw: serializer.fromJson<String>(json['fw']),
       hasJournald: serializer.fromJson<bool>(json['hasJournald']),
       journalReadable: serializer.fromJson<bool>(json['journalReadable']),
+      journalAccess: serializer.fromJson<String>(json['journalAccess']),
       arch: serializer.fromJson<String>(json['arch']),
       discoveredAt: serializer.fromJson<DateTime>(json['discoveredAt']),
     );
@@ -1781,6 +1812,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
       'fw': serializer.toJson<String>(fw),
       'hasJournald': serializer.toJson<bool>(hasJournald),
       'journalReadable': serializer.toJson<bool>(journalReadable),
+      'journalAccess': serializer.toJson<String>(journalAccess),
       'arch': serializer.toJson<String>(arch),
       'discoveredAt': serializer.toJson<DateTime>(discoveredAt),
     };
@@ -1797,6 +1829,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
     String? fw,
     bool? hasJournald,
     bool? journalReadable,
+    String? journalAccess,
     String? arch,
     DateTime? discoveredAt,
   }) => CachedFactsRow(
@@ -1812,6 +1845,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
     fw: fw ?? this.fw,
     hasJournald: hasJournald ?? this.hasJournald,
     journalReadable: journalReadable ?? this.journalReadable,
+    journalAccess: journalAccess ?? this.journalAccess,
     arch: arch ?? this.arch,
     discoveredAt: discoveredAt ?? this.discoveredAt,
   );
@@ -1839,6 +1873,9 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
       journalReadable: data.journalReadable.present
           ? data.journalReadable.value
           : this.journalReadable,
+      journalAccess: data.journalAccess.present
+          ? data.journalAccess.value
+          : this.journalAccess,
       arch: data.arch.present ? data.arch.value : this.arch,
       discoveredAt: data.discoveredAt.present
           ? data.discoveredAt.value
@@ -1859,6 +1896,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
           ..write('fw: $fw, ')
           ..write('hasJournald: $hasJournald, ')
           ..write('journalReadable: $journalReadable, ')
+          ..write('journalAccess: $journalAccess, ')
           ..write('arch: $arch, ')
           ..write('discoveredAt: $discoveredAt')
           ..write(')'))
@@ -1877,6 +1915,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
     fw,
     hasJournald,
     journalReadable,
+    journalAccess,
     arch,
     discoveredAt,
   );
@@ -1894,6 +1933,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
           other.fw == this.fw &&
           other.hasJournald == this.hasJournald &&
           other.journalReadable == this.journalReadable &&
+          other.journalAccess == this.journalAccess &&
           other.arch == this.arch &&
           other.discoveredAt == this.discoveredAt);
 }
@@ -1909,6 +1949,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
   final Value<String> fw;
   final Value<bool> hasJournald;
   final Value<bool> journalReadable;
+  final Value<String> journalAccess;
   final Value<String> arch;
   final Value<DateTime> discoveredAt;
   final Value<int> rowid;
@@ -1923,6 +1964,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
     this.fw = const Value.absent(),
     this.hasJournald = const Value.absent(),
     this.journalReadable = const Value.absent(),
+    this.journalAccess = const Value.absent(),
     this.arch = const Value.absent(),
     this.discoveredAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1938,6 +1980,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
     required String fw,
     required bool hasJournald,
     required bool journalReadable,
+    this.journalAccess = const Value.absent(),
     required String arch,
     required DateTime discoveredAt,
     this.rowid = const Value.absent(),
@@ -1962,6 +2005,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
     Expression<String>? fw,
     Expression<bool>? hasJournald,
     Expression<bool>? journalReadable,
+    Expression<String>? journalAccess,
     Expression<String>? arch,
     Expression<DateTime>? discoveredAt,
     Expression<int>? rowid,
@@ -1977,6 +2021,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
       if (fw != null) 'fw': fw,
       if (hasJournald != null) 'has_journald': hasJournald,
       if (journalReadable != null) 'journal_readable': journalReadable,
+      if (journalAccess != null) 'journal_access': journalAccess,
       if (arch != null) 'arch': arch,
       if (discoveredAt != null) 'discovered_at': discoveredAt,
       if (rowid != null) 'rowid': rowid,
@@ -1994,6 +2039,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
     Value<String>? fw,
     Value<bool>? hasJournald,
     Value<bool>? journalReadable,
+    Value<String>? journalAccess,
     Value<String>? arch,
     Value<DateTime>? discoveredAt,
     Value<int>? rowid,
@@ -2009,6 +2055,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
       fw: fw ?? this.fw,
       hasJournald: hasJournald ?? this.hasJournald,
       journalReadable: journalReadable ?? this.journalReadable,
+      journalAccess: journalAccess ?? this.journalAccess,
       arch: arch ?? this.arch,
       discoveredAt: discoveredAt ?? this.discoveredAt,
       rowid: rowid ?? this.rowid,
@@ -2048,6 +2095,9 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
     if (journalReadable.present) {
       map['journal_readable'] = Variable<bool>(journalReadable.value);
     }
+    if (journalAccess.present) {
+      map['journal_access'] = Variable<String>(journalAccess.value);
+    }
     if (arch.present) {
       map['arch'] = Variable<String>(arch.value);
     }
@@ -2073,6 +2123,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
           ..write('fw: $fw, ')
           ..write('hasJournald: $hasJournald, ')
           ..write('journalReadable: $journalReadable, ')
+          ..write('journalAccess: $journalAccess, ')
           ..write('arch: $arch, ')
           ..write('discoveredAt: $discoveredAt, ')
           ..write('rowid: $rowid')
@@ -6890,6 +6941,7 @@ typedef $$CachedFactsTableCreateCompanionBuilder =
       required String fw,
       required bool hasJournald,
       required bool journalReadable,
+      Value<String> journalAccess,
       required String arch,
       required DateTime discoveredAt,
       Value<int> rowid,
@@ -6906,6 +6958,7 @@ typedef $$CachedFactsTableUpdateCompanionBuilder =
       Value<String> fw,
       Value<bool> hasJournald,
       Value<bool> journalReadable,
+      Value<String> journalAccess,
       Value<String> arch,
       Value<DateTime> discoveredAt,
       Value<int> rowid,
@@ -6967,6 +7020,11 @@ class $$CachedFactsTableFilterComposer
 
   ColumnFilters<bool> get journalReadable => $composableBuilder(
     column: $table.journalReadable,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get journalAccess => $composableBuilder(
+    column: $table.journalAccess,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7040,6 +7098,11 @@ class $$CachedFactsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get journalAccess => $composableBuilder(
+    column: $table.journalAccess,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get arch => $composableBuilder(
     column: $table.arch,
     builder: (column) => ColumnOrderings(column),
@@ -7102,6 +7165,11 @@ class $$CachedFactsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get journalAccess => $composableBuilder(
+    column: $table.journalAccess,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get arch =>
       $composableBuilder(column: $table.arch, builder: (column) => column);
 
@@ -7152,6 +7220,7 @@ class $$CachedFactsTableTableManager
                 Value<String> fw = const Value.absent(),
                 Value<bool> hasJournald = const Value.absent(),
                 Value<bool> journalReadable = const Value.absent(),
+                Value<String> journalAccess = const Value.absent(),
                 Value<String> arch = const Value.absent(),
                 Value<DateTime> discoveredAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -7166,6 +7235,7 @@ class $$CachedFactsTableTableManager
                 fw: fw,
                 hasJournald: hasJournald,
                 journalReadable: journalReadable,
+                journalAccess: journalAccess,
                 arch: arch,
                 discoveredAt: discoveredAt,
                 rowid: rowid,
@@ -7182,6 +7252,7 @@ class $$CachedFactsTableTableManager
                 required String fw,
                 required bool hasJournald,
                 required bool journalReadable,
+                Value<String> journalAccess = const Value.absent(),
                 required String arch,
                 required DateTime discoveredAt,
                 Value<int> rowid = const Value.absent(),
@@ -7196,6 +7267,7 @@ class $$CachedFactsTableTableManager
                 fw: fw,
                 hasJournald: hasJournald,
                 journalReadable: journalReadable,
+                journalAccess: journalAccess,
                 arch: arch,
                 discoveredAt: discoveredAt,
                 rowid: rowid,

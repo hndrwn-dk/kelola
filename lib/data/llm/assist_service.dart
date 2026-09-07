@@ -24,19 +24,29 @@ class AssistService {
   })  : _http = http,
         gate = gate ?? AssistPreviewGate();
 
-  /// Mobile incident sheet: keep replies scannable.
+  /// Mobile incident sheet: labeled sections, parsed on-device for layout.
   static const failedUnitSystemPrompt =
-      'Explain why this systemd unit failed in plain language. '
-      'Reply with at most 3 short paragraphs: (1) the cause, '
-      '(2) quote the concrete error line when present, '
-      '(3) one next step. '
+      'Explain why this systemd unit failed. '
+      'Reply using exactly these three section labels, each on its own line, '
+      'followed by that section\'s content:\n'
+      'Cause:\n'
+      'Concrete Error Line:\n'
+      'Next Step:\n'
+      'Keep each section short. Under Concrete Error Line, quote the concrete '
+      'error when present. '
+      'Do not rewrite labels into sentence openers. '
       'Ground the answer in the journal and systemctl show fields. '
       'Do not invent facts absent from the input. Do not repeat yourself.';
 
   static const diskSystemPrompt =
       'Explain what is consuming disk space. '
-      'Reply with at most 3 short paragraphs: (1) what is large, '
-      '(2) evidence from df/du, (3) one conventionally safe next step. '
+      'Reply using exactly these three section labels, each on its own line, '
+      'followed by that section\'s content:\n'
+      'What:\n'
+      'Evidence:\n'
+      'Next Step:\n'
+      'Keep each section short. Under Evidence, cite df/du. '
+      'Do not rewrite labels into sentence openers. '
       'Do not invent paths.';
 
   final LlmHttpClient _http;

@@ -51,13 +51,16 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
 
   Future<void> _loadAudit() async {
     final repo = ref.read(hostRepositoryProvider);
-    final rows = await repo.listAudit();
+    final now = DateTime.now().toUtc();
+    final rows = await repo.listAuditSince(
+      now.subtract(const Duration(days: 7)),
+    );
     final widgetOn = await repo.widgetEnabled();
     if (!mounted) {
       return;
     }
     setState(() {
-      _audit = summarizeAudit(rows, now: DateTime.now().toUtc());
+      _audit = summarizeAudit(rows, now: now);
       _widgetOn = widgetOn;
     });
   }

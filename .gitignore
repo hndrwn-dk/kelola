@@ -57,6 +57,8 @@ app.*.map.json
 readiness/
 .cursor/
 # .cursorrules is tracked — design-system hard bans for agents/humans.
+play_console/
+docs/superpowers/
 
 # Secrets, credentials, and signing artifacts
 .env
@@ -74,3 +76,4 @@ credentials.json
 **/credentials.json
 *service-account*.json
 play-*.json
+

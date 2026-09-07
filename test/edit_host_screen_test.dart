@@ -38,11 +38,44 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [databaseProvider.overrideWithValue(db)],
-        child: KelolaApp(home: EditHostScreen(hostId: hostId)),
+        child: KelolaApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => EditHostScreen(hostId: hostId),
+                      ),
+                    );
+                  },
+                  child: const Text('open-edit'),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('open-edit'));
+    await tester.pumpAndSettle();
   }
+
+  testWidgets('Save pops back after a successful no-confirm edit', (tester) async {
+    final id = await seed();
+    await pumpEditor(tester, id);
+
+    expect(find.byType(EditHostScreen), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('edit-host-tags')), 'uat, edge');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(EditHostScreen), findsNothing);
+    expect(find.text('open-edit'), findsOneWidget);
+    expect((await repo.get(id))!.tags, unorderedEquals(['uat', 'edge']));
+  });
 
   testWidgets('alias save does not show DestructiveConfirmSheet', (tester) async {
     final id = await seed();

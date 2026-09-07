@@ -4,6 +4,7 @@ import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/presentation/ssh_host_key_flow.dart';
 import 'package:kelola/providers.dart';
 
@@ -15,6 +16,7 @@ Future<T> runHostProbe<T>({
   HostFacts? facts,
   void Function(int done, int? total)? onProgress,
   TransferCancel? cancel,
+  ProbeScope scope = ProbeScope.host,
 }) {
   return ref.read(sessionPoolProvider).execute(
         host,
@@ -22,6 +24,7 @@ Future<T> runHostProbe<T>({
         facts: facts,
         onProgress: onProgress,
         cancel: cancel,
+        scope: scope,
         onUnknownHostKey: (hostId, algorithm, fingerprint) {
           return promptUnknownHostKey(
             context,

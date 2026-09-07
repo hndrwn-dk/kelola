@@ -13,7 +13,7 @@ systemd 255 (255.4-1ubuntu8)
 /usr/sbin/nft
 /usr/sbin/iptables
 ---JOURNAL---
-hendra adm sudo systemd-journal
+READABLE
 ---ARCH---
 x86_64
 ---NPROC---

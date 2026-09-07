@@ -22,13 +22,18 @@ Future<void> openFleetHostSheet(
   WidgetRef ref, {
   required Host host,
   required FleetHostHealth health,
+  void Function(FleetHostHealth updated)? onHealthUpdated,
 }) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     builder: (_) => KelolaSheet(
-      child: FleetHostSheet(host: host, health: health),
+      child: FleetHostSheet(
+        host: host,
+        health: health,
+        onHealthUpdated: onHealthUpdated,
+      ),
     ),
   );
 }
@@ -38,16 +43,19 @@ class FleetHostSheet extends ConsumerStatefulWidget {
     super.key,
     required this.host,
     required this.health,
+    this.onHealthUpdated,
   });
 
   final Host host;
   final FleetHostHealth health;
+  final void Function(FleetHostHealth updated)? onHealthUpdated;
 
   @override
   ConsumerState<FleetHostSheet> createState() => _FleetHostSheetState();
 }
 
 class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
+  late FleetHostHealth _health;
   MetricsSnapshot? _metrics;
   String? _error;
   bool _loadingMetrics = true;
@@ -56,6 +64,7 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
   @override
   void initState() {
     super.initState();
+    _health = widget.health;
     _loadMetrics();
   }
 
@@ -74,8 +83,19 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
       if (!mounted) {
         return;
       }
+      final updated = applyFleetMetricsSample(
+        _health,
+        load1: snap.load1,
+        memPercent: snap.memUsedPercent,
+      );
+      // Sync write-back into the fleet grid before painting LIVE.
+      widget.onHealthUpdated?.call(updated);
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _metrics = snap;
+        _health = updated;
         _loadingMetrics = false;
       });
     } catch (e) {
@@ -152,6 +172,12 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
               builder: (_) => PackagesScreen(hostId: widget.host.id),
             ),
           );
+        case FleetIssueKind.unreachable:
+        case FleetIssueKind.loadHigh:
+        case FleetIssueKind.memHigh:
+        case FleetIssueKind.pendingUpdates:
+        case FleetIssueKind.rebootRequired:
+          break;
       }
     } catch (e) {
       if (mounted) {
@@ -173,14 +199,33 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
     );
   }
 
+  HealthStatus _issueStatus(FleetIssueKind kind) {
+    return switch (kind) {
+      FleetIssueKind.unreachable ||
+      FleetIssueKind.failedUnit ||
+      FleetIssueKind.badContainer ||
+      FleetIssueKind.loadHigh =>
+        HealthStatus.failed,
+      FleetIssueKind.diskCritical ||
+      FleetIssueKind.memHigh ||
+      FleetIssueKind.securityUpdates ||
+      FleetIssueKind.pendingUpdates ||
+      FleetIssueKind.rebootRequired =>
+        HealthStatus.warning,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    final health = widget.health;
-    final issues = fleetIssues(health);
-    final actions = fleetQuickActions(health);
-    final more = fleetMoreIssuesLabel(health);
+    final assessment = assessFleetHost(_health);
+    final issues = assessment.issues;
+    final actions = fleetQuickActions(_health);
+    final more = fleetMoreIssuesLabel(_health);
     final metrics = _metrics;
+    final live = fleetLiveStrings(_health);
+    final loadText = live.load;
+    final age = live.age.isEmpty ? 'just now' : live.age;
 
     return Container(
       constraints: BoxConstraints(
@@ -197,59 +242,66 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
       child: ListView(
         shrinkWrap: true,
         children: [
-            Text('Fleet', style: KelolaType.display(color: c.text, size: 16)),
+          Text('Fleet', style: KelolaType.display(color: c.text, size: 16)),
+          Text(
+            widget.host.alias,
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 12),
+          if (_error != null) ...[
+            KelolaError(message: _error!, sudoUser: widget.host.username),
+            const SizedBox(height: 10),
+          ],
+          Text(
+            'ISSUES',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 6),
+          if (assessment.isHealthy)
             Text(
-              widget.host.alias,
-              style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
-            ),
-            const SizedBox(height: 12),
-            if (_error != null) ...[
-              KelolaError(message: _error!, sudoUser: widget.host.username),
-              const SizedBox(height: 10),
-            ],
-            Text(
-              'ISSUES',
-              style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
-            ),
-            const SizedBox(height: 6),
-            if (issues.isEmpty)
-              Text(
-                health.reachable ? 'No critical issues.' : 'Host unreachable.',
-                style: KelolaType.body(color: c.muted, size: 13),
-              )
-            else
-              for (final issue in issues) ...[
-                ServiceRow(
-                  risk: issue.kind == FleetIssueKind.failedUnit
-                      ? RiskLevel.mutate
-                      : RiskLevel.read,
-                  name: issue.label,
-                  meta: issue.meta,
-                ),
-                const SizedBox(height: 6),
-              ],
-            if (more != null) ...[
-              Text(more, style: KelolaType.body(color: c.amber, size: 12)),
-              const SizedBox(height: 8),
-            ],
-            Text(
-              'LIVE',
-              style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
-            ),
-            const SizedBox(height: 6),
-            if (_loadingMetrics)
-              Text('Sampling CPU…', style: KelolaType.mono(color: c.muted, size: 11))
-            else if (metrics != null) ...[
+              'No critical issues.',
+              style: KelolaType.body(color: c.muted, size: 13),
+            )
+          else
+            for (final issue in issues) ...[
               ServiceRow(
                 risk: RiskLevel.read,
-                name: 'CPU ${metrics.cpuPercent.toStringAsFixed(0)}%',
-                meta:
-                    'load ${metrics.load1.toStringAsFixed(2)} · mem ${metrics.memUsedPercent}%',
+                status: _issueStatus(issue.kind),
+                name: issue.label,
+                meta: issue.meta,
               ),
+              const SizedBox(height: 6),
+            ],
+          if (more != null) ...[
+            Text(more, style: KelolaType.body(color: c.amber, size: 12)),
+            const SizedBox(height: 8),
+          ],
+          Text(
+            'LIVE · $age',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 6),
+          if (_loadingMetrics)
+            Text(
+              'Sampling CPU…',
+              style: KelolaType.mono(color: c.muted, size: 11),
+            )
+          else ...[
+            ServiceRow(
+              risk: RiskLevel.read,
+              name: metrics == null
+                  ? 'load $loadText'
+                  : 'CPU ${metrics.cpuPercent.toStringAsFixed(0)}%',
+              meta: metrics == null
+                  ? 'mem ${_health.memPercent}% · $age'
+                  : 'load $loadText · mem ${_health.memPercent}% · $age',
+            ),
+            if (metrics != null) ...[
               const SizedBox(height: 6),
               Text(
                 'TOP CPU',
-                style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+                style:
+                    KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
               ),
               const SizedBox(height: 4),
               for (final p in metrics.topCpu.take(3))
@@ -260,7 +312,8 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
               const SizedBox(height: 8),
               Text(
                 'TOP MEM',
-                style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+                style:
+                    KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
               ),
               const SizedBox(height: 4),
               for (final p in metrics.topMem.take(3))
@@ -269,26 +322,27 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
                   style: KelolaType.mono(color: c.text, size: 11),
                 ),
             ],
-            const SizedBox(height: 14),
-            for (final action in actions) ...[
-              ServiceRow(
-                risk: action.kind == FleetIssueKind.failedUnit
-                    ? RiskLevel.mutate
-                    : RiskLevel.read,
-                name: action.label,
-                meta: action.meta,
-                onTap: _busy ? null : () => _runAction(action),
-              ),
-              const SizedBox(height: 6),
-            ],
-            ServiceRow(
-              risk: RiskLevel.read,
-              name: 'Open host',
-              meta: 'full dashboard',
-              onTap: _openHost,
-            ),
           ],
-        ),
-      );
+          const SizedBox(height: 14),
+          for (final action in actions) ...[
+            ServiceRow(
+              risk: action.kind == FleetIssueKind.failedUnit
+                  ? RiskLevel.mutate
+                  : RiskLevel.read,
+              name: action.label,
+              meta: action.meta,
+              onTap: _busy ? null : () => _runAction(action),
+            ),
+            const SizedBox(height: 6),
+          ],
+          ServiceRow(
+            risk: RiskLevel.read,
+            name: 'Open host',
+            meta: 'full dashboard',
+            onTap: _openHost,
+          ),
+        ],
+      ),
+    );
   }
 }

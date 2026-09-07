@@ -7,6 +7,7 @@ import 'package:kelola/domain/units/shell_quote.dart';
 /// unfinished tail — never the lines already yielded.
 class JournalNdjsonBuffer {
   final StringBuffer _tail = StringBuffer();
+  int skippedLines = 0;
 
   int get pendingBytes => _tail.length;
 
@@ -34,22 +35,29 @@ class JournalNdjsonBuffer {
       }
       final line = raw.substring(start, nl);
       start = nl + 1;
-      final entry = JournalParser.tryParseLine(line);
-      if (entry != null) {
-        entries.add(entry);
-      }
+      _acceptLine(line, entries);
     }
     final leftover = start < raw.length ? raw.substring(start) : '';
     _tail.clear();
     if (flushIncomplete) {
-      final entry = JournalParser.tryParseLine(leftover);
-      if (entry != null) {
-        entries.add(entry);
-      }
+      _acceptLine(leftover, entries);
     } else {
       _tail.write(leftover);
     }
     return entries;
+  }
+
+  void _acceptLine(String line, List<JournalEntry> entries) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    final entry = JournalParser.tryParseLine(trimmed);
+    if (entry != null) {
+      entries.add(entry);
+    } else {
+      skippedLines++;
+    }
   }
 }
 
@@ -63,12 +71,20 @@ class JournalParser {
     final buf = JournalNdjsonBuffer();
     final entries = buf.add(stdout);
     entries.addAll(buf.flush());
+    final skipped = buf.skippedLines;
+    String? hint;
+    if (entries.isEmpty && !permission) {
+      hint = skipped > 0
+          ? 'journalctl returned $skipped line(s) Kelola could not parse.'
+          : 'journalctl returned no JSON lines. The SSH user needs the systemd-journal group or passwordless sudo.';
+    } else if (skipped > 0) {
+      hint = 'Skipped $skipped unparseable journal line(s).';
+    }
     return JournalPage(
       entries: entries,
       permissionDenied: permission && entries.isEmpty,
-      emptyHint: entries.isEmpty && !permission
-          ? 'journalctl returned no JSON lines. The SSH user needs the systemd-journal group or passwordless sudo.'
-          : null,
+      emptyHint: hint,
+      skippedLines: skipped,
     );
   }
 

@@ -16,9 +16,12 @@ import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
 import 'package:kelola/domain/journal/journal_follow.dart';
+import 'package:kelola/domain/journal/journal_view.dart';
 import 'package:kelola/data/ssh/dart_sftp_port.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
+import 'package:kelola/domain/probes/journal_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/domain/probes/sftp_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/search/search_index_write.dart';
@@ -83,6 +86,7 @@ class SshSessionPool {
     UnknownHostKeyHandler? onUnknownHostKey,
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
+    ProbeScope scope = ProbeScope.host,
   }) async {
     if (host.username == 'root') {
       throw RootLoginRejectedException();
@@ -105,8 +109,11 @@ class SshSessionPool {
     final command = draft.command;
     final started = DateTime.now();
     final skipProbeAudit = _auditPolicy.alreadyLost(host.id);
+    // Successful Fleet-scope reads must not flood Insights (spec B).
+    final quietFleetRead =
+        scope == ProbeScope.fleet && probe.risk == RiskLevel.read;
     String? auditId;
-    if (!skipProbeAudit) {
+    if (!skipProbeAudit && !quietFleetRead) {
       auditId = await _repository.beginAudit(
         hostId: host.id,
         hostAlias: host.alias,
@@ -138,9 +145,16 @@ class SshSessionPool {
       } else {
         final result = await client.runWithResult(command).timeout(probe.timeout);
         exitCode = result.exitCode;
+        if (probe is JournalProbe) {
+          logJournalProbeReceive(
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          );
+        }
         parsed = probe.parse(
-          utf8.decode(result.stdout),
-          utf8.decode(result.stderr),
+          utf8.decode(result.stdout, allowMalformed: true),
+          utf8.decode(result.stderr, allowMalformed: true),
           result.exitCode ?? -1,
         );
       }
@@ -152,7 +166,7 @@ class SshSessionPool {
           exitCode: exitCode,
           durationMs: durationMs,
         );
-      } else {
+      } else if (!quietFleetRead && !skipProbeAudit) {
         await _repository.recordAudit(
           hostId: host.id,
           hostAlias: host.alias,
@@ -228,7 +242,9 @@ class SshSessionPool {
     String? unit,
     int? priority,
     String? grep,
+    JournalScope scope = JournalScope.all,
     void Function()? onDenied,
+    void Function()? onNoSyslog,
     void Function(Object error)? onError,
     void Function()? onClosed,
     UnknownHostKeyHandler? onUnknownHostKey,
@@ -238,6 +254,7 @@ class SshSessionPool {
       unit: unit,
       priority: priority,
       grep: grep,
+      scope: scope,
     ).command(facts);
     final opener = _followOpener ?? _openFollowChannel;
     final channel = await opener(
@@ -249,6 +266,7 @@ class SshSessionPool {
       channel: channel,
       onEntry: onEntry,
       onDenied: onDenied,
+      onNoSyslog: onNoSyslog,
       onError: onError,
       onClosed: onClosed,
     );

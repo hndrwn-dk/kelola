@@ -9,11 +9,13 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/facts/serial_mask.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/dashboard_status.dart';
 import 'package:kelola/domain/hosts/poll_backoff.dart';
 import 'package:kelola/domain/probes/dashboard_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/metrics_probe.dart';
 import 'package:kelola/domain/widget/publish_home_widget.dart';
+import 'package:kelola/presentation/destructive_auth.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/nav.dart';
 import 'package:kelola/presentation/screens/audit_screen.dart';
@@ -109,7 +111,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   Future<void> _refresh() async {
     setState(() {
       _loading = true;
-      _error = null;
+      _error = dashboardErrorAfterRefreshStart(_error);
     });
     try {
       final repo = ref.read(hostRepositoryProvider);
@@ -119,28 +121,35 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         return;
       }
       _host = host;
-      _facts = await repo.facts(host.id);
+      var facts = await repo.facts(host.id);
       await ref.read(enrollmentProvider.notifier).ensureKey();
       if (!mounted) {
         return;
       }
       final sw = Stopwatch()..start();
-      final facts = await runHostProbe(
-        ref: ref,
-        context: context,
-        host: host,
-        probe: const HostFactsProbe(),
-      );
-      await repo.saveFacts(host.id, facts);
-      if (!mounted) {
-        return;
+      // Cached facts when present — never re-run HostFactsProbe (and never
+      // re-attempt privileged DMI) on every dashboard open.
+      if (facts == null || facts.osId.isEmpty) {
+        final probed = await runHostProbe(
+          ref: ref,
+          context: context,
+          host: host,
+          probe: const HostFactsProbe(),
+        );
+        facts = probed;
+        await repo.saveFacts(host.id, probed);
+        if (!mounted) {
+          return;
+        }
       }
+      final knownFacts = facts!;
+      _facts = knownFacts;
       final dash = await runHostProbe(
         ref: ref,
         context: context,
         host: host,
         probe: const DashboardProbe(),
-        facts: facts,
+        facts: knownFacts,
       );
       sw.stop();
       final now = DateTime.now().toUtc();
@@ -253,7 +262,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       }
       _cpuBackoff.success();
       setState(() {
-        _error = null;
+        _error = dashboardErrorAfterSuccessfulPoll(_error);
         _cpu.add(cpu);
         if (_cpu.length > 40) {
           _cpu.removeAt(0);
@@ -342,6 +351,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 child: KelolaError(
                   message: _error!,
                   sudoUser: host?.username,
+                  onDismiss: () => setState(() => _error = null),
                 ),
               ),
             if (dash != null && dash.failedUnitCount > 0) ...[
@@ -860,6 +870,14 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       return;
     }
     try {
+      await requireDestructivePresence(
+        ref.read(hardwareSignerProvider),
+        risk: risk,
+        reason: title,
+      );
+      if (!mounted) {
+        return;
+      }
       final msg = await runHostProbe(
         ref: ref,
         context: context,
@@ -867,11 +885,17 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         probe: HostActionProbe(verb),
         facts: _facts,
       );
+      if (verb == HostVerb.reboot || verb == HostVerb.poweroff) {
+        await ref.read(sessionPoolProvider).disconnect(host.id);
+      }
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
+      if (verb == HostVerb.reboot || verb == HostVerb.poweroff) {
+        await ref.read(sessionPoolProvider).disconnect(host.id);
+      }
       if (!mounted) {
         return;
       }

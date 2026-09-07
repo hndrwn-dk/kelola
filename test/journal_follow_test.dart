@@ -52,18 +52,20 @@ void main() {
     expect(journalFollowRequiresPty, isTrue);
   });
 
-  test('host-wide follow tails syslog so logger -t lines arrive', () {
+  test('host-wide follow uses journalctl like historical, not syslog-first', () {
     final cmd = const JournalFollowCommand().command(_facts);
-    expect(cmd, contains('tail -n 0 -F /var/log/syslog'));
+    expect(cmd, contains('journalctl -o json --no-pager -f -n 0'));
+    expect(cmd, isNot(contains('tail -n 0 -F /var/log/syslog')));
     expect(cmd, isNot(contains(r'out=$(journalctl')));
     expect(cmd, isNot(contains('---NOJOURNAL---')));
   });
 
-  test('follow command degrades when journald is absent', () {
-    expect(
-      const JournalFollowCommand().command(HostFacts.undiscovered),
-      contains('---NOJOURNAL---'),
-    );
+  test('follow command uses syslog when journald is absent', () {
+    final cmd = const JournalFollowCommand().command(HostFacts.undiscovered);
+    expect(cmd, contains('/var/log/syslog'));
+    // Unknown access may try sudo once; empty path caches as denied.
+    expect(cmd, contains('---DENIED---'));
+    expect(cmd, isNot(contains('journalctl')));
   });
 
   test('cancel closes the SSH channel and drops the follow', () async {
@@ -209,7 +211,8 @@ void main() {
         required String command,
         UnknownHostKeyHandler? onUnknownHostKey,
       }) async {
-        expect(command, contains('tail -n 0 -F /var/log/syslog'));
+        expect(command, contains('journalctl -o json --no-pager -f -n 0'));
+        expect(command, isNot(contains('tail -n 0 -F /var/log/syslog')));
         return channel;
       },
     );
@@ -287,6 +290,11 @@ class _BoomSigner implements HardwareSigner {
 
   @override
   Future<Uint8List> sign(String alias, Uint8List data) async {
+    throw StateError('follow test must not open SSH');
+  }
+
+  @override
+  Future<void> confirmPresence({String reason = 'Confirm destructive action'}) async {
     throw StateError('follow test must not open SSH');
   }
 

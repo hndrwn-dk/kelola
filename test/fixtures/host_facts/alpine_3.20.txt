@@ -12,6 +12,6 @@ PRETTY_NAME="Alpine Linux v3.20"
 ---FW---
 /usr/sbin/iptables
 ---JOURNAL---
-hendra wheel
+NOT_READABLE
 ---ARCH---
 aarch64

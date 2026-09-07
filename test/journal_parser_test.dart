@@ -4,13 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/domain/journal/journal_parser.dart';
 
 void main() {
-  test('parses NDJSON journal lines and skips junk', () {
+  test('parses NDJSON journal lines and counts junk', () {
     final raw = File('test/fixtures/journal/sample.ndjson').readAsStringSync();
     final page = const JournalParser().parse(raw, '');
     expect(page.entries, hasLength(2));
     expect(page.entries.first.unit, 'nginx.service');
     expect(page.entries.first.isError, isTrue);
     expect(page.entries.last.message, 'Hi');
+    expect(page.skippedLines, 1);
+    expect(page.emptyHint, contains('Skipped 1'));
   });
 
   test('permission denied with empty body', () {
@@ -24,7 +26,9 @@ void main() {
   test('empty json has a hint', () {
     final page = const JournalParser().parse('not json\n', '');
     expect(page.entries, isEmpty);
+    expect(page.skippedLines, 1);
     expect(page.emptyHint, isNotNull);
+    expect(page.emptyHint, contains('could not parse'));
   });
 
   test('incremental buffer holds a split line until the next chunk', () {
@@ -50,6 +54,7 @@ void main() {
     expect(got, hasLength(1));
     expect(got.single.message, 'ok');
     expect(got.single.isError, isTrue);
+    expect(buf.skippedLines, 1);
   });
 
   test('incremental buffer does not retain completed lines', () {

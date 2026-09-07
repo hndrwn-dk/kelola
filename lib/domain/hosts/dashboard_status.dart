@@ -22,3 +22,16 @@ String dashboardStatusLine({
   }
   return parts.join(' · ');
 }
+
+/// Sudo NOPASSWD hints stay until the user dismisses them.
+String? dashboardErrorAfterSuccessfulPoll(String? current) {
+  if (current != null && looksLikeSudoRequired(current)) {
+    return current;
+  }
+  return null;
+}
+
+/// Pull-to-refresh must not wipe a sticky sudo hint either.
+String? dashboardErrorAfterRefreshStart(String? current) {
+  return dashboardErrorAfterSuccessfulPoll(current);
+}

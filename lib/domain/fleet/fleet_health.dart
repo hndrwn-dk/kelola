@@ -1,5 +1,6 @@
+import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/hosts/host.dart';
-import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/hosts/host_probe_outcome.dart';
 
 class FleetTileMetric {
   const FleetTileMetric({required this.label, required this.value});
@@ -13,12 +14,64 @@ enum FleetSeverity {
   failedUnits,
   badContainers,
   diskHigh,
-  securityUpdates,
-  pendingUpdates,
   loadHigh,
   memHigh,
+  securityUpdates,
+  pendingUpdates,
   rebootRequired,
   healthy,
+}
+
+/// Host condition for fleet tiles — not action risk ([RiskLevel]).
+enum FleetTileHealth {
+  healthy,
+  warning,
+  failed,
+  unknown,
+}
+
+enum FleetIssueKind {
+  unreachable,
+  failedUnit,
+  badContainer,
+  diskCritical,
+  loadHigh,
+  memHigh,
+  securityUpdates,
+  pendingUpdates,
+  rebootRequired,
+}
+
+class FleetIssue {
+  const FleetIssue({
+    required this.kind,
+    required this.label,
+    required this.meta,
+  });
+
+  final FleetIssueKind kind;
+  final String label;
+  final String meta;
+
+  bool get isActionable =>
+      kind == FleetIssueKind.failedUnit ||
+      kind == FleetIssueKind.badContainer ||
+      kind == FleetIssueKind.diskCritical ||
+      kind == FleetIssueKind.securityUpdates;
+}
+
+class FleetAssessment {
+  const FleetAssessment({
+    required this.severity,
+    required this.tileHealth,
+    required this.issues,
+  });
+
+  final FleetSeverity severity;
+  final FleetTileHealth tileHealth;
+  final List<FleetIssue> issues;
+
+  bool get isHealthy => severity == FleetSeverity.healthy;
 }
 
 class FleetHostHealth {
@@ -40,6 +93,7 @@ class FleetHostHealth {
     this.uptime = Duration.zero,
     this.rebootRequired = false,
     this.fromCache = false,
+    this.outcome = HostProbeOutcome.pending,
   });
 
   final String hostId;
@@ -59,6 +113,7 @@ class FleetHostHealth {
   final bool rebootRequired;
   final DateTime fetchedAt;
   final bool fromCache;
+  final HostProbeOutcome outcome;
 
   static const loadRatioHigh = 1.0;
   static const loadHighFallback = 4.0;
@@ -83,60 +138,14 @@ class FleetHostHealth {
     return '$containersDown down / $containersUnhealthy unhealthy';
   }
 
-  FleetSeverity get severity {
-    if (!reachable) {
-      return FleetSeverity.unreachable;
-    }
-    if (failedUnitCount > 0) {
-      return FleetSeverity.failedUnits;
-    }
-    if (containerTroubleCount > 0) {
-      return FleetSeverity.badContainers;
-    }
-    if (diskRootPercent >= diskHighThreshold || highDiskMounts.isNotEmpty) {
-      return FleetSeverity.diskHigh;
-    }
-    if (securityUpdates > 0) {
-      return FleetSeverity.securityUpdates;
-    }
-    if (pendingUpdates > 0) {
-      return FleetSeverity.pendingUpdates;
-    }
-    final ratio = loadRatio;
-    if (ratio != null) {
-      if (ratio >= loadRatioHigh) {
-        return FleetSeverity.loadHigh;
-      }
-    } else if (load1 >= loadHighFallback) {
-      return FleetSeverity.loadHigh;
-    }
-    if (memPercent >= memHighThreshold) {
-      return FleetSeverity.memHigh;
-    }
-    if (rebootRequired) {
-      return FleetSeverity.rebootRequired;
-    }
-    return FleetSeverity.healthy;
-  }
+  /// Single source for severity, tile health, and ISSUES.
+  ///
+  /// Priority: unreachable → failed units → bad containers → disk → load →
+  /// mem → security → pending → reboot. Unreachable blocks ops; broken
+  /// workloads next; then resource pressure; package debt last.
+  FleetSeverity get severity => assessFleetHost(this).severity;
 
-  /// Band risk for [FleetHostTile]. Load ≥100% is destructive (red).
-  RiskLevel get tileRiskLevel {
-    switch (severity) {
-      case FleetSeverity.unreachable:
-      case FleetSeverity.loadHigh:
-        return RiskLevel.destructive;
-      case FleetSeverity.failedUnits:
-      case FleetSeverity.badContainers:
-      case FleetSeverity.diskHigh:
-        return RiskLevel.mutate;
-      case FleetSeverity.securityUpdates:
-      case FleetSeverity.pendingUpdates:
-      case FleetSeverity.memHigh:
-      case FleetSeverity.rebootRequired:
-      case FleetSeverity.healthy:
-        return RiskLevel.read;
-    }
-  }
+  FleetTileHealth get tileHealth => assessFleetHost(this).tileHealth;
 
   bool isStale({DateTime? now}) {
     final n = (now ?? DateTime.now()).toUtc();
@@ -161,13 +170,10 @@ class FleetHostHealth {
     if (!reachable) {
       return const [];
     }
-    final ratio = loadRatio;
-    final loadVal = ratio == null
-        ? load1.toStringAsFixed(2)
-        : '${(ratio * 100).round()}%';
+    final live = fleetLiveStrings(this, now: now);
     final cells = <FleetTileMetric>[
-      FleetTileMetric(label: 'load', value: loadVal),
-      FleetTileMetric(label: 'mem', value: '$memPercent%'),
+      FleetTileMetric(label: 'load', value: live.load),
+      FleetTileMetric(label: 'mem', value: live.mem),
       FleetTileMetric(label: 'disk', value: '$diskRootPercent%'),
       FleetTileMetric(label: 'up', value: uptimeLabel()),
     ];
@@ -194,15 +200,264 @@ class FleetHostHealth {
   }
 
   String tileSummary({DateTime? now}) {
+    if (outcome != HostProbeOutcome.healthy && !reachable) {
+      return fleetUnreachableMessage(
+        outcome: outcome == HostProbeOutcome.pending
+            ? HostProbeOutcome.unreachable
+            : outcome,
+        hasCache: fromCache || fetchedAt.millisecondsSinceEpoch > 0,
+        fetchedAt: fetchedAt,
+        now: now,
+      );
+    }
     if (!reachable) {
-      return fromCache || fetchedAt.millisecondsSinceEpoch > 0
-          ? 'down · cache ${ageLabel(now: now)}'
-          : 'unreachable';
+      return fleetUnreachableMessage(
+        outcome: HostProbeOutcome.unreachable,
+        hasCache: fromCache || fetchedAt.millisecondsSinceEpoch > 0,
+        fetchedAt: fetchedAt,
+        now: now,
+      );
     }
     return tileMetrics(now: now)
         .map((m) => '${m.label} ${m.value}')
         .join(' · ');
   }
+
+  FleetHostHealth copyWith({
+    double? load1,
+    int? nprocCores,
+    int? memPercent,
+    DateTime? fetchedAt,
+    bool? fromCache,
+    bool? reachable,
+    HostProbeOutcome? outcome,
+  }) {
+    return FleetHostHealth(
+      hostId: hostId,
+      alias: alias,
+      reachable: reachable ?? this.reachable,
+      load1: load1 ?? this.load1,
+      nprocCores: nprocCores ?? this.nprocCores,
+      memPercent: memPercent ?? this.memPercent,
+      diskRootPercent: diskRootPercent,
+      highDiskMounts: highDiskMounts,
+      failedUnitCount: failedUnitCount,
+      pendingUpdates: pendingUpdates,
+      securityUpdates: securityUpdates,
+      containersDown: containersDown,
+      containersUnhealthy: containersUnhealthy,
+      uptime: uptime,
+      rebootRequired: rebootRequired,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      fromCache: fromCache ?? this.fromCache,
+      outcome: outcome ?? this.outcome,
+    );
+  }
+}
+
+/// Load as core-normalized percent when [nprocCores] is known; else raw loadavg.
+String formatFleetLoad(double load1, int? nprocCores) {
+  if (nprocCores == null || nprocCores <= 0) {
+    return load1.toStringAsFixed(2);
+  }
+  return '${((load1 / nprocCores) * 100).round()}%';
+}
+
+class FleetLiveStrings {
+  const FleetLiveStrings({
+    required this.load,
+    required this.mem,
+    required this.age,
+  });
+
+  final String load;
+  final String mem;
+  final String age;
+}
+
+/// Merge a metrics sample into the fleet row (preserves [nprocCores]).
+FleetHostHealth applyFleetMetricsSample(
+  FleetHostHealth prior, {
+  required double load1,
+  required int memPercent,
+  DateTime? now,
+}) {
+  return prior.copyWith(
+    load1: load1,
+    memPercent: memPercent,
+    fetchedAt: (now ?? DateTime.now()).toUtc(),
+    fromCache: false,
+    reachable: true,
+  );
+}
+
+/// Sheet LIVE + tile cells must both use this for the same [FleetHostHealth].
+FleetLiveStrings fleetLiveStrings(FleetHostHealth health, {DateTime? now}) {
+  return FleetLiveStrings(
+    load: formatFleetLoad(health.load1, health.nprocCores),
+    mem: '${health.memPercent}%',
+    age: health.ageLabel(now: now),
+  );
+}
+
+/// Map live fleet probe into Host inventory attention buckets.
+HostAttention attentionFromFleetHealth(FleetHostHealth health) {
+  if (!health.reachable) {
+    return HostAttention.unreachable;
+  }
+  if (health.failedUnitCount > 0) {
+    return HostAttention.failedUnits;
+  }
+  if (health.diskRootPercent >= FleetHostHealth.diskHighThreshold ||
+      health.highDiskMounts.isNotEmpty) {
+    return HostAttention.diskHigh;
+  }
+  return HostAttention.healthy;
+}
+
+/// One verdict for tile + sheet. Issues cover every non-healthy severity.
+FleetAssessment assessFleetHost(FleetHostHealth health) {
+  final issues = <FleetIssue>[];
+
+  if (!health.reachable) {
+    issues.add(
+      const FleetIssue(
+        kind: FleetIssueKind.unreachable,
+        label: 'Host unreachable',
+        meta: 'SSH failed',
+      ),
+    );
+  }
+  if (health.reachable && health.failedUnitCount > 0) {
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.failedUnit,
+        label: 'Restart failed unit',
+        meta: '${health.failedUnitCount} failed',
+      ),
+    );
+  }
+  if (health.reachable && health.containerTroubleCount > 0) {
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.badContainer,
+        label: 'Inspect containers',
+        meta: health.containersLabel,
+      ),
+    );
+  }
+  if (health.reachable &&
+      (health.diskRootPercent >= FleetHostHealth.diskHighThreshold ||
+          health.highDiskMounts.isNotEmpty)) {
+    final mounts = [
+      if (health.diskRootPercent >= FleetHostHealth.diskHighThreshold)
+        '/:${health.diskRootPercent}%',
+      ...health.highDiskMounts,
+    ].join(' · ');
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.diskCritical,
+        label: 'Review disk',
+        meta: mounts,
+      ),
+    );
+  }
+
+  if (health.reachable && _isLoadHigh(health)) {
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.loadHigh,
+        label: 'Load high',
+        meta: formatFleetLoad(health.load1, health.nprocCores),
+      ),
+    );
+  }
+  if (health.reachable &&
+      health.memPercent >= FleetHostHealth.memHighThreshold) {
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.memHigh,
+        label: 'Memory high',
+        meta: '${health.memPercent}%',
+      ),
+    );
+  }
+  if (health.reachable && health.securityUpdates > 0) {
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.securityUpdates,
+        label: 'Security updates',
+        meta: '${health.securityUpdates} security',
+      ),
+    );
+  }
+  if (health.reachable && health.pendingUpdates > 0) {
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.pendingUpdates,
+        label: 'Pending updates',
+        meta: '${health.pendingUpdates} pending',
+      ),
+    );
+  }
+  if (health.reachable && health.rebootRequired) {
+    issues.add(
+      const FleetIssue(
+        kind: FleetIssueKind.rebootRequired,
+        label: 'Reboot required',
+        meta: 'pending',
+      ),
+    );
+  }
+
+  final severity = _severityFromIssues(issues);
+  return FleetAssessment(
+    severity: severity,
+    tileHealth: _tileHealth(severity),
+    issues: List.unmodifiable(issues),
+  );
+}
+
+bool _isLoadHigh(FleetHostHealth health) {
+  final ratio = health.loadRatio;
+  if (ratio != null) {
+    return ratio >= FleetHostHealth.loadRatioHigh;
+  }
+  return health.load1 >= FleetHostHealth.loadHighFallback;
+}
+
+FleetSeverity _severityFromIssues(List<FleetIssue> issues) {
+  if (issues.isEmpty) {
+    return FleetSeverity.healthy;
+  }
+  return switch (issues.first.kind) {
+    FleetIssueKind.unreachable => FleetSeverity.unreachable,
+    FleetIssueKind.failedUnit => FleetSeverity.failedUnits,
+    FleetIssueKind.badContainer => FleetSeverity.badContainers,
+    FleetIssueKind.diskCritical => FleetSeverity.diskHigh,
+    FleetIssueKind.loadHigh => FleetSeverity.loadHigh,
+    FleetIssueKind.memHigh => FleetSeverity.memHigh,
+    FleetIssueKind.securityUpdates => FleetSeverity.securityUpdates,
+    FleetIssueKind.pendingUpdates => FleetSeverity.pendingUpdates,
+    FleetIssueKind.rebootRequired => FleetSeverity.rebootRequired,
+  };
+}
+
+FleetTileHealth _tileHealth(FleetSeverity severity) {
+  return switch (severity) {
+    FleetSeverity.unreachable => FleetTileHealth.unknown,
+    FleetSeverity.failedUnits ||
+    FleetSeverity.badContainers ||
+    FleetSeverity.loadHigh =>
+      FleetTileHealth.failed,
+    FleetSeverity.diskHigh ||
+    FleetSeverity.memHigh ||
+    FleetSeverity.securityUpdates ||
+    FleetSeverity.pendingUpdates ||
+    FleetSeverity.rebootRequired =>
+      FleetTileHealth.warning,
+    FleetSeverity.healthy => FleetTileHealth.healthy,
+  };
 }
 
 List<FleetHostHealth> sortFleetHealth(Iterable<FleetHostHealth> rows) {

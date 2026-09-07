@@ -7,6 +7,9 @@ abstract class HardwareSigner {
 
   Future<Uint8List> sign(String alias, Uint8List data);
 
+  /// App-level presence check for destructive actions (single timed key).
+  Future<void> confirmPresence({String reason = 'Confirm destructive action'});
+
   Future<bool> keyExists(String alias);
 
   Future<void> deleteKey(String alias);

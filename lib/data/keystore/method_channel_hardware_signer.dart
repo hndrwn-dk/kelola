@@ -40,6 +40,13 @@ class MethodChannelHardwareSigner implements HardwareSigner {
     return _bytes(raw);
   }
 
+  @override
+  Future<void> confirmPresence({
+    String reason = 'Confirm destructive action',
+  }) async {
+    await _channel.invokeMethod<void>('confirmPresence', {'reason': reason});
+  }
+
   static Uint8List _bytes(dynamic raw) {
     if (raw is Uint8List) {
       return raw;

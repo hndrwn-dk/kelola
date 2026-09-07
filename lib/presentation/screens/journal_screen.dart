@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
@@ -41,6 +43,10 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
   bool _loading = true;
   bool _permissionDenied = false;
   bool _hasJournald = true;
+  bool _usedSyslog = false;
+  bool _noReadableLogSource = false;
+  int _skippedLines = 0;
+  JournalScope _scope = JournalScope.all;
   late int? _priority;
   String _q = '';
   bool _searching = false;
@@ -51,6 +57,8 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
   String? _older;
   JournalFollowHandle? _follow;
   final _scroll = ScrollController();
+
+  bool get _journalFiltersEnabled => _hasJournald && !_usedSyslog;
 
   @override
   void initState() {
@@ -110,25 +118,45 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
       if (!mounted) {
         return;
       }
+      var known = facts;
+      if (known == null) {
+        setState(() => _error = 'Host facts missing');
+        return;
+      }
       final page = await runHostProbe(
         ref: ref,
         context: context,
         host: host,
         probe: JournalProbe(
           unit: widget.unit,
-          priority: _priority,
+          priority: _journalFiltersEnabled ? _priority : null,
           grep: _q,
           untilUsec: reset ? null : _older,
-          sinceUsec: _sinceUsec,
+          sinceUsec: _journalFiltersEnabled ? _sinceUsec : null,
+          scope: _scope,
         ),
-        facts: facts,
+        facts: known,
       );
+      final learned = page.learnedAccess;
+      if (learned != null && learned != known.journalAccess) {
+        known = known.copyWith(
+          journalAccess: learned,
+          journalReadable: learned == JournalAccess.plain ||
+              learned == JournalAccess.sudo,
+        );
+        await repo.saveFacts(host.id, known);
+      }
       setState(() {
         _host = host;
-        _facts = facts;
+        _facts = known;
         _hasJournald = page.hasJournald;
+        _usedSyslog = page.usedSyslog;
+        _noReadableLogSource = page.noReadableLogSource;
         _permissionDenied = page.permissionDenied;
         _emptyHint = page.emptyHint;
+        _skippedLines = reset
+            ? page.skippedLines
+            : _skippedLines + page.skippedLines;
         if (reset) {
           _entries.addAll(page.entries);
         } else {
@@ -190,8 +218,9 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
             host,
             facts: facts,
             unit: widget.unit,
-            priority: _priority,
+            priority: _journalFiltersEnabled ? _priority : null,
             grep: _q,
+            scope: _scope,
             onEntry: _prependFollow,
             onDenied: () {
               if (!mounted) {
@@ -199,6 +228,28 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
               }
               setState(() {
                 _permissionDenied = true;
+                _live = false;
+              });
+              final current = _facts;
+              if (current != null &&
+                  current.journalAccess != JournalAccess.denied) {
+                final updated = current.copyWith(
+                  journalAccess: JournalAccess.denied,
+                  journalReadable: false,
+                );
+                _facts = updated;
+                unawaited(
+                  ref.read(hostRepositoryProvider).saveFacts(host.id, updated),
+                );
+              }
+              _stopFollow();
+            },
+            onNoSyslog: () {
+              if (!mounted) {
+                return;
+              }
+              setState(() {
+                _noReadableLogSource = true;
                 _live = false;
               });
               _stopFollow();
@@ -265,7 +316,14 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    final kicker = journalKicker(unit: widget.unit, priority: _priority);
+    final kickerText = _noReadableLogSource && !_usedSyslog
+        ? 'NO LOGS'
+        : journalKicker(
+            unit: widget.unit,
+            priority: _journalFiltersEnabled ? _priority : null,
+            scope: _scope,
+            syslog: _usedSyslog,
+          );
 
     return Scaffold(
       backgroundColor: c.ink,
@@ -278,7 +336,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
           children: [
             Text('Logs', style: KelolaType.display(color: c.text, size: 16)),
             Text(
-              kicker,
+              kickerText,
               style: KelolaType.mono(
                 color: c.dim,
                 size: 8.5,
@@ -331,24 +389,48 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
                   runSpacing: 5,
                   children: [
                     FilterPill(
+                      label: 'system',
+                      selected: _scope == JournalScope.system,
+                      enabled: _journalFiltersEnabled,
+                      onTap: () =>
+                          _setFilter(() => _scope = JournalScope.system),
+                    ),
+                    FilterPill(
+                      label: 'user',
+                      selected: _scope == JournalScope.user,
+                      enabled: _journalFiltersEnabled,
+                      onTap: () => _setFilter(() => _scope = JournalScope.user),
+                    ),
+                    FilterPill(
+                      label: 'all journals',
+                      selected: _scope == JournalScope.all,
+                      enabled: _journalFiltersEnabled,
+                      onTap: () => _setFilter(() => _scope = JournalScope.all),
+                    ),
+                    FilterPill(
                       label: 'err+',
                       selected: _priority == 3,
+                      enabled: _journalFiltersEnabled,
                       onTap: () => _setFilter(() => _priority = 3),
                     ),
                     FilterPill(
                       label: 'warn+',
                       selected: _priority == 4,
+                      enabled: _journalFiltersEnabled,
                       onTap: () => _setFilter(() => _priority = 4),
                     ),
                     FilterPill(
                       label: 'all',
                       selected: _priority == null,
+                      enabled: _journalFiltersEnabled,
                       onTap: () => _setFilter(() => _priority = null),
                     ),
                     FilterPill(
                       label: '1h',
                       selected: _lastHour,
-                      onTap: () => _setFilter(() => _lastHour = !_lastHour),
+                      enabled: _journalFiltersEnabled,
+                      onTap: () =>
+                          _setFilter(() => _lastHour = !_lastHour),
                     ),
                     FilterPill(
                       label: 'live',
@@ -357,6 +439,13 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
                     ),
                   ],
                 ),
+                if (_skippedLines > 0) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Skipped $_skippedLines unparseable journal line(s).',
+                    style: KelolaType.mono(color: c.dim, size: 10),
+                  ),
+                ],
                 if (_entries.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   ServiceRow(
@@ -436,7 +525,32 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
         ],
       );
     }
-    if (!_hasJournald) {
+    if (_noReadableLogSource) {
+      return ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              children: [
+                Text(
+                  'No readable logs',
+                  textAlign: TextAlign.center,
+                  style: KelolaType.display(color: c.text, size: 18),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _emptyHint ??
+                      'No journald and no readable /var/log/syslog or /var/log/messages.',
+                  textAlign: TextAlign.center,
+                  style: KelolaType.body(color: c.muted, size: 14),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+    if (!_hasJournald && !_usedSyslog) {
       return ListView(
         children: [
           Padding(
@@ -472,7 +586,8 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Kelola tried journalctl, then sudo -n journalctl. Both returned nothing. Grant the group, then open a new SSH session (disconnect in the app and reconnect).',
+            _emptyHint ??
+                'journalctl reported a permission error. Grant journal ACL/group access for this SSH user, then disconnect and reconnect.',
             style: KelolaType.body(color: c.muted, size: 13),
           ),
           const SizedBox(height: 12),

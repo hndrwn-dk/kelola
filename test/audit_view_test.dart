@@ -74,7 +74,7 @@ void main() {
     expect(shown.map((e) => e.id), ['fail', 'ro', 'hk']);
   });
 
-  test('seven-day summary counts changes, destructive, and failed', () {
+  test('seven-day summary counts changes, destructive, and failed changes only', () {
     final rows = [
       ev(
         id: 'old',
@@ -85,20 +85,27 @@ void main() {
       ev(id: 'm', title: 'Restarted nginx.service', risk: 'mutate'),
       ev(id: 'd', title: 'Rebooted host', risk: 'destructive'),
       ev(
-        id: 'fail',
+        id: 'fail-read',
         title: 'Polled dashboard',
         risk: 'read',
+        exitCode: 1,
+      ),
+      ev(
+        id: 'fail-mutate',
+        title: 'Restarted nginx.service',
+        risk: 'mutate',
         exitCode: 1,
       ),
       ev(id: 'read', title: 'Read journal', risk: 'read'),
     ];
     final summary = summarizeAudit(rows, now: now);
-    expect(summary.changes, 2);
+    expect(summary.changes, 3); // m, d, fail-mutate
     expect(summary.destructive, 1);
+    // Failed reads must not inflate teaser "failed" next to "changes".
     expect(summary.failed, 1);
     expect(
       formatAuditWeekSummary(summary),
-      'Last 7 days · 2 changes · 1 destructive · 1 failed',
+      'Last 7 days · 3 changes · 1 destructive · 1 failed',
     );
   });
 

@@ -85,8 +85,6 @@ ID=debian
 ---DMI---
 sys_vendor=Dell Inc.
 product_name=PowerEdge R640
----SERIAL---
-REQUIRES_ROOT
 ''');
     expect(facts.model, 'Dell Inc. PowerEdge R640');
   });
@@ -110,27 +108,33 @@ x86_64
     expect(facts.gpu, isNull);
   });
 
-  test('serial sudo fail is requiresRoot, not a blank serial', () {
+  test('readable product_serial fills serial without sudo', () {
     final facts = parser.parse('''
 ---OS---
 ID=debian
----SERIAL---
-REQUIRES_ROOT
-''');
-    expect(facts.serial, isNull);
-    expect(facts.serialStatus, SerialStatus.requiresRoot);
-  });
-
-  test('passwordless dmidecode fills serial', () {
-    final facts = parser.parse('''
----OS---
-ID=debian
----SERIAL---
-OK
-ABC1237F2K
+---DMI---
+product_serial=ABC1237F2K
 ''');
     expect(facts.serial, 'ABC1237F2K');
     expect(facts.serialStatus, SerialStatus.available);
+  });
+
+  test('unreadable product_serial is missing, not requiresRoot', () {
+    final facts = parser.parse('''
+---OS---
+ID=debian
+---DMI---
+sys_vendor=Dell Inc.
+product_name=PowerEdge R640
+''');
+    expect(facts.serial, isNull);
+    expect(facts.serialStatus, SerialStatus.missing);
+  });
+
+  test('legacy SERIAL REQUIRES_ROOT parses as requiresRoot', () {
+    final parsed = HostFactsParser.parseSerial('REQUIRES_ROOT');
+    expect(parsed.$1, isNull);
+    expect(parsed.$2, SerialStatus.requiresRoot);
   });
 
   test('loopback is skipped; eth0 IPv4 IPv6 and MAC are kept', () {

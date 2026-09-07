@@ -15,10 +15,12 @@ import 'package:kelola/domain/probes/firewall_apply_probe.dart';
 import 'package:kelola/domain/probes/firewall_list_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/presentation/destructive_auth.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/confirm_package_action.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 import 'package:kelola/providers.dart';
+import 'package:kelola/domain/risk/risk_level.dart';
 
 class FirewallScreen extends ConsumerStatefulWidget {
   const FirewallScreen({super.key, required this.hostId});
@@ -160,6 +162,14 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
       _error = null;
     });
     try {
+      await requireDestructivePresence(
+        ref.read(hardwareSignerProvider),
+        risk: RiskLevel.destructive,
+        reason: 'Confirm firewall change',
+      );
+      if (!mounted) {
+        return;
+      }
       final result = await runHostProbe(
         ref: ref,
         context: context,
