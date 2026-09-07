@@ -116,4 +116,41 @@ void main() {
     expect(find.byType(ActionableError), findsNothing);
     expect(find.text('Timed out waiting for SSH login.'), findsOneWidget);
   });
+
+  testWidgets('sudo KelolaError shows dismiss and calls onDismiss', (tester) async {
+    var dismissed = false;
+    await tester.pumpWidget(
+      KelolaApp(
+        home: Scaffold(
+          body: KelolaError(
+            message: SudoRequiredException(
+              const SudoHintContext(kind: SudoHintKind.hostReboot),
+            ).toString(),
+            sudoUser: 'hendra',
+            onDismiss: () => dismissed = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Dismiss'), findsOneWidget);
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pump();
+    expect(dismissed, isTrue);
+  });
+
+  testWidgets('ordinary KelolaError has no dismiss control', (tester) async {
+    await tester.pumpWidget(
+      KelolaApp(
+        home: Scaffold(
+          body: KelolaError(
+            message: 'Timed out waiting for SSH login.',
+            onDismiss: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Dismiss'), findsNothing);
+  });
 }

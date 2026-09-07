@@ -49,6 +49,8 @@ class CachedFacts extends Table {
   TextColumn get fw => text()();
   BoolColumn get hasJournald => boolean()();
   BoolColumn get journalReadable => boolean()();
+  TextColumn get journalAccess =>
+      text().withDefault(const Constant('unknown'))();
   TextColumn get arch => text()();
   DateTimeColumn get discoveredAt => dateTime()();
 

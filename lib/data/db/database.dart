@@ -28,7 +28,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -100,6 +100,14 @@ UPDATE app_settings SET
   llm_openai_model = CASE
     WHEN llm_provider IN ('openaiCompatible', 'openai') THEN llm_model
     ELSE llm_openai_model END
+''');
+          }
+          if (from < 12) {
+            await m.addColumn(cachedFacts, cachedFacts.journalAccess);
+            await customStatement('''
+UPDATE cached_facts SET journal_access = CASE
+  WHEN journal_readable = 1 THEN 'plain'
+  ELSE 'unknown' END
 ''');
           }
         },

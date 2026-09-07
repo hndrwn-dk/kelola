@@ -38,6 +38,35 @@ void main() {
     expect(cmd, contains('---CONTAINERS---'));
     expect(cmd, contains('---REBOOT---'));
     expect(cmd, contains('---NPROC---'));
+    expect(cmd, isNot(contains('sudo -n')));
+  });
+
+  test('undiscovered facts still probe failed systemd units', () {
+    // Fleet refresh historically omitted HostFacts → init unknown → FAILED
+    // hard-coded to 0, so tiles stayed green while the host dashboard saw
+    // nginx.service failed.
+    final cmd = const FleetHealthProbe().command(HostFacts.undiscovered);
+    expect(
+      cmd,
+      contains('systemctl list-units --type=service --state=failed'),
+    );
+    expect(cmd, isNot(contains('echo 0\necho "---FAILED_NAMES---"')));
+  });
+
+  test('OpenRC hosts do not call systemctl for failed units', () {
+    final openrc = HostFacts(
+      osId: 'alpine',
+      osVersionId: '3.19',
+      init: InitSystem.openrc,
+      systemdVersion: null,
+      pkg: PackageManager.apk,
+      fw: FirewallBackend.none,
+      hasJournald: false,
+      journalReadable: false,
+      arch: 'x86_64',
+    );
+    final cmd = const FleetHealthProbe().command(openrc);
+    expect(cmd, isNot(contains('systemctl list-units')));
   });
 
   test('parses expanded fleet health without inventing CPU percent', () {

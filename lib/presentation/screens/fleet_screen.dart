@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/facts/enums.dart';
+import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/fleet/fleet_gate.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/host_probe_outcome.dart';
 import 'package:kelola/domain/hosts/pooled_run.dart';
 import 'package:kelola/domain/probes/fleet_health_probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
@@ -12,23 +15,13 @@ import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/fleet_host_sheet.dart';
 import 'package:kelola/providers.dart';
 
-HealthStatus? fleetTileHealthStatus(FleetHostHealth h) {
-  switch (h.severity) {
-    case FleetSeverity.unreachable:
-      return HealthStatus.unknown;
-    case FleetSeverity.failedUnits:
-    case FleetSeverity.badContainers:
-    case FleetSeverity.loadHigh:
-      return HealthStatus.failed;
-    case FleetSeverity.diskHigh:
-    case FleetSeverity.securityUpdates:
-    case FleetSeverity.memHigh:
-    case FleetSeverity.pendingUpdates:
-    case FleetSeverity.rebootRequired:
-      return HealthStatus.warning;
-    case FleetSeverity.healthy:
-      return HealthStatus.healthy;
-  }
+HealthStatus fleetTileHealthStatus(FleetHostHealth h) {
+  return switch (assessFleetHost(h).tileHealth) {
+    FleetTileHealth.healthy => HealthStatus.healthy,
+    FleetTileHealth.warning => HealthStatus.warning,
+    FleetTileHealth.failed => HealthStatus.failed,
+    FleetTileHealth.unknown => HealthStatus.unknown,
+  };
 }
 
 class FleetScreen extends ConsumerStatefulWidget {
@@ -67,6 +60,10 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
     await _refresh();
   }
 
+  void _applyHealth(FleetHostHealth health) {
+    setState(() => _byId[health.hostId] = health);
+  }
+
   Future<void> _refresh() async {
     final hosts = await ref.read(hostsProvider.future);
     if (!mounted) {
@@ -103,11 +100,15 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
         const scope = ProbeScope.fleet;
         final probe = FleetHealthProbe(hostId: host.id, alias: host.alias);
         assertFleetReadOnly(probe, scope: scope);
+        final facts = await ref.read(hostRepositoryProvider).facts(host.id) ??
+            HostFacts.undiscovered;
         final health = await runHostProbe(
           ref: ref,
           context: context,
           host: host,
           probe: probe,
+          facts: facts,
+          scope: scope,
         );
         final live = FleetHostHealth(
           hostId: host.id,
@@ -126,12 +127,20 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
           uptime: health.uptime,
           rebootRequired: health.rebootRequired,
           fetchedAt: DateTime.now().toUtc(),
+          outcome: HostProbeOutcome.healthy,
         );
         await ref.read(hostRepositoryProvider).saveFleetCache(live);
+        await ref.read(hostRepositoryProvider).updateAttention(
+              id: host.id,
+              attention: attentionFromFleetHealth(live),
+              failedUnitCount: live.failedUnitCount,
+              diskRootPercent: live.diskRootPercent,
+              attentionAt: live.fetchedAt,
+              lastSeenAt: live.fetchedAt,
+            );
         if (!mounted) {
           return;
         }
-        // Progressive: paint this tile as soon as the host finishes.
         setState(() {
           _byId[host.id] = live;
           _loading.remove(host.id);
@@ -142,6 +151,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
           return;
         }
         final cached = _byId[host.id];
+        final outcome = classifyProbeFailure(error);
         final unreachable = FleetHostHealth(
           hostId: host.id,
           alias: host.alias,
@@ -161,9 +171,17 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
           fetchedAt: cached?.fetchedAt ??
               DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
           fromCache: cached != null,
+          outcome: outcome,
         );
         if (cached != null) {
           await ref.read(hostRepositoryProvider).saveFleetCache(unreachable);
+        }
+        if (isConnectionFailureOutcome(outcome)) {
+          await ref.read(hostRepositoryProvider).updateAttention(
+                id: host.id,
+                attention: HostAttention.unreachable,
+                attentionAt: DateTime.now().toUtc(),
+              );
         }
         if (!mounted) {
           return;
@@ -206,7 +224,6 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
     final filtered = filterFleetByTag(rows, tagsByHost, _tagFilter);
     final sorted = sortFleetHealth(filtered);
     final width = MediaQuery.sizeOf(context).width;
-    // Prefer density: 3 cols on phone, 4 on wide — target 12–16 tiles without scroll.
     final columns = width >= 700 ? 4 : 3;
 
     return Scaffold(
@@ -302,11 +319,11 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                           );
                           return FleetHostTile(
                             alias: row.alias,
-                            risk: row.tileRiskLevel,
                             status: fleetTileHealthStatus(row),
                             loading: _loading.contains(row.hostId),
                             reachable: row.reachable,
-                            downMessage: row.reachable ? null : row.tileSummary(),
+                            downMessage:
+                                row.reachable ? null : row.tileSummary(),
                             metrics: [
                               for (final m in row.tileMetrics())
                                 FleetTileMetricView(
@@ -319,6 +336,13 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                               ref,
                               host: host,
                               health: row,
+                              onHealthUpdated: (updated) {
+                                // Paint tile immediately; persist in background.
+                                _applyHealth(updated);
+                                ref
+                                    .read(hostRepositoryProvider)
+                                    .saveFleetCache(updated);
+                              },
                             ),
                           );
                         },

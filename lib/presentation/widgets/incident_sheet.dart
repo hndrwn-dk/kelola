@@ -20,6 +20,8 @@ import 'package:kelola/domain/probes/unit_list_probe.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/data/llm/assist_service.dart';
 import 'package:kelola/presentation/assist_flow.dart';
+import 'package:kelola/domain/llm/explain_sections.dart';
+import 'package:kelola/presentation/widgets/llm_explain_body.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/confirm_unit_action.dart';
 import 'package:kelola/presentation/widgets/diagnostic_pack_sheet.dart';
@@ -90,6 +92,7 @@ class IncidentSheetPanel extends StatelessWidget {
     this.onExplain,
     this.explainBusy = false,
     this.explainResult,
+    this.explainKind = ExplainKind.failedUnit,
     this.error,
     this.status,
   });
@@ -102,6 +105,7 @@ class IncidentSheetPanel extends StatelessWidget {
   final VoidCallback? onExplain;
   final bool explainBusy;
   final String? explainResult;
+  final ExplainKind explainKind;
   final String? error;
   final String? status;
 
@@ -247,11 +251,9 @@ class IncidentSheetPanel extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    SelectionArea(
-                      child: Text(
-                        explainResult!,
-                        style: KelolaType.body(color: c.text, size: 13),
-                      ),
+                    LlmExplainBody(
+                      source: explainResult!,
+                      kind: explainKind,
                     ),
                   ],
                   if (onExplain != null) ...[
@@ -314,13 +316,17 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final view = _view;
     return IncidentSheetPanel(
       host: widget.host,
-      view: _view,
+      view: view,
       error: _error,
       status: _status,
       explainBusy: _explainBusy,
       explainResult: _explainResult,
+      explainKind: view.focus?.kind == IncidentObjectKind.disk
+          ? ExplainKind.disk
+          : ExplainKind.failedUnit,
       onAction: _act,
       onLookUp: _lookUp,
       onDiagnostic: () => openDiagnosticPack(context, ref, widget.host),

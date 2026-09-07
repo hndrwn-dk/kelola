@@ -7,6 +7,7 @@ import 'package:kelola/domain/llm/assist_request.dart';
 import 'package:kelola/domain/llm/provider.dart';
 import 'package:kelola/domain/llm/settings.dart';
 import 'package:kelola/presentation/widgets/assist_preview_sheet.dart';
+import 'package:kelola/presentation/widgets/llm_output_body.dart';
 import 'package:kelola/providers.dart';
 
 Future<LlmSettings> requireAssistSettings(WidgetRef ref) async {
@@ -87,12 +88,7 @@ Future<void> showAssistResult(
                         const SizedBox(height: 10),
                         Flexible(
                           child: SingleChildScrollView(
-                            child: SelectionArea(
-                              child: Text(
-                                bodyText,
-                                style: KelolaType.body(color: c.text, size: 13),
-                              ),
-                            ),
+                            child: LlmOutputBody(source: bodyText),
                           ),
                         ),
                         const SizedBox(height: 12),

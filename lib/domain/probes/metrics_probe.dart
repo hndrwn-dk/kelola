@@ -115,6 +115,11 @@ class MetricsParser {
       if (m == null) {
         continue;
       }
+      final command = m.group(6)!.trim();
+      // MetricsProbe shells out to `ps`; exclude that self-sample noise.
+      if (command == 'ps' || command.endsWith('/ps')) {
+        continue;
+      }
       out.add(
         MetricsProc(
           pid: int.tryParse(m.group(1)!) ?? 0,
@@ -122,7 +127,7 @@ class MetricsParser {
           cpu: double.tryParse(m.group(3)!) ?? 0,
           mem: double.tryParse(m.group(4)!) ?? 0,
           rssKb: int.tryParse(m.group(5)!) ?? 0,
-          command: m.group(6)!.trim(),
+          command: command,
         ),
       );
     }

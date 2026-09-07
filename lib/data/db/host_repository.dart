@@ -208,20 +208,23 @@ class HostRepository {
         );
   }
 
-  Future<void> saveFacts(String hostId, HostFacts facts) {
-    return _db.into(_db.cachedFacts).insertOnConflictUpdate(
+  Future<void> saveFacts(String hostId, HostFacts facts) async {
+    final previous = await this.facts(hostId);
+    final merged = coalesceJournalAccess(facts, previous);
+    await _db.into(_db.cachedFacts).insertOnConflictUpdate(
           CachedFactsCompanion.insert(
             hostId: hostId,
-            osId: facts.osId,
-            osVersionId: facts.osVersionId,
-            prettyName: Value(facts.prettyName),
-            initSystem: facts.init.name,
-            systemdVersion: Value(facts.systemdVersion),
-            pkg: facts.pkg.name,
-            fw: facts.fw.name,
-            hasJournald: facts.hasJournald,
-            journalReadable: facts.journalReadable,
-            arch: facts.arch,
+            osId: merged.osId,
+            osVersionId: merged.osVersionId,
+            prettyName: Value(merged.prettyName),
+            initSystem: merged.init.name,
+            systemdVersion: Value(merged.systemdVersion),
+            pkg: merged.pkg.name,
+            fw: merged.fw.name,
+            hasJournald: merged.hasJournald,
+            journalReadable: merged.journalReadable,
+            journalAccess: Value(merged.journalAccess.name),
+            arch: merged.arch,
             discoveredAt: DateTime.now().toUtc(),
           ),
         );
@@ -234,6 +237,8 @@ class HostRepository {
     if (row == null) {
       return null;
     }
+    final access = JournalAccess.values.asNameMap()[row.journalAccess] ??
+        (row.journalReadable ? JournalAccess.plain : JournalAccess.unknown);
     return HostFacts(
       osId: row.osId,
       osVersionId: row.osVersionId,
@@ -244,6 +249,7 @@ class HostRepository {
       fw: FirewallBackend.values.byName(row.fw),
       hasJournald: row.hasJournald,
       journalReadable: row.journalReadable,
+      journalAccess: access,
       arch: row.arch,
     );
   }
@@ -554,25 +560,41 @@ class HostRepository {
       query.where((t) => t.hostId.equals(hostId));
     }
     final rows = await query.get();
-    return rows
-        .map(
-          (row) => AuditEvent(
-            id: row.id,
-            timestampUtc: row.timestampUtc,
-            hostId: row.hostId,
-            hostAlias: row.hostAlias,
-            remoteUser: row.remoteUser,
-            title: row.title,
-            command: row.command,
-            risk: row.risk,
-            usedSudo: row.usedSudo,
-            durationMs: row.durationMs,
-            appVersion: row.appVersion,
-            exitCode: row.exitCode,
-            errorSummary: row.errorSummary,
-          ),
-        )
-        .toList();
+    return rows.map(_auditFromRow).toList();
+  }
+
+  /// Insights / week summary: full 7-day window, not newest-N.
+  Future<List<AuditEvent>> listAuditSince(
+    DateTime sinceUtc, {
+    String? hostId,
+  }) async {
+    final since = sinceUtc.toUtc();
+    final query = _db.select(_db.auditRecords)
+      ..where((t) => t.timestampUtc.isBiggerOrEqualValue(since))
+      ..orderBy([(t) => OrderingTerm.desc(t.timestampUtc)]);
+    if (hostId != null) {
+      query.where((t) => t.hostId.equals(hostId));
+    }
+    final rows = await query.get();
+    return rows.map(_auditFromRow).toList();
+  }
+
+  AuditEvent _auditFromRow(AuditRow row) {
+    return AuditEvent(
+      id: row.id,
+      timestampUtc: row.timestampUtc,
+      hostId: row.hostId,
+      hostAlias: row.hostAlias,
+      remoteUser: row.remoteUser,
+      title: row.title,
+      command: row.command,
+      risk: row.risk,
+      usedSudo: row.usedSudo,
+      durationMs: row.durationMs,
+      appVersion: row.appVersion,
+      exitCode: row.exitCode,
+      errorSummary: row.errorSummary,
+    );
   }
 
   static const searchKindUnit = 'unit';

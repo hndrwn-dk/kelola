@@ -97,6 +97,7 @@ class Host {
   String get subtitle {
     if (attention == HostAttention.unreachable) {
       final seen = lastSeenAt == null ? 'never' : ageLabel(lastSeenAt!);
+      // Never say "down"; unreachable only after a failed probe wrote attention.
       return 'unreachable · last seen $seen';
     }
     final bits = <String>[endpoint];

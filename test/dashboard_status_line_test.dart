@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/app.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/hosts/dashboard_status.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 
@@ -44,6 +45,24 @@ void main() {
       ),
       'Checked 4m ago · read-only · $sudoMutateWillFail',
     );
+  });
+
+  test('successful poll keeps sudo hint until user dismisses', () {
+    final sudo = SudoRequiredException(
+      const SudoHintContext(kind: SudoHintKind.hostReboot),
+    ).toString();
+    expect(dashboardErrorAfterSuccessfulPoll(sudo), sudo);
+    expect(
+      dashboardErrorAfterSuccessfulPoll('No route to 192.168.18.114'),
+      isNull,
+    );
+    expect(dashboardErrorAfterSuccessfulPoll(null), isNull);
+  });
+
+  test('refresh start keeps sticky sudo hint', () {
+    final sudo = SudoRequiredException().toString();
+    expect(dashboardErrorAfterRefreshStart(sudo), sudo);
+    expect(dashboardErrorAfterRefreshStart('Host missing'), isNull);
   });
 
   testWidgets('default footer shows Checked and not HostFacts chips',

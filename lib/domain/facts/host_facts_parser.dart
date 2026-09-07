@@ -17,7 +17,7 @@ class HostFactsParser {
     final arch = (sections['ARCH'] ?? '').trim();
     final runtime = sections['RUNTIME'] ?? '';
     final dmi = _dmiMap(sections['DMI'] ?? '');
-    final serialParsed = parseSerial(sections['SERIAL'] ?? '');
+    final serialParsed = parseSerialFromDmi(dmi);
 
     final osId = _osField(os, 'ID') ?? '';
     final osVersionId = _osField(os, 'VERSION_ID') ?? '';
@@ -25,8 +25,8 @@ class HostFactsParser {
 
     final systemdVersion = _systemdVersion(init);
     final initSystem = _initSystem(init, systemdVersion);
-    final groups = journal.trim().split(RegExp(r'\s+'));
 
+    final journalReadable = journal.trim() == 'READABLE';
     return HostFacts(
       osId: osId,
       osVersionId: osVersionId,
@@ -36,8 +36,9 @@ class HostFactsParser {
       pkg: _packageManager(pkg),
       fw: _firewall(fw),
       hasJournald: initSystem == InitSystem.systemd,
-      journalReadable: groups.contains('systemd-journal') ||
-          groups.contains('adm'),
+      journalReadable: journalReadable,
+      journalAccess:
+          journalReadable ? JournalAccess.plain : JournalAccess.unknown,
       arch: arch,
       runtimes: _runtimes(runtime),
       nprocCores: parseNproc(sections['NPROC'] ?? ''),
@@ -180,6 +181,17 @@ class HostFactsParser {
     return '$vendor $product';
   }
 
+  /// Unprivileged DMI product_serial only. Never sudo — failed sudo -n
+  /// pollutes auth.log / journal on every HostFactsProbe.
+  static (String?, SerialStatus) parseSerialFromDmi(Map<String, String> dmi) {
+    final value = _dmiValue(dmi, 'product_serial');
+    if (value == null || _unusableSerial(value)) {
+      return (null, SerialStatus.missing);
+    }
+    return (value, SerialStatus.available);
+  }
+
+  /// Legacy SERIAL section parser (tests / older fixtures).
   static (String?, SerialStatus) parseSerial(String raw) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {

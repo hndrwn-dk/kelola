@@ -3,8 +3,10 @@ package com.tursinalabs.kelola
 import android.content.Context
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
+import android.security.keystore.UserNotAuthenticatedException
 import android.util.Log
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -15,7 +17,6 @@ import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import android.security.keystore.KeyInfo
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.KeyStore
@@ -79,6 +80,11 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
                 }
                 sign(alias, data, result)
             }
+            "confirmPresence" -> {
+                val reason = call.argument<String>("reason")
+                    ?: "Confirm destructive action"
+                confirmPresence(reason, result)
+            }
             "keyExists" -> {
                 val alias = call.argument<String>("alias") ?: run {
                     result.error("bad_args", "alias required", null)
@@ -140,8 +146,11 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setUserAuthenticationRequired(attempt.auth)
         if (attempt.auth && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // 300s read/mutate window (Fleet one-auth). Destructive actions
+            // use an app-level BiometricPrompt gate — Keystore cannot re-auth
+            // selected ops on a timed key without a second alias.
             builder.setUserAuthenticationParameters(
-                0,
+                300,
                 KeyProperties.AUTH_BIOMETRIC_STRONG,
             )
         }
@@ -190,6 +199,37 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         )
     }
 
+    private fun confirmPresence(reason: String, result: MethodChannel.Result) {
+        val act = activity
+        if (act == null) {
+            result.error("no_activity", "confirmPresence requires an activity", null)
+            return
+        }
+        val prompt = BiometricPrompt(
+            act,
+            ContextCompat.getMainExecutor(act),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(
+                    authResult: BiometricPrompt.AuthenticationResult,
+                ) {
+                    result.success(null)
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    result.error("auth_failed", errString.toString(), null)
+                }
+            },
+        )
+        prompt.authenticate(
+            BiometricPrompt.PromptInfo.Builder()
+                .setTitle(reason)
+                .setSubtitle("Required for destructive actions")
+                .setNegativeButtonText("Cancel")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                .build(),
+        )
+    }
+
     private fun sign(alias: String, data: ByteArray, result: MethodChannel.Result) {
         val ks = keyStore()
         val privateKey = ks.getKey(alias, null) as? PrivateKey
@@ -197,54 +237,113 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
                 result.error("missing_key", "no private key $alias", null)
                 return
             }
-        val signature = Signature.getInstance("SHA256withECDSA")
         val act = activity
         if (act == null) {
             result.error("no_activity", "signing requires an activity", null)
             return
         }
         try {
-            signature.initSign(privateKey)
-            signature.update(data)
-            result.success(signature.sign())
-        } catch (_: Exception) {
-            val prompt = BiometricPrompt(
-                act,
-                ContextCompat.getMainExecutor(act),
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(
-                        authResult: BiometricPrompt.AuthenticationResult,
-                    ) {
-                        try {
-                            val crypto = authResult.cryptoObject?.signature
-                                ?: signature
-                            crypto.update(data)
-                            result.success(crypto.sign())
-                        } catch (e: Exception) {
-                            result.error("sign_failed", e.message, null)
-                        }
-                    }
+            result.success(signWith(privateKey, data))
+        } catch (_: UserNotAuthenticatedException) {
+            // Timed-auth keys (300s window): unlock with a plain BiometricPrompt.
+            // CryptoObject + initSign throws UserNotAuthenticatedException while
+            // the window is closed — the prompt never appears.
+            unlockThenSign(act, privateKey, data, result)
+        } catch (e: Exception) {
+            // Per-use keys (timeout 0): must bind Signature via CryptoObject.
+            signWithCryptoObject(act, privateKey, data, result, e)
+        }
+    }
 
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        result.error("auth_failed", errString.toString(), null)
+    private fun signWith(privateKey: PrivateKey, data: ByteArray): ByteArray {
+        val signature = Signature.getInstance("SHA256withECDSA")
+        signature.initSign(privateKey)
+        signature.update(data)
+        return signature.sign()
+    }
+
+    private fun unlockThenSign(
+        act: FragmentActivity,
+        privateKey: PrivateKey,
+        data: ByteArray,
+        result: MethodChannel.Result,
+    ) {
+        val prompt = BiometricPrompt(
+            act,
+            ContextCompat.getMainExecutor(act),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(
+                    authResult: BiometricPrompt.AuthenticationResult,
+                ) {
+                    try {
+                        result.success(signWith(privateKey, data))
+                    } catch (e: Exception) {
+                        result.error("sign_failed", e.message, null)
                     }
-                },
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    result.error("auth_failed", errString.toString(), null)
+                }
+            },
+        )
+        prompt.authenticate(
+            BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Sign SSH challenge")
+                .setSubtitle("The private key never leaves this device")
+                .setNegativeButtonText("Cancel")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                .build(),
+        )
+    }
+
+    private fun signWithCryptoObject(
+        act: FragmentActivity,
+        privateKey: PrivateKey,
+        data: ByteArray,
+        result: MethodChannel.Result,
+        firstError: Exception,
+    ) {
+        val prompt = BiometricPrompt(
+            act,
+            ContextCompat.getMainExecutor(act),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(
+                    authResult: BiometricPrompt.AuthenticationResult,
+                ) {
+                    try {
+                        val crypto = authResult.cryptoObject?.signature
+                            ?: throw IllegalStateException(
+                                firstError.message ?: "crypto object missing",
+                            )
+                        crypto.update(data)
+                        result.success(crypto.sign())
+                    } catch (e: Exception) {
+                        result.error("sign_failed", e.message, null)
+                    }
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    result.error("auth_failed", errString.toString(), null)
+                }
+            },
+        )
+        try {
+            val cryptoSig = Signature.getInstance("SHA256withECDSA")
+            cryptoSig.initSign(privateKey)
+            prompt.authenticate(
+                BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Sign SSH challenge")
+                    .setSubtitle("The private key never leaves this device")
+                    .setNegativeButtonText("Cancel")
+                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                    .build(),
+                BiometricPrompt.CryptoObject(cryptoSig),
             )
-            try {
-                val cryptoSig = Signature.getInstance("SHA256withECDSA")
-                cryptoSig.initSign(privateKey)
-                prompt.authenticate(
-                    BiometricPrompt.PromptInfo.Builder()
-                        .setTitle("Sign SSH challenge")
-                        .setSubtitle("The private key never leaves this device")
-                        .setNegativeButtonText("Cancel")
-                        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-                        .build(),
-                    BiometricPrompt.CryptoObject(cryptoSig),
-                )
-            } catch (e: Exception) {
-                result.error("sign_failed", e.message, null)
-            }
+        } catch (e: UserNotAuthenticatedException) {
+            unlockThenSign(act, privateKey, data, result)
+        } catch (e: Exception) {
+            result.error("sign_failed", e.message ?: firstError.message, null)
         }
     }
 

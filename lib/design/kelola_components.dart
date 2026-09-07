@@ -18,24 +18,37 @@ import 'kelola_theme.dart';
 /// goes inside a RiskBand. It is never a plain Card, never a
 /// Material ListTile, never a gauge, never a FAB.
 class RiskBand extends StatelessWidget {
-  final RiskLevel risk;
+  final RiskLevel? risk;
   final HealthStatus? status;
   final Widget child;
   final EdgeInsets padding;
+  final bool _healthOnly;
 
   const RiskBand({
     super.key,
-    required this.risk,
+    required RiskLevel this.risk,
     this.status,
     required this.child,
     this.padding = const EdgeInsets.fromLTRB(15, 11, 12, 11),
-  });
+  }) : _healthOnly = false;
+
+  /// Host/machine condition band — no [RiskLevel]. Failed uses hazard stripe.
+  const RiskBand.forHealth({
+    super.key,
+    required HealthStatus this.status,
+    required this.child,
+    this.padding = const EdgeInsets.fromLTRB(15, 11, 12, 11),
+  })  : risk = null,
+        _healthOnly = true;
 
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    final bandColor =
-        status != null ? c.forHealth(status!) : c.forRisk(risk);
+    final bandColor = status != null
+        ? c.forHealth(status!)
+        : c.forRisk(risk ?? RiskLevel.read);
+    final hazard = (!_healthOnly && risk == RiskLevel.destructive) ||
+        (_healthOnly && status == HealthStatus.failed);
     return Container(
       decoration: BoxDecoration(
         color: c.surface,
@@ -51,7 +64,7 @@ class RiskBand extends StatelessWidget {
             bottom: 0,
             width: 4,
             child: ClipRect(
-              child: risk == RiskLevel.destructive
+              child: hazard
                   ? CustomPaint(
                       painter: _HazardStripePainter(
                         bright: c.red,
@@ -242,12 +255,11 @@ class FleetTileMetricView {
   final String value;
 }
 
-/// Dense fleet monitor cell (~90–110px). Severity on the RiskBand edge;
-/// metrics are a small labeled grid, not a wrapping sentence.
+/// Dense fleet monitor cell (~90–110px). Severity from [HealthStatus] only —
+/// never [RiskLevel] (that enum is for actions).
 class FleetHostTile extends StatelessWidget {
   final String alias;
-  final RiskLevel risk;
-  final HealthStatus? status;
+  final HealthStatus status;
   final bool loading;
   final bool reachable;
   final String? downMessage;
@@ -257,8 +269,7 @@ class FleetHostTile extends StatelessWidget {
   const FleetHostTile({
     super.key,
     required this.alias,
-    required this.risk,
-    this.status,
+    required this.status,
     this.loading = false,
     this.reachable = true,
     this.downMessage,
@@ -274,8 +285,7 @@ class FleetHostTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(KelolaRadii.md),
-        child: RiskBand(
-          risk: risk,
+        child: RiskBand.forHealth(
           status: status,
           padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
           child: Column(
@@ -1261,12 +1271,14 @@ class ActionableError extends StatelessWidget {
   final String title;
   final String body;
   final String snippet;
+  final VoidCallback? onDismiss;
 
   const ActionableError({
     super.key,
     required this.title,
     required this.body,
     required this.snippet,
+    this.onDismiss,
   });
 
   factory ActionableError.sudo({
@@ -1274,6 +1286,7 @@ class ActionableError extends StatelessWidget {
     String user = 'YOURUSER',
     SudoHintContext context = const SudoHintContext(),
     String? message,
+    VoidCallback? onDismiss,
   }) {
     final ctx = message == null ? context : SudoHintContext.tryParse(message);
     final hint = kelolaSudoHint(user: user, context: ctx);
@@ -1282,6 +1295,7 @@ class ActionableError extends StatelessWidget {
       title: sudoRequiredTitle,
       body: hint.body,
       snippet: hint.snippet,
+      onDismiss: onDismiss,
     );
   }
 
@@ -1294,7 +1308,26 @@ class ActionableError extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: KelolaType.display(color: c.text, size: 15)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: KelolaType.display(color: c.text, size: 15),
+                ),
+              ),
+              if (onDismiss != null)
+                IconButton(
+                  tooltip: 'Dismiss',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  icon: Icon(Icons.close, size: 18, color: c.muted),
+                  onPressed: onDismiss,
+                ),
+            ],
+          ),
           const SizedBox(height: 6),
           Text(body, style: KelolaType.body(color: c.muted, size: 13)),
           const SizedBox(height: 10),
@@ -1342,8 +1375,14 @@ class ActionableError extends StatelessWidget {
 class KelolaError extends StatelessWidget {
   final String message;
   final String? sudoUser;
+  final VoidCallback? onDismiss;
 
-  const KelolaError({super.key, required this.message, this.sudoUser});
+  const KelolaError({
+    super.key,
+    required this.message,
+    this.sudoUser,
+    this.onDismiss,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1351,6 +1390,7 @@ class KelolaError extends StatelessWidget {
       return ActionableError.sudo(
         user: sudoUser ?? 'YOURUSER',
         message: message,
+        onDismiss: onDismiss,
       );
     }
     return Text(

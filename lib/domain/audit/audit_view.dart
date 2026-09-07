@@ -105,7 +105,8 @@ AuditWeekSummary summarizeAudit(
     if (e.risk == RiskLevel.destructive.name) {
       destructive++;
     }
-    if (auditFailed(e)) {
+    // Teaser "failed" means failed changes — not failed read probes.
+    if (auditFailed(e) && auditIsChange(e)) {
       failed++;
     }
   }

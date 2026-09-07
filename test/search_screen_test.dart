@@ -33,6 +33,11 @@ class _BoomSigner implements HardwareSigner {
   }
 
   @override
+  Future<void> confirmPresence({String reason = 'Confirm destructive action'}) async {
+    throw StateError('search must not open SSH');
+  }
+
+  @override
   Future<bool> keyExists(String alias) async {
     throw StateError('search must not open SSH');
   }

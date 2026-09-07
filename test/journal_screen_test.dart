@@ -17,8 +17,10 @@ import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
 import 'package:kelola/domain/journal/journal_follow.dart';
+import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/probes/journal_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/presentation/screens/journal_screen.dart';
 import 'package:kelola/providers.dart';
 
@@ -149,6 +151,85 @@ void main() {
       isFalse,
     );
   });
+
+  testWidgets('syslog host shows lines and disables journal-only chips',
+      (tester) async {
+    const alpine = HostFacts(
+      osId: 'alpine',
+      osVersionId: '3.20',
+      init: InitSystem.openrc,
+      systemdVersion: null,
+      pkg: PackageManager.apk,
+      fw: FirewallBackend.nftables,
+      hasJournald: false,
+      journalReadable: false,
+      arch: 'x86_64',
+    );
+    await repo.saveFacts(host.id, alpine);
+    pool.page = const JournalPage(
+      entries: [
+        JournalEntry(
+          cursor: 'syslog:1:kelolatest:hi',
+          realtimeUsec: '1756721400000000',
+          priority: 6,
+          message: 'hi from syslog',
+          syslogIdentifier: 'kelolatest',
+        ),
+      ],
+      permissionDenied: false,
+      hasJournald: false,
+      usedSyslog: true,
+    );
+    await pumpLogs(tester);
+
+    expect(find.textContaining('hi from syslog'), findsOneWidget);
+    expect(find.text('SYSLOG · ALL'), findsOneWidget);
+    expect(
+      tester.widget<FilterPill>(find.widgetWithText(FilterPill, 'SYSTEM')).enabled,
+      isFalse,
+    );
+    expect(
+      tester.widget<FilterPill>(find.widgetWithText(FilterPill, 'ERR+')).enabled,
+      isFalse,
+    );
+    expect(
+      tester.widget<FilterPill>(find.widgetWithText(FilterPill, '1H')).enabled,
+      isFalse,
+    );
+    expect(
+      tester.widget<FilterPill>(find.widgetWithText(FilterPill, 'LIVE')).enabled,
+      isTrue,
+    );
+  });
+
+  testWidgets('no journald and no syslog shows an honest empty state',
+      (tester) async {
+    const alpine = HostFacts(
+      osId: 'alpine',
+      osVersionId: '3.20',
+      init: InitSystem.openrc,
+      systemdVersion: null,
+      pkg: PackageManager.apk,
+      fw: FirewallBackend.nftables,
+      hasJournald: false,
+      journalReadable: false,
+      arch: 'x86_64',
+    );
+    await repo.saveFacts(host.id, alpine);
+    pool.page = const JournalPage(
+      entries: [],
+      permissionDenied: false,
+      hasJournald: false,
+      noReadableLogSource: true,
+      emptyHint:
+          'No journald and no readable /var/log/syslog or /var/log/messages.',
+    );
+    await pumpLogs(tester);
+
+    expect(find.text('No readable logs'), findsOneWidget);
+    expect(find.textContaining('/var/log/syslog'), findsOneWidget);
+    expect(find.byType(JournalLogLine), findsNothing);
+  });
 }
 
 class _ReadyEnrollment extends EnrollmentController {
@@ -162,6 +243,17 @@ class _JournalPool extends SshSessionPool {
   _JournalPool({
     required super.repository,
     required JournalFollowOpener followOpener,
+    this.page = const JournalPage(
+      entries: [
+        JournalEntry(
+          cursor: 'c1',
+          realtimeUsec: '1756721400000000',
+          priority: 3,
+          message: 'Failed to bind',
+        ),
+      ],
+      permissionDenied: false,
+    ),
   }) : super(
           signer: _BoomSigner(),
           hostKeys: HostKeyPolicy(repository),
@@ -169,25 +261,20 @@ class _JournalPool extends SshSessionPool {
           followOpener: followOpener,
         );
 
+  JournalPage page;
+
   @override
   Future<T> execute<T>(
     Host host,
     Probe<T> probe, {
     HostFacts? facts,
     UnknownHostKeyHandler? onUnknownHostKey,
+    void Function(int done, int? total)? onProgress,
+    TransferCancel? cancel,
+    ProbeScope scope = ProbeScope.host,
   }) async {
     if (probe is JournalProbe) {
-      return JournalPage(
-        entries: const [
-          JournalEntry(
-            cursor: 'c1',
-            realtimeUsec: '1756721400000000',
-            priority: 3,
-            message: 'Failed to bind',
-          ),
-        ],
-        permissionDenied: false,
-      ) as T;
+      return page as T;
     }
     throw StateError('unexpected ${probe.runtimeType}');
   }
@@ -224,6 +311,11 @@ class _BoomSigner implements HardwareSigner {
 
   @override
   Future<Uint8List> sign(String alias, Uint8List data) async {
+    throw StateError('journal screen test must not open SSH');
+  }
+
+  @override
+  Future<void> confirmPresence({String reason = 'Confirm destructive action'}) async {
     throw StateError('journal screen test must not open SSH');
   }
 

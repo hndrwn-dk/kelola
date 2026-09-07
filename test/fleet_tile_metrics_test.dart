@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
-import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/presentation/screens/fleet_screen.dart';
 
 void main() {
@@ -55,12 +54,12 @@ void main() {
     expect(labels, isNot(contains('upd')));
   });
 
-  test('load over 100% uses failed health (red band), not warning amber', () {
+  test('load over 100% uses failed health (hazard), not warning amber', () {
     final h = FleetHostHealth(
       hostId: 'c',
       alias: 'east-controlpanel-uat',
       reachable: true,
-      load1: 1.14,
+      load1: 4.06,
       nprocCores: 1,
       memPercent: 40,
       diskRootPercent: 50,
@@ -68,8 +67,10 @@ void main() {
       pendingUpdates: 0,
       fetchedAt: DateTime.utc(2026, 1, 1),
     );
-    expect(h.severity, FleetSeverity.loadHigh);
-    expect(h.tileRiskLevel, RiskLevel.destructive);
+    final a = assessFleetHost(h);
+    expect(a.severity, FleetSeverity.loadHigh);
+    expect(a.tileHealth, FleetTileHealth.failed);
+    expect(a.issues, isNotEmpty);
     expect(fleetTileHealthStatus(h), HealthStatus.failed);
   });
 }
