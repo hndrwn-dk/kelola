@@ -39,10 +39,14 @@ Specs: [`readiness/SPEC.md`](readiness/SPEC.md) · design: [`readiness/DESIGN.ht
 ## Screenshots
 
 <p>
-<img src="docs/screenshots/hosts.png" width="220" alt="Hosts list grouped by attention">
-<img src="docs/screenshots/host-details.png" width="220" alt="Host details and HostFacts">
-<img src="docs/screenshots/containers.png" width="220" alt="Docker containers with stacks and actions">
-<img src="docs/screenshots/logs.png" width="220" alt="journald follow with LIVE streaming">
+<img src="docs/screenshots/0_host_inventory.png" width="180" alt="Hosts inventory with attention buckets">
+<img src="docs/screenshots/1_host_dashboard.png" width="180" alt="Host dashboard with load memory disk and tools">
+<img src="docs/screenshots/2_fleets.png" width="180" alt="Fleet health grid and host sheet">
+<img src="docs/screenshots/3_ai_llm_supports.png" width="180" alt="Assist LLM provider settings">
+<img src="docs/screenshots/4_incident_explain.png" width="180" alt="Incident explain with structured LLM sections">
+<img src="docs/screenshots/5_logs.png" width="180" alt="Logs with journal scope filters and LIVE">
+<img src="docs/screenshots/6_containers.png" width="180" alt="Containers list with stacks and actions">
+<img src="docs/screenshots/7_service_cta.png" width="180" alt="Service detail with mutate actions">
 </p>
 
 ## Host requirements
