@@ -128,6 +128,8 @@ class JournalFollowCommand {
       return 'echo "---DENIED---"\n';
     }
     if (!facts.hasJournald) {
+      // Match JournalProbe: empty path is absence (---NOSYSLOG---), not denial.
+      // kelola_access records whether sudo was tried (same as historical).
       final triedSudo = access == JournalAccess.unknown ||
           access == JournalAccess.sudo;
       return '''
@@ -137,7 +139,8 @@ path=\$(
 ${syslogSelectPathScript(access)}
 )
 if [ -z "\$path" ]; then
-  ${triedSudo ? 'echo "---DENIED---"' : 'echo "---NOSYSLOG---"'}
+  echo "---NOSYSLOG---"
+  ${triedSudo ? 'echo "kelola_access=denied"' : 'echo "kelola_access=missing"'}
   exit 0
 fi
 if [ "\${path#SUDO:}" != "\$path" ]; then
@@ -209,7 +212,7 @@ class JournalFollowHandle {
     required JournalFollowChannel channel,
     required void Function(JournalEntry entry) onEntry,
     void Function()? onDenied,
-    void Function()? onNoSyslog,
+    void Function(JournalAccess? learnedAccess)? onNoSyslog,
     void Function(Object error)? onError,
     void Function()? onClosed,
   }) {
@@ -218,7 +221,17 @@ class JournalFollowHandle {
       (chunk) {
         final text = utf8.decode(chunk, allowMalformed: true);
         if (text.contains('---NOSYSLOG---')) {
-          onNoSyslog?.call();
+          final accessMatch = RegExp(
+            r'^kelola_access=(plain|sudo|denied|missing)$',
+            multiLine: true,
+          ).firstMatch(text);
+          final learned = switch (accessMatch?.group(1)) {
+            'denied' => JournalAccess.denied,
+            'sudo' => JournalAccess.sudo,
+            'plain' => JournalAccess.plain,
+            _ => null,
+          };
+          onNoSyslog?.call(learned);
           return;
         }
         if (text.contains('---DENIED---') || text.contains('---NOJOURNAL---')) {

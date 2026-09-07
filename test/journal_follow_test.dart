@@ -63,8 +63,9 @@ void main() {
   test('follow command uses syslog when journald is absent', () {
     final cmd = const JournalFollowCommand().command(HostFacts.undiscovered);
     expect(cmd, contains('/var/log/syslog'));
-    // Unknown access may try sudo once; empty path caches as denied.
-    expect(cmd, contains('---DENIED---'));
+    // Match JournalProbe: empty path is ---NOSYSLOG---; kelola_access records the sudo try.
+    expect(cmd, contains('---NOSYSLOG---'));
+    expect(cmd, contains('kelola_access=denied'));
     expect(cmd, isNot(contains('journalctl')));
   });
 

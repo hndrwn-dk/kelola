@@ -86,10 +86,8 @@ void main() {
     expect(find.text('nas-01'), findsOneWidget);
     expect(find.text('db-primary'), findsOneWidget);
     expect(find.text('ub'), findsOneWidget);
-    expect(
-      find.text('2 failed · disk 91% · checked 4m ago'),
-      findsOneWidget,
-    );
+    // Inventory meta is endpoint · OS — metrics live on the attention pill / Fleet.
+    expect(find.text('192.168.1.24 · Debian 12'), findsOneWidget);
     expect(find.text('2 FAILED'), findsOneWidget);
     expect(find.byType(OsIcon), findsWidgets);
     expect(find.byType(SectionSlab), findsNWidgets(3));
