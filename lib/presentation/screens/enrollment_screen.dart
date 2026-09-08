@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kelola/data/ssh/openssh_ecdsa.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/screens/host_key_mismatch_screen.dart';
 import 'package:kelola/presentation/ssh_host_key_flow.dart';
-import 'package:kelola/presentation/theme/kelola_fonts.dart';
-import 'package:kelola/presentation/theme/kelola_theme.dart';
+import 'package:kelola/presentation/theme/kelola_theme.dart' show keyBackendLabel;
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 class EnrollmentScreen extends ConsumerStatefulWidget {
   const EnrollmentScreen({super.key, required this.hostId});
@@ -105,42 +105,95 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
     }
   }
 
+  static String _manualInstallCommands(String authorizedKeysLine) {
+    return "mkdir -p ~/.ssh && chmod 700 ~/.ssh\n"
+        "echo '$authorizedKeysLine' >> ~/.ssh/authorized_keys\n"
+        'chmod 600 ~/.ssh/authorized_keys';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<KelolaColors>()!;
+    final c = context.kc;
     final enrollment = ref.watch(enrollmentProvider);
     final line = enrollment.authorizedKeysLine ?? 'generating…';
+    final blob = enrollment.publicBlob;
+    final fingerprint = blob == null
+        ? null
+        : OpensshEcdsaP256.fingerprintSha256(blob);
+    final installBlock =
+        blob == null ? null : _manualInstallCommands(line);
 
     return KelolaPage(
       title: 'Add the key',
       kicker: 'ONE KEY PER PHONE',
       busy: _busy,
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: kelolaScrollPadding(
+          context,
+          left: 16,
+          top: 16,
+          right: 16,
+          extraBottom: 16,
+        ),
         children: [
           Text(
-            'Scan this on the server, or copy the line into ~/.ssh/authorized_keys. No network needed.',
-            style: TextStyle(color: colors.muted, height: 1.5),
+            'Installing this key needs existing access to the host — '
+            'another SSH session, a web console, or physical access.',
+            style: KelolaType.body(color: c.muted, size: 13),
           ),
           const SizedBox(height: 18),
-          if (enrollment.publicBlob != null)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: colors.text,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: QrImageView(
-                  data: line,
-                  size: 180,
-                  backgroundColor: colors.text,
-                ),
+          Text(
+            'PUBLIC KEY',
+            style: KelolaType.mono(
+              color: c.dim,
+              size: 8.5,
+              letterSpacing: 0.9,
+            ),
+          ),
+          const SizedBox(height: 8),
+          KelolaCommand(command: line),
+          if (installBlock != null) ...[
+            const SizedBox(height: 18),
+            Text(
+              'MANUAL INSTALL',
+              style: KelolaType.mono(
+                color: c.dim,
+                size: 8.5,
+                letterSpacing: 0.9,
               ),
             ),
-          const SizedBox(height: 16),
-          KelolaCommand(command: line),
-          const SizedBox(height: 14),
+            const SizedBox(height: 8),
+            KelolaCommand(command: installBlock),
+          ],
+          if (fingerprint != null) ...[
+            const SizedBox(height: 18),
+            Text(
+              'FINGERPRINT',
+              style: KelolaType.mono(
+                color: c.dim,
+                size: 8.5,
+                letterSpacing: 0.9,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              fingerprint,
+              style: KelolaType.mono(color: c.text, size: 12),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'RHEL-family hosts may need restorecon -R ~/.ssh if '
+              '~/.ssh was created outside Kelola\'s bootstrap.',
+              style: KelolaType.body(color: c.dim, size: 12),
+            ),
+          ],
+          const SizedBox(height: 18),
+          FilledButton(
+            // Wired in Task 9.
+            onPressed: null,
+            child: const Text('Install with password'),
+          ),
+          const SizedBox(height: 8),
           FilledButton(
             onPressed: _busy ? null : _test,
             child: Text(_busy ? 'Testing…' : 'Test connection'),
@@ -157,13 +210,14 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
             const SizedBox(height: 8),
             Text(
               'Backend: ${keyBackendLabel(enrollment.backendLabel)}',
-              style: KelolaFonts.machine(color: colors.dim, size: 12),
+              style: KelolaType.mono(color: c.dim, size: 12),
             ),
           ],
           const SizedBox(height: 8),
           Text(
-            'This phone has one hardware key, reused for every host. A new VM does not create a new key.',
-            style: TextStyle(color: colors.dim, fontSize: 12, height: 1.45),
+            'This phone has one hardware key, reused for every host. '
+            'A new VM does not create a new key.',
+            style: KelolaType.body(color: c.dim, size: 12),
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
