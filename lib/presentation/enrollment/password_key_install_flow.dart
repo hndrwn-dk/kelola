@@ -1,10 +1,8 @@
-import 'dart:convert';
-
-import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/ssh/openssh_ecdsa.dart';
+import 'package:kelola/data/ssh/session_pool.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/enrollment/ephemeral_password.dart';
@@ -12,10 +10,8 @@ import 'package:kelola/domain/enrollment/key_install_outcome.dart';
 import 'package:kelola/domain/enrollment/key_install_script.dart';
 import 'package:kelola/domain/enrollment/password_auth_failure.dart';
 import 'package:kelola/domain/exceptions.dart';
-import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
-import 'package:kelola/domain/probes/key_install_append_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/presentation/screens/host_key_mismatch_screen.dart';
 import 'package:kelola/presentation/ssh_host_key_flow.dart';
@@ -314,7 +310,7 @@ Future<void> runPasswordKeyInstallFlow({
             if (!confirmed) {
               return null;
             }
-            return _runAppendOnBootstrapClient(
+            return pool.appendAuthorizedKeysLine(
               client: client,
               keyBody: keyBody,
               fullLine: fullLine,
@@ -343,8 +339,8 @@ Future<void> runPasswordKeyInstallFlow({
         }
         final failure = classifySshBootstrapError(
           e,
-          hostKeyAccepted: true,
-          serverAuthMethods: const {},
+          hostKeyAccepted: pool.lastHostKeyAccepted,
+          serverAuthMethods: pool.lastServerAuthMethods,
         );
         await repo.recordAudit(
           hostId: host.id,
@@ -376,23 +372,16 @@ Future<void> runPasswordKeyInstallFlow({
 
       var verifyOk = false;
       if (append.kind != KeyInstallAppendKind.failed) {
-        try {
-          await pool.verifyFreshKeyAuth(
-            host,
-            const HostFactsProbe(),
-            onUnknownHostKey: (id, algorithm, fp) {
-              return promptUnknownHostKey(
-                context,
-                hostId: id,
-                algorithm: algorithm,
-                fingerprint: fp,
-              );
-            },
-          );
-          verifyOk = true;
-        } catch (_) {
-          verifyOk = false;
+        final verified = await verifyAfterPasswordKeyInstall(
+          context: context,
+          pool: pool,
+          host: host,
+        );
+        if (verified == null) {
+          // Host-key mismatch UI already shown; do not present stray-key copy.
+          return;
         }
+        verifyOk = verified;
       }
 
       final report = buildKeyInstallReport(
@@ -421,19 +410,45 @@ Future<void> runPasswordKeyInstallFlow({
   }
 }
 
-Future<KeyInstallAppendResult> _runAppendOnBootstrapClient({
-  required SSHClient client,
-  required String keyBody,
-  required String fullLine,
+/// Fresh key-only verify after append. Returns `true`/`false` for verify
+/// outcome, or `null` when [HostKeyMismatchException] was surfaced to the user.
+Future<bool?> verifyAfterPasswordKeyInstall({
+  required BuildContext context,
+  required SshSessionPool pool,
+  required Host host,
 }) async {
-  final install = KeyInstallAppendProbe(keyBody: keyBody, fullLine: fullLine);
-  final command = install.command(HostFacts.undiscovered);
-  final result = await client.runWithResult(command).timeout(install.timeout);
-  return install.parse(
-    utf8.decode(result.stdout, allowMalformed: true),
-    utf8.decode(result.stderr, allowMalformed: true),
-    result.exitCode ?? -1,
-  );
+  try {
+    await pool.verifyFreshKeyAuth(
+      host,
+      const HostFactsProbe(),
+      onUnknownHostKey: (id, algorithm, fp) {
+        return promptUnknownHostKey(
+          context,
+          hostId: id,
+          algorithm: algorithm,
+          fingerprint: fp,
+        );
+      },
+    );
+    return true;
+  } on HostKeyMismatchException catch (e) {
+    // Do not fold mismatch into append-ok / verify-fail stray-key UI.
+    if (!context.mounted) {
+      return null;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => HostKeyMismatchScreen(
+          hostAlias: host.alias,
+          pinned: e.pinnedFingerprint,
+          seen: e.seenFingerprint,
+        ),
+      ),
+    );
+    return null;
+  } catch (_) {
+    return false;
+  }
 }
 
 Future<void> _recordKeyInstallAudit({

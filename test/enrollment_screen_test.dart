@@ -1,16 +1,27 @@
 import 'dart:typed_data';
 
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/app.dart';
+import 'package:kelola/data/db/database.dart';
+import 'package:kelola/data/db/host_repository.dart';
+import 'package:kelola/data/keystore/hardware_signer.dart';
+import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/openssh_ecdsa.dart';
+import 'package:kelola/data/ssh/session_pool.dart';
 import 'package:kelola/domain/enrollment/ephemeral_password.dart';
 import 'package:kelola/domain/enrollment/key_install_outcome.dart';
 import 'package:kelola/domain/enrollment/key_install_script.dart';
 import 'package:kelola/domain/enrollment/password_auth_failure.dart';
+import 'package:kelola/domain/exceptions.dart';
+import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/presentation/enrollment/password_key_install_flow.dart';
 import 'package:kelola/presentation/screens/enrollment_screen.dart';
+import 'package:kelola/presentation/screens/host_key_mismatch_screen.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -146,6 +157,108 @@ void main() {
   );
 
   testWidgets(
+    'classifySshBootstrapError passwordDisabled path shows no retry',
+    (tester) async {
+      final failure = classifySshBootstrapError(
+        SSHAuthFailError('All authentication methods failed'),
+        hostKeyAccepted: true,
+        serverAuthMethods: const {'publickey'},
+      );
+      expect(failure.mode, PasswordAuthFailureMode.passwordDisabled);
+      expect(failure.offerRetry, isFalse);
+
+      await tester.pumpWidget(
+        KelolaApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: TextButton(
+                  onPressed: () {
+                    showPasswordAuthFailureSheet(
+                      context,
+                      failure: failure,
+                      passwordDiscarded: true,
+                    );
+                  },
+                  child: const Text('fail'),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('fail'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Password authentication is not available'),
+          findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      expect(find.text('Retry'), findsNothing);
+      expect(find.text('Use manual path'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'verify HostKeyMismatchException shows mismatch UI not removal hint',
+    (tester) async {
+      final db = KelolaDatabase.memory();
+      addTearDown(db.close);
+      final repo = HostRepository(db);
+      final host = await repo.insert(
+        alias: 'pi',
+        address: '127.0.0.1',
+        port: 22,
+        username: 'pi',
+      );
+      final pool = _VerifyMismatchPool(repository: repo);
+
+      await tester.pumpWidget(
+        KelolaApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: TextButton(
+                  onPressed: () async {
+                    final verified = await verifyAfterPasswordKeyInstall(
+                      context: context,
+                      pool: pool,
+                      host: host,
+                    );
+                    if (verified == false && context.mounted) {
+                      await showKeyInstallReportSheet(
+                        context,
+                        report: buildKeyInstallReport(
+                          append: const KeyInstallAppendResult(
+                            kind: KeyInstallAppendKind.appended,
+                            homeMode: 'drwx------',
+                            createdSsh: false,
+                          ),
+                          verifyOk: false,
+                          fullLine: line,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('verify'),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('verify'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(HostKeyMismatchScreen), findsOneWidget);
+      expect(find.textContaining('Host key changed'), findsOneWidget);
+      expect(find.textContaining('delete that line'), findsNothing);
+      expect(find.textContaining('Key present but not verified'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'verify-fail report shows removal hint',
     (tester) async {
       final report = buildKeyInstallReport(
@@ -206,4 +319,54 @@ class _TrackingPassword extends EphemeralPassword {
     clearCount++;
     super.clear();
   }
+}
+
+class _VerifyMismatchPool extends SshSessionPool {
+  _VerifyMismatchPool({required HostRepository repository})
+      : super(
+          repository: repository,
+          signer: _BoomSigner(),
+          hostKeys: HostKeyPolicy(repository),
+          publicBlob: () => Uint8List.fromList(List.filled(64, 1)),
+        );
+
+  @override
+  Future<T> verifyFreshKeyAuth<T>(
+    Host host,
+    Probe<T> probe, {
+    HostFacts? facts,
+    UnknownHostKeyHandler? onUnknownHostKey,
+  }) async {
+    throw HostKeyMismatchException(
+      hostId: host.id,
+      pinnedFingerprint: 'pinned-fp',
+      seenFingerprint: 'seen-fp',
+      algorithm: 'ssh-ed25519',
+    );
+  }
+}
+
+class _BoomSigner implements HardwareSigner {
+  @override
+  Future<HardwareKey> generateKey(String alias) async {
+    throw StateError('enrollment test must not open SSH');
+  }
+
+  @override
+  Future<Uint8List> sign(String alias, Uint8List data) async {
+    throw StateError('enrollment test must not open SSH');
+  }
+
+  @override
+  Future<void> confirmPresence({
+    String reason = 'Confirm destructive action',
+  }) async {
+    throw StateError('enrollment test must not open SSH');
+  }
+
+  @override
+  Future<bool> keyExists(String alias) async => false;
+
+  @override
+  Future<void> deleteKey(String alias) async {}
 }
