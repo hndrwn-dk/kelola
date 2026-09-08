@@ -60,6 +60,7 @@ readiness/
 play_console/
 **/play_console/
 docs/superpowers/
+.worktrees/
 
 # Secrets, credentials, and signing artifacts
 .env
