@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:meta/meta.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/ssh/openssh_ecdsa.dart';
@@ -311,11 +310,21 @@ Future<void> runPasswordKeyInstallFlow({
             if (!confirmed) {
               return null;
             }
-            return pool.appendAuthorizedKeysLine(
-              client: client,
-              keyBody: keyBody,
-              fullLine: fullLine,
-            );
+            // Append/exec errors are not credential failures — report unknown
+            // file state via KeyInstallAppendKind.failed, not auth-mode UI.
+            try {
+              return await pool.appendAuthorizedKeysLine(
+                client: client,
+                keyBody: keyBody,
+                fullLine: fullLine,
+              );
+            } catch (_) {
+              return const KeyInstallAppendResult(
+                kind: KeyInstallAppendKind.failed,
+                homeMode: 'unknown',
+                createdSsh: false,
+              );
+            }
           },
         );
       } on HostKeyMismatchException catch (e) {
@@ -341,6 +350,7 @@ Future<void> runPasswordKeyInstallFlow({
         final failure = classifySshBootstrapError(
           e,
           hostKeyAccepted: pool.lastHostKeyAccepted,
+          hostKeyDeclined: pool.lastHostKeyDeclined,
           serverAuthMethods: pool.lastServerAuthMethods,
         );
         await repo.recordAudit(

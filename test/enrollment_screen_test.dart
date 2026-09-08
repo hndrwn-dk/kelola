@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -24,7 +25,6 @@ import 'package:kelola/presentation/screens/enrollment_screen.dart';
 import 'package:kelola/presentation/screens/host_key_mismatch_screen.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
   final blob = Uint8List.fromList(List.filled(64, 1));
@@ -62,7 +62,6 @@ void main() {
           findsOneWidget);
       expect(find.text('Test connection'), findsOneWidget);
       expect(find.text('Install with password'), findsOneWidget);
-      expect(find.byType(QrImageView), findsNothing);
       expect(
         find.textContaining('messaging'),
         findsNothing,
@@ -302,6 +301,139 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'append exec exception shows append failure not password auth retry',
+    (tester) async {
+      final db = KelolaDatabase.memory();
+      addTearDown(db.close);
+      final repo = HostRepository(db);
+      final host = await repo.insert(
+        alias: 'pi',
+        address: '127.0.0.1',
+        port: 22,
+        username: 'pi',
+      );
+      final pool = _AppendThrowFlowPool(repository: repo);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            hostRepositoryProvider.overrideWithValue(repo),
+            sessionPoolProvider.overrideWithValue(pool),
+            enrollmentProvider.overrideWith(_ReadyEnrollment.new),
+          ],
+          child: KelolaApp(
+            home: Consumer(
+              builder: (context, ref, _) {
+                return Scaffold(
+                  body: TextButton(
+                    onPressed: () => runPasswordKeyInstallFlow(
+                      context: context,
+                      ref: ref,
+                      hostId: host.id,
+                    ),
+                    child: const Text('start'),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('start'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'secret');
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Install this key?'), findsOneWidget);
+      await tester.tap(find.text('Install this key'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Key install failed'), findsOneWidget);
+      expect(
+        find.textContaining('file state on the server is unknown'),
+        findsOneWidget,
+      );
+      expect(find.text('Try again'), findsNothing);
+      expect(
+        find.textContaining('Check the username and password'),
+        findsNothing,
+      );
+
+      final audits = await repo.listAudit();
+      expect(audits, hasLength(1));
+      expect(audits.single.command, contains('append_failed'));
+    },
+  );
+
+  testWidgets(
+    'declined TOFU shows host-key declined not connection failure',
+    (tester) async {
+      final db = KelolaDatabase.memory();
+      addTearDown(db.close);
+      final repo = HostRepository(db);
+      final host = await repo.insert(
+        alias: 'pi',
+        address: '127.0.0.1',
+        port: 22,
+        username: 'pi',
+      );
+      final pool = _TofuDeclineFlowPool(repository: repo);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            hostRepositoryProvider.overrideWithValue(repo),
+            sessionPoolProvider.overrideWithValue(pool),
+            enrollmentProvider.overrideWith(_ReadyEnrollment.new),
+          ],
+          child: KelolaApp(
+            home: Consumer(
+              builder: (context, ref, _) {
+                return Scaffold(
+                  body: TextButton(
+                    onPressed: () => runPasswordKeyInstallFlow(
+                      context: context,
+                      ref: ref,
+                      hostId: host.id,
+                    ),
+                    child: const Text('start'),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('start'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'secret');
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Unknown host key'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Could not connect'), findsNothing);
+      expect(find.textContaining('Check network'), findsNothing);
+      expect(find.textContaining('Host key was not trusted'), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      expect(find.text('Use manual path'), findsOneWidget);
+
+      final audits = await repo.listAudit();
+      expect(audits, hasLength(1));
+      expect(audits.single.errorSummary, 'hostKeyDeclined');
+    },
+  );
 }
 
 class _ReadyEnrollment extends EnrollmentController {
@@ -345,6 +477,72 @@ class _VerifyMismatchPool extends SshSessionPool {
     );
   }
 }
+
+/// Authenticated bootstrap that invokes [body]; append exec throws.
+class _AppendThrowFlowPool extends SshSessionPool {
+  _AppendThrowFlowPool({required HostRepository repository})
+      : super(
+          repository: repository,
+          signer: _BoomSigner(),
+          hostKeys: HostKeyPolicy(repository),
+          publicBlob: () => Uint8List.fromList(List.filled(64, 1)),
+        );
+
+  @override
+  Future<T> runPasswordBootstrap<T>({
+    required Host host,
+    required EphemeralPassword password,
+    required UnknownHostKeyHandler onUnknownHostKey,
+    required Future<T> Function(SSHClient client) body,
+  }) async {
+    lastHostKeyAccepted = true;
+    lastServerAuthMethods = const {'password'};
+    // Client unused: [appendAuthorizedKeysLine] is overridden.
+    return body(_FakeSshClient());
+  }
+
+  @override
+  Future<KeyInstallAppendResult> appendAuthorizedKeysLine({
+    required SSHClient client,
+    required String keyBody,
+    required String fullLine,
+  }) async {
+    throw TimeoutException('remote append exec timed out');
+  }
+}
+
+/// Prompts TOFU then aborts like a declined unknown host key.
+class _TofuDeclineFlowPool extends SshSessionPool {
+  _TofuDeclineFlowPool({required HostRepository repository})
+      : super(
+          repository: repository,
+          signer: _BoomSigner(),
+          hostKeys: HostKeyPolicy(repository),
+          publicBlob: () => Uint8List.fromList(List.filled(64, 1)),
+        );
+
+  @override
+  Future<T> runPasswordBootstrap<T>({
+    required Host host,
+    required EphemeralPassword password,
+    required UnknownHostKeyHandler onUnknownHostKey,
+    required Future<T> Function(SSHClient client) body,
+  }) async {
+    final accepted = await onUnknownHostKey(
+      host.id,
+      'ssh-ed25519',
+      'SHA256:declined-fp',
+    );
+    lastHostKeyAccepted = accepted;
+    lastHostKeyDeclined = !accepted;
+    if (!accepted) {
+      throw SSHAuthAbortError('host key rejected');
+    }
+    return body(_FakeSshClient());
+  }
+}
+
+class _FakeSshClient extends Fake implements SSHClient {}
 
 class _BoomSigner implements HardwareSigner {
   @override

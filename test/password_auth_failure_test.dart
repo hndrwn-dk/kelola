@@ -159,5 +159,21 @@ void main() {
       expect(failure.mode, PasswordAuthFailureMode.connectionFailed);
       expect(failure.offerRetry, isFalse);
     });
+
+    test('declined TOFU is hostKeyDeclined not connectionFailed', () {
+      final failure = classifySshBootstrapError(
+        SSHAuthAbortError('host key rejected'),
+        hostKeyAccepted: false,
+        hostKeyDeclined: true,
+        serverAuthMethods: const {},
+      );
+
+      expect(failure.mode, PasswordAuthFailureMode.hostKeyDeclined);
+      expect(failure.offerRetry, isFalse);
+      expect(failure.message.toLowerCase(), contains('host key'));
+      expect(failure.message.toLowerCase(), isNot(contains('connect')));
+      expect(failure.message.toLowerCase(), isNot(contains('network')));
+      expect(failure.message.toLowerCase(), isNot(contains('password error')));
+    });
   });
 }
