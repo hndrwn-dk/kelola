@@ -158,17 +158,17 @@ final sessionPoolProvider = Provider<SshSessionPool>((ref) {
   return pool;
 });
 
-final hostsProvider = FutureProvider<List<Host>>((ref) async {
-  final hosts = await ref.watch(hostRepositoryProvider).list();
-  return sortByAttention(hosts);
+/// Live host membership and attention from Drift table watches.
+final hostsProvider = StreamProvider<List<Host>>((ref) {
+  return ref.watch(hostRepositoryProvider).watchList().map(sortByAttention);
 });
 
-final recentsProvider = FutureProvider<List<Host>>((ref) {
-  return ref.watch(hostRepositoryProvider).recentHosts();
+final recentsProvider = StreamProvider<List<Host>>((ref) {
+  return ref.watch(hostRepositoryProvider).watchRecentHosts();
 });
 
-final lastHostIdProvider = FutureProvider<String?>((ref) {
-  return ref.watch(hostRepositoryProvider).lastHostId();
+final lastHostIdProvider = StreamProvider<String?>((ref) {
+  return ref.watch(hostRepositoryProvider).watchLastHostId();
 });
 
 final _searchUnitsFromDbProvider =
