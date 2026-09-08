@@ -98,6 +98,10 @@ class SshSessionPool {
     return follow != null && !follow.isClosed;
   }
 
+  /// Test hook: clients currently held in the key-auth pool for [hostId].
+  /// Bootstrap open must leave this at 0.
+  int debugPooledCount(String hostId) => _pool[hostId]?.length ?? 0;
+
   int get activeFollowCount =>
       _follows.values.where((h) => h.isOpen).length;
 
@@ -454,14 +458,50 @@ class SshSessionPool {
             onPasswordRequest: passwordRequest,
           );
 
+    try {
+      return await createAndAuthenticateClient(
+        socket: socket,
+        username: host.username,
+        identities: identities,
+        onVerifyHostKey: verifyHostKey,
+        onPasswordRequest: passwordHandler,
+      );
+    } catch (e) {
+      // Mirror execute: changed pins must surface HostKeyMismatchException so
+      // enrollment mismatch UI runs (not TOFU for an unknown key).
+      if (e is HostKeyMismatchException) {
+        rethrow;
+      }
+      if (e is SSHAuthAbortError || e is SSHHostkeyError) {
+        final mismatch = _hostKeys.takeMismatch();
+        if (mismatch != null) {
+          throw mismatch;
+        }
+      }
+      rethrow;
+    }
+  }
+
+  /// Builds the SSH client and awaits authentication.
+  ///
+  /// Override in tests to drive host-key / password handlers without a real
+  /// handshake. Production path closes the client before rethrowing.
+  Future<SSHClient> createAndAuthenticateClient({
+    required SSHSocket socket,
+    required String username,
+    required List<SSHIdentity>? identities,
+    required Future<bool> Function(String type, Uint8List fingerprint)
+        onVerifyHostKey,
+    FutureOr<String?> Function()? onPasswordRequest,
+  }) async {
     final client = SSHClient(
       socket,
-      username: host.username,
+      username: username,
       identities: identities,
       algorithms: KelolaAlgorithms.ssh,
       keepAliveInterval: const Duration(seconds: 30),
-      onVerifyHostKey: verifyHostKey,
-      onPasswordRequest: passwordHandler,
+      onVerifyHostKey: onVerifyHostKey,
+      onPasswordRequest: onPasswordRequest,
     );
     try {
       // Must outlast the TOFU prompt. dartssh2 holds NEWKEYS until verify
