@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:meta/meta.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/ssh/openssh_ecdsa.dart';
@@ -390,7 +391,7 @@ Future<void> runPasswordKeyInstallFlow({
         fullLine: fullLine,
       );
 
-      await _recordKeyInstallAudit(
+      await recordKeyInstallAudit(
         repo: repo,
         host: host,
         append: append,
@@ -451,7 +452,8 @@ Future<bool?> verifyAfterPasswordKeyInstall({
   }
 }
 
-Future<void> _recordKeyInstallAudit({
+@visibleForTesting
+Future<void> recordKeyInstallAudit({
   required HostRepository repo,
   required Host host,
   required KeyInstallAppendResult append,
