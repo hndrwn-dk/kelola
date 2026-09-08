@@ -18,6 +18,7 @@ import 'package:kelola/domain/journal/journal_entry.dart';
 import 'package:kelola/domain/journal/journal_follow.dart';
 import 'package:kelola/domain/journal/journal_view.dart';
 import 'package:kelola/data/ssh/dart_sftp_port.dart';
+import 'package:kelola/domain/enrollment/ephemeral_password.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/probes/journal_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
@@ -32,6 +33,22 @@ typedef JournalFollowOpener = Future<JournalFollowChannel> Function({
   required String command,
   UnknownHostKeyHandler? onUnknownHostKey,
 });
+
+/// Password handler that yields material only after host-key verify accepts.
+///
+/// dartssh2 may invoke [SSHClient.onPasswordRequest] around auth; gate so the
+/// password is never returned until TOFU/mismatch handling completes.
+FutureOr<String?> Function() gatedPasswordRequest({
+  required Completer<bool> hostKeyAccepted,
+  required FutureOr<String?> Function() onPasswordRequest,
+}) {
+  return () async {
+    if (!await hostKeyAccepted.future) {
+      return null;
+    }
+    return await onPasswordRequest();
+  };
+}
 
 class SshSessionPool {
   SshSessionPool({
@@ -61,6 +78,16 @@ class SshSessionPool {
   final Map<String, SSHClient> _followClients = {};
   final Map<String, JournalFollowHandle> _follows = {};
   final ProbeAuditPolicy _auditPolicy = ProbeAuditPolicy();
+
+  /// True when the most recent client open used password auth.
+  /// Cleared at the start of every open via [noteClientOpen].
+  bool lastOpenUsedPassword = false;
+
+  /// Records whether the upcoming client construction used password.
+  /// Overridable in tests; production sets [lastOpenUsedPassword].
+  void noteClientOpen({required bool usedPassword}) {
+    lastOpenUsedPassword = usedPassword;
+  }
 
   bool hasLiveSession(String hostId) {
     final list = _pool[hostId];
@@ -293,9 +320,9 @@ class SshSessionPool {
     if (used >= maxPerHost) {
       await _pool[host.id]!.removeLast().close();
     }
-    final client = await _open(
+    final client = await openSession(
       host,
-      {host.id},
+      visiting: {host.id},
       onUnknownHostKey: onUnknownHostKey,
     );
     _followClients[host.id] = client;
@@ -326,9 +353,9 @@ class SshSessionPool {
       return existing.first;
     }
 
-    final client = await _open(
+    final client = await openSession(
       host,
-      visiting,
+      visiting: visiting,
       onUnknownHostKey: onUnknownHostKey,
     );
     final list = _pool.putIfAbsent(host.id, () => []);
@@ -339,12 +366,12 @@ class SshSessionPool {
     return client;
   }
 
-  Future<SSHClient> _open(
+  /// Opens a TCP/jump socket for [host]. Override in tests to avoid real SSH.
+  Future<SSHSocket> connectSocket(
     Host host,
     Set<String> visiting, {
     UnknownHostKeyHandler? onUnknownHostKey,
   }) async {
-    SSHSocket socket;
     if (host.jumpHostId != null) {
       final jump = await _repository.get(host.jumpHostId!);
       if (jump == null) {
@@ -355,37 +382,86 @@ class SshSessionPool {
         visiting: visiting,
         onUnknownHostKey: onUnknownHostKey,
       );
-      socket = await jumpClient.forwardLocal(host.address, host.port);
-    } else {
-      socket = await SSHSocket.connect(
-        host.address,
-        host.port,
-        timeout: const Duration(seconds: 12),
+      return jumpClient.forwardLocal(host.address, host.port);
+    }
+    return SSHSocket.connect(
+      host.address,
+      host.port,
+      timeout: const Duration(seconds: 12),
+    );
+  }
+
+  /// Opens an SSH client. Normal pool / execute paths must omit
+  /// [onPasswordRequest] (key identity only). Password bootstrap is the sole
+  /// caller that passes a password handler — and must not insert the client
+  /// into [_pool].
+  ///
+  /// Fresh verify after bootstrap: [disconnect] then [execute] (or
+  /// [verifyFreshKeyAuth]) so a new key-only client is acquired.
+  Future<SSHClient> openSession(
+    Host host, {
+    Set<String>? visiting,
+    UnknownHostKeyHandler? onUnknownHostKey,
+    FutureOr<String?> Function()? onPasswordRequest,
+  }) async {
+    visiting ??= <String>{host.id};
+    final usePassword = onPasswordRequest != null;
+    // Record before connect so tests can inspect password vs key-only without
+    // completing a real handshake.
+    noteClientOpen(usedPassword: usePassword);
+
+    final socket = await connectSocket(
+      host,
+      visiting,
+      onUnknownHostKey: onUnknownHostKey,
+    );
+
+    final hostKeyGate = Completer<bool>();
+
+    Future<bool> verifyHostKey(String type, Uint8List fingerprint) async {
+      final accepted = await _hostKeys.verify(
+        hostId: host.id,
+        algorithm: type,
+        fingerprintBytes: fingerprint,
+        onUnknown: onUnknownHostKey == null
+            ? null
+            : (algorithm, fp) => onUnknownHostKey(host.id, algorithm, fp),
       );
+      if (usePassword && !hostKeyGate.isCompleted) {
+        hostKeyGate.complete(accepted);
+      }
+      return accepted;
     }
 
-    final identity = HardwareSshIdentity(
-      signer: _signer,
-      alias: host.keyAlias,
-      publicBlob: _publicBlob(),
-    ).toIdentity();
+    // Password bootstrap: no key identities (avoids hardware presence prompts
+    // while the key is not yet authorized). Key-only opens keep identities and
+    // never set onPasswordRequest.
+    final List<SSHIdentity>? identities = usePassword
+        ? null
+        : [
+            HardwareSshIdentity(
+              signer: _signer,
+              alias: host.keyAlias,
+              publicBlob: _publicBlob(),
+            ).toIdentity(),
+          ];
+
+    final passwordRequest = onPasswordRequest;
+    final FutureOr<String?> Function()? passwordHandler = passwordRequest == null
+        ? null
+        : gatedPasswordRequest(
+            hostKeyAccepted: hostKeyGate,
+            onPasswordRequest: passwordRequest,
+          );
 
     final client = SSHClient(
       socket,
       username: host.username,
-      identities: [identity],
+      identities: identities,
       algorithms: KelolaAlgorithms.ssh,
       keepAliveInterval: const Duration(seconds: 30),
-      onVerifyHostKey: (type, fingerprint) {
-        return _hostKeys.verify(
-          hostId: host.id,
-          algorithm: type,
-          fingerprintBytes: fingerprint,
-          onUnknown: onUnknownHostKey == null
-              ? null
-              : (algorithm, fp) => onUnknownHostKey(host.id, algorithm, fp),
-        );
-      },
+      onVerifyHostKey: verifyHostKey,
+      onPasswordRequest: passwordHandler,
     );
     try {
       // Must outlast the TOFU prompt. dartssh2 holds NEWKEYS until verify
@@ -396,6 +472,68 @@ class SshSessionPool {
       await client.close();
       rethrow;
     }
+  }
+
+  /// Password-only bootstrap open. Client is **not** inserted into the pool —
+  /// callers must close it and must not treat it as proof of key auth.
+  Future<SSHClient> openPasswordBootstrap(
+    Host host, {
+    required FutureOr<String?> Function() onPasswordRequest,
+    UnknownHostKeyHandler? onUnknownHostKey,
+  }) {
+    return openSession(
+      host,
+      visiting: {host.id},
+      onUnknownHostKey: onUnknownHostKey,
+      onPasswordRequest: onPasswordRequest,
+    );
+  }
+
+  /// Runs [body] on a non-pooled password bootstrap client, then closes it
+  /// and [disconnect]s so verify cannot reuse the bootstrap session.
+  ///
+  /// After this returns, call [verifyFreshKeyAuth] (or [disconnect] then
+  /// key-only [execute]) for STEP 5 verify — never reuse the bootstrap client.
+  Future<T> runPasswordBootstrap<T>({
+    required Host host,
+    required EphemeralPassword password,
+    required UnknownHostKeyHandler onUnknownHostKey,
+    required Future<T> Function(SSHClient client) body,
+  }) async {
+    SSHClient? client;
+    try {
+      client = await openPasswordBootstrap(
+        host,
+        onUnknownHostKey: onUnknownHostKey,
+        // openSession gates password behind host-key accept; pass read only.
+        onPasswordRequest: () => password.read(),
+      );
+      return await body(client);
+    } finally {
+      if (client != null && !client.isClosed) {
+        await client.close();
+      }
+      await disconnect(host.id);
+    }
+  }
+
+  /// Fresh key-only proof after password bootstrap.
+  ///
+  /// Disconnects [host.id] first so any leftover pooled/bootstrap session
+  /// cannot satisfy verify, then [execute]s with key identity only.
+  Future<T> verifyFreshKeyAuth<T>(
+    Host host,
+    Probe<T> probe, {
+    HostFacts? facts,
+    UnknownHostKeyHandler? onUnknownHostKey,
+  }) async {
+    await disconnect(host.id);
+    return execute(
+      host,
+      probe,
+      facts: facts,
+      onUnknownHostKey: onUnknownHostKey,
+    );
   }
 
   Future<void> disconnect(String hostId) async {
