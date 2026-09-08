@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/domain/enrollment/password_auth_failure.dart';
 
@@ -68,6 +72,92 @@ void main() {
       expect(connection.message, isNot(disabled.message));
       expect(connection.message, isNot(rejected.message));
       expect(disabled.message, isNot(rejected.message));
+    });
+  });
+
+  group('classifySshBootstrapError', () {
+    test('socket timeout maps to connectionFailed', () {
+      final failure = classifySshBootstrapError(
+        TimeoutException('SSH connect timed out'),
+        hostKeyAccepted: false,
+        serverAuthMethods: const {},
+      );
+
+      expect(failure.mode, PasswordAuthFailureMode.connectionFailed);
+      expect(failure.offerRetry, isFalse);
+      expect(failure.message.toLowerCase(), contains('connect'));
+      expect(failure.message.toLowerCase(), contains('not a password error'));
+    });
+
+    test('SocketException maps to connectionFailed even if host key accepted', () {
+      final failure = classifySshBootstrapError(
+        const SocketException('Connection refused'),
+        hostKeyAccepted: true,
+        serverAuthMethods: const {'password'},
+      );
+
+      expect(failure.mode, PasswordAuthFailureMode.connectionFailed);
+      expect(failure.offerRetry, isFalse);
+    });
+
+    test('auth abort with no password method is passwordDisabled', () {
+      final failure = classifySshBootstrapError(
+        SSHAuthAbortError('Connection closed before authentication'),
+        hostKeyAccepted: true,
+        serverAuthMethods: const {'publickey'},
+      );
+
+      expect(failure.mode, PasswordAuthFailureMode.passwordDisabled);
+      expect(failure.offerRetry, isFalse);
+      expect(
+        failure.message.toLowerCase(),
+        anyOf(contains('not offered'), contains('disabled'), contains('did not offer')),
+      );
+    });
+
+    test('auth fail after password offered is rejected with retry', () {
+      final failure = classifySshBootstrapError(
+        SSHAuthFailError('All authentication methods failed'),
+        hostKeyAccepted: true,
+        serverAuthMethods: const {'publickey', 'password'},
+      );
+
+      expect(failure.mode, PasswordAuthFailureMode.rejected);
+      expect(failure.offerRetry, isTrue);
+      expect(failure.message.toLowerCase(), contains('password'));
+    });
+
+    test('empty methods use message heuristic for password disabled', () {
+      final failure = classifySshBootstrapError(
+        SSHAuthFailError('password authentication disabled'),
+        hostKeyAccepted: true,
+        serverAuthMethods: const {},
+      );
+
+      expect(failure.mode, PasswordAuthFailureMode.passwordDisabled);
+      expect(failure.offerRetry, isFalse);
+    });
+
+    test('empty methods default SSHAuthFailError to rejected', () {
+      final failure = classifySshBootstrapError(
+        SSHAuthFailError('All authentication methods failed'),
+        hostKeyAccepted: true,
+        serverAuthMethods: const {},
+      );
+
+      expect(failure.mode, PasswordAuthFailureMode.rejected);
+      expect(failure.offerRetry, isTrue);
+    });
+
+    test('host key not accepted is connectionFailed', () {
+      final failure = classifySshBootstrapError(
+        SSHAuthAbortError('host key rejected', SSHHostkeyError('mismatch')),
+        hostKeyAccepted: false,
+        serverAuthMethods: const {'password'},
+      );
+
+      expect(failure.mode, PasswordAuthFailureMode.connectionFailed);
+      expect(failure.offerRetry, isFalse);
     });
   });
 }
