@@ -112,6 +112,10 @@ class SshSessionPool {
   /// Reset to false when a password open begins; set from verify.
   bool lastHostKeyAccepted = false;
 
+  /// True when the user declined an unknown host key (TOFU cancel) during the
+  /// latest password bootstrap open. Distinct from never reaching verify.
+  bool lastHostKeyDeclined = false;
+
   /// Last `methodsLeft` captured from dartssh2 userauth failure traces for the
   /// latest password bootstrap attempt. Empty until a failure message arrives.
   Set<String> lastServerAuthMethods = {};
@@ -122,6 +126,7 @@ class SshSessionPool {
     lastOpenUsedPassword = usedPassword;
     if (usedPassword) {
       lastHostKeyAccepted = false;
+      lastHostKeyDeclined = false;
       lastServerAuthMethods = {};
     }
   }
@@ -477,7 +482,13 @@ class SshSessionPool {
         fingerprintBytes: fingerprint,
         onUnknown: onUnknownHostKey == null
             ? null
-            : (algorithm, fp) => onUnknownHostKey(host.id, algorithm, fp),
+            : (algorithm, fp) async {
+                final ok = await onUnknownHostKey(host.id, algorithm, fp);
+                if (usePassword && !ok) {
+                  lastHostKeyDeclined = true;
+                }
+                return ok;
+              },
       );
       if (usePassword) {
         lastHostKeyAccepted = accepted;

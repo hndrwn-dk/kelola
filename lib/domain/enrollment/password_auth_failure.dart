@@ -7,6 +7,7 @@ enum PasswordAuthFailureMode {
   rejected,
   passwordDisabled,
   connectionFailed,
+  hostKeyDeclined,
 }
 
 class PasswordAuthFailure {
@@ -25,7 +26,18 @@ PasswordAuthFailure classifyPasswordAuthFailure({
   required Object error,
   required bool hostKeyVerified,
   required bool passwordMethodOffered,
+  bool hostKeyDeclined = false,
 }) {
+  if (hostKeyDeclined) {
+    return const PasswordAuthFailure(
+      mode: PasswordAuthFailureMode.hostKeyDeclined,
+      message:
+          'Host key was not trusted. No password was sent and nothing was written. '
+          'Use the manual install path, or try again after confirming the fingerprint.',
+      offerRetry: false,
+    );
+  }
+
   if (!hostKeyVerified) {
     return const PasswordAuthFailure(
       mode: PasswordAuthFailureMode.connectionFailed,
@@ -59,11 +71,24 @@ PasswordAuthFailure classifyPasswordAuthFailure({
 ///
 /// Prefer [serverAuthMethods] from the server when present. Message heuristics
 /// are used only when that set is empty, to distinguish disabled vs rejected.
+///
+/// When [hostKeyDeclined] is true (user cancelled TOFU), that wins over
+/// connection-failure copy even if [hostKeyAccepted] is false.
 PasswordAuthFailure classifySshBootstrapError(
   Object error, {
   required bool hostKeyAccepted,
   required Set<String> serverAuthMethods,
+  bool hostKeyDeclined = false,
 }) {
+  if (hostKeyDeclined) {
+    return classifyPasswordAuthFailure(
+      error: error,
+      hostKeyVerified: false,
+      passwordMethodOffered: false,
+      hostKeyDeclined: true,
+    );
+  }
+
   if (!hostKeyAccepted || _isConnectionFailure(error)) {
     return classifyPasswordAuthFailure(
       error: error,
