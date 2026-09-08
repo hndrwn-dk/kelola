@@ -146,6 +146,7 @@ void main() {
     );
     expect(pool.passwordReturnedBeforeVerify, isFalse);
     expect(pool.passwordResult, 'secret');
+    expect(pool.lastHostKeyAccepted, isTrue);
   });
 
   test('openSession gate: password is null when host-key rejects', () async {
@@ -161,6 +162,42 @@ void main() {
     );
     expect(pool.passwordReturnedBeforeVerify, isFalse);
     expect(pool.passwordResult, isNull);
+    expect(pool.lastHostKeyAccepted, isFalse);
+  });
+
+  test('parseUserauthFailureMethodsLeft extracts methodsLeft list', () {
+    expect(
+      parseUserauthFailureMethodsLeft(
+        '<- Instance of \'_DummySocket\': '
+        'SSH_Message_Userauth_Failure(methodsLeft: [publickey, keyboard-interactive], '
+        'partialSuccess: false)',
+      ),
+      {'publickey', 'keyboard-interactive'},
+    );
+    expect(
+      parseUserauthFailureMethodsLeft(
+        'SSH_Message_Userauth_Failure(methodsLeft: [password], partialSuccess: false)',
+      ),
+      {'password'},
+    );
+    expect(
+      parseUserauthFailureMethodsLeft(
+        'SSH_Message_Userauth_Failure(methodsLeft: [], partialSuccess: false)',
+      ),
+      <String>{},
+    );
+    expect(parseUserauthFailureMethodsLeft('unrelated trace'), isNull);
+  });
+
+  test('considerAuthTrace records lastServerAuthMethods', () {
+    final pool = _RecordingPool(repository: repo);
+    pool.noteClientOpen(usedPassword: true);
+    expect(pool.lastServerAuthMethods, isEmpty);
+
+    pool.considerAuthTrace(
+      'SSH_Message_Userauth_Failure(methodsLeft: [publickey], partialSuccess: false)',
+    );
+    expect(pool.lastServerAuthMethods, {'publickey'});
   });
 }
 

@@ -19,8 +19,10 @@ import 'package:kelola/domain/journal/journal_follow.dart';
 import 'package:kelola/domain/journal/journal_view.dart';
 import 'package:kelola/data/ssh/dart_sftp_port.dart';
 import 'package:kelola/domain/enrollment/ephemeral_password.dart';
+import 'package:kelola/domain/enrollment/key_install_script.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/probes/journal_probe.dart';
+import 'package:kelola/domain/probes/key_install_append_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/domain/probes/sftp_probe.dart';
@@ -48,6 +50,29 @@ FutureOr<String?> Function() gatedPasswordRequest({
     }
     return await onPasswordRequest();
   };
+}
+
+/// Parses dartssh2 [printTrace] lines for `SSH_Message_Userauth_Failure`.
+///
+/// dartssh2 does not expose `methodsLeft` on [SSHAuthFailError]; the failure
+/// message is only visible on the partial-auth trace path. Returns null when
+/// the line is not a userauth failure.
+Set<String>? parseUserauthFailureMethodsLeft(String trace) {
+  final match = RegExp(
+    r'SSH_Message_Userauth_Failure\(methodsLeft:\s*\[(.*?)\]',
+  ).firstMatch(trace);
+  if (match == null) {
+    return null;
+  }
+  final inner = match.group(1)!.trim();
+  if (inner.isEmpty) {
+    return <String>{};
+  }
+  return inner
+      .split(',')
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty)
+      .toSet();
 }
 
 class SshSessionPool {
@@ -83,10 +108,33 @@ class SshSessionPool {
   /// Cleared at the start of every open via [noteClientOpen].
   bool lastOpenUsedPassword = false;
 
+  /// Whether host-key verify accepted for the latest password bootstrap open.
+  /// Reset to false when a password open begins; set from verify.
+  bool lastHostKeyAccepted = false;
+
+  /// Last `methodsLeft` captured from dartssh2 userauth failure traces for the
+  /// latest password bootstrap attempt. Empty until a failure message arrives.
+  Set<String> lastServerAuthMethods = {};
+
   /// Records whether the upcoming client construction used password.
   /// Overridable in tests; production sets [lastOpenUsedPassword].
   void noteClientOpen({required bool usedPassword}) {
     lastOpenUsedPassword = usedPassword;
+    if (usedPassword) {
+      lastHostKeyAccepted = false;
+      lastServerAuthMethods = {};
+    }
+  }
+
+  /// Hook for dartssh2 [SSHClient.printTrace] during bootstrap auth.
+  void considerAuthTrace(String? message) {
+    if (message == null) {
+      return;
+    }
+    final methods = parseUserauthFailureMethodsLeft(message);
+    if (methods != null) {
+      lastServerAuthMethods = methods;
+    }
   }
 
   bool hasLiveSession(String hostId) {
@@ -431,8 +479,11 @@ class SshSessionPool {
             ? null
             : (algorithm, fp) => onUnknownHostKey(host.id, algorithm, fp),
       );
-      if (usePassword && !hostKeyGate.isCompleted) {
-        hostKeyGate.complete(accepted);
+      if (usePassword) {
+        lastHostKeyAccepted = accepted;
+        if (!hostKeyGate.isCompleted) {
+          hostKeyGate.complete(accepted);
+        }
       }
       return accepted;
     }
@@ -502,6 +553,9 @@ class SshSessionPool {
       keepAliveInterval: const Duration(seconds: 30),
       onVerifyHostKey: onVerifyHostKey,
       onPasswordRequest: onPasswordRequest,
+      // dartssh2 only surfaces methodsLeft on Userauth_Failure traces, not on
+      // SSHAuthFailError — capture them for password-bootstrap classification.
+      printTrace: onPasswordRequest == null ? null : considerAuthTrace,
     );
     try {
       // Must outlast the TOFU prompt. dartssh2 holds NEWKEYS until verify
@@ -512,6 +566,24 @@ class SshSessionPool {
       await client.close();
       rethrow;
     }
+  }
+
+  /// Appends [fullLine] via [KeyInstallAppendProbe] on an authenticated client.
+  ///
+  /// Overridable in tests so UI flows can assert verify/mismatch without SSH.
+  Future<KeyInstallAppendResult> appendAuthorizedKeysLine({
+    required SSHClient client,
+    required String keyBody,
+    required String fullLine,
+  }) async {
+    final install = KeyInstallAppendProbe(keyBody: keyBody, fullLine: fullLine);
+    final command = install.command(HostFacts.undiscovered);
+    final result = await client.runWithResult(command).timeout(install.timeout);
+    return install.parse(
+      utf8.decode(result.stdout, allowMalformed: true),
+      utf8.decode(result.stderr, allowMalformed: true),
+      result.exitCode ?? -1,
+    );
   }
 
   /// Password-only bootstrap open. Client is **not** inserted into the pool —
