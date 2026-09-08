@@ -10,6 +10,7 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_inventory_view.dart';
 import 'package:kelola/domain/hosts/pooled_run.dart';
+import 'package:kelola/domain/hosts/stable_host_inventory.dart';
 import 'package:kelola/domain/incident/incident_sheet.dart';
 import 'package:kelola/domain/widget/publish_home_widget.dart';
 import 'package:kelola/domain/llm/settings.dart';
@@ -42,6 +43,17 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   var _widgetOn = false;
   final Set<HostInventoryBucket> _forceExpanded = {};
   final Set<HostInventoryBucket> _forceCollapsed = {};
+  final _stableInventory = StableHostInventory();
+  /// One-shot: pull-to-refresh finished probing and may re-bucket.
+  var _allowInventoryReorder = false;
+
+  bool _takeAllowReorder() {
+    if (!_allowInventoryReorder) {
+      return false;
+    }
+    _allowInventoryReorder = false;
+    return true;
+  }
 
   @override
   void initState() {
@@ -71,11 +83,15 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     final hosts = ref.watch(hostsProvider);
     final lastHostId = ref.watch(lastHostIdProvider).valueOrNull;
     final pool = ref.watch(sessionPoolProvider);
-    final summary = hosts.maybeWhen(
-      data: (list) =>
-          list.isEmpty ? null : HostInventoryView.build(list).summary,
-      orElse: () => null,
-    );
+    final liveList = hosts.valueOrNull;
+    HostInventoryView? inventory;
+    if (liveList != null && liveList.isNotEmpty) {
+      inventory = _stableInventory.project(
+        liveList,
+        allowReorder: _takeAllowReorder(),
+      );
+    }
+    final summary = inventory?.summary;
 
     return Scaffold(
       backgroundColor: c.ink,
@@ -119,7 +135,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                           builder: (_) => const AddHostScreen(),
                         ),
                       );
-                      _invalidate();
+                      _reloadSideState();
                     },
                   ),
                 ],
@@ -128,53 +144,75 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                 child: hosts.when(
                   data: (list) {
                     if (list.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Kelola',
-                                style: KelolaType.display(
-                                  color: c.text,
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                "Add your first server. You'll need SSH access and a minute.",
-                                textAlign: TextAlign.center,
-                                style: KelolaType.body(color: c.muted, size: 14),
-                              ),
-                              const SizedBox(height: 16),
-                              FilledButton(
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (_) => const AddHostScreen(),
-                                    ),
-                                  );
-                                },
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: c.amber,
-                                ),
-                                child: Text(
-                                  'Add host',
-                                  style: KelolaType.display(
-                                    color: c.ink,
-                                    size: 13,
+                      return RefreshIndicator(
+                        color: c.amber,
+                        onRefresh: () => _refresh(const []),
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            SizedBox(
+                              height: MediaQuery.sizeOf(context).height * 0.45,
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Kelola',
+                                        style: KelolaType.display(
+                                          color: c.text,
+                                          size: 22,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        "Add your first server. You'll need SSH access and a minute.",
+                                        textAlign: TextAlign.center,
+                                        style: KelolaType.body(
+                                          color: c.muted,
+                                          size: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      FilledButton(
+                                        onPressed: () async {
+                                          await Navigator.of(context).push(
+                                            MaterialPageRoute<void>(
+                                              builder: (_) =>
+                                                  const AddHostScreen(),
+                                            ),
+                                          );
+                                          _loadAudit();
+                                        },
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: c.amber,
+                                        ),
+                                        child: Text(
+                                          'Add host',
+                                          style: KelolaType.display(
+                                            color: c.ink,
+                                            size: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       );
                     }
-                    final view = HostInventoryView.build(list);
+                    final view = inventory ??
+                        _stableInventory.project(
+                          list,
+                          allowReorder: false,
+                        );
                     Host? resume;
-                    if (lastHostId != null && pool.hasLiveSession(lastHostId)) {
+                    if (lastHostId != null &&
+                        pool.hasLiveSession(lastHostId)) {
                       for (final h in list) {
                         if (h.id == lastHostId) {
                           resume = h;
@@ -473,10 +511,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     };
   }
 
-  void _invalidate() {
-    ref.invalidate(hostsProvider);
-    ref.invalidate(recentsProvider);
-    ref.invalidate(lastHostIdProvider);
+  void _reloadSideState() {
     _loadAudit();
   }
 
@@ -504,15 +539,19 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         if (error != null) {
           await storeInventoryPingFailed(repo: repo, host: host);
         }
-        if (mounted) {
-          _invalidate();
-        }
       },
     );
     await publishHomeWidget(
       repo: repo,
       bridge: ref.read(homeWidgetBridgeProvider),
     );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _allowInventoryReorder = true;
+    });
+    _loadAudit();
   }
 
   Future<void> _toggleWidget() async {
@@ -534,7 +573,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     }
     await ref.read(sessionPoolProvider).disconnect(host.id);
     await ref.read(hostRepositoryProvider).delete(host.id);
-    _invalidate();
+    _reloadSideState();
   }
 
   Future<void> _editHost(Host host) async {
@@ -543,7 +582,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         builder: (_) => EditHostScreen(hostId: host.id),
       ),
     );
-    _invalidate();
+    _reloadSideState();
   }
 
   Future<void> _hostActions(Host host) {
@@ -566,6 +605,6 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         builder: (_) => HostDashboardScreen(hostId: host.id),
       ),
     );
-    _invalidate();
+    _reloadSideState();
   }
 }

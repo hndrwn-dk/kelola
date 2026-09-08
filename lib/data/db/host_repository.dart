@@ -30,6 +30,28 @@ class HostRepository {
     final rows = await _db.select(_db.hosts).get();
     final facts = await _db.select(_db.cachedFacts).get();
     final tags = await _db.select(_db.hostTags).get();
+    return _hostsFromRows(rows, facts, tags);
+  }
+
+  /// Live membership + attention. Re-emits when hosts, facts, or tags change.
+  Stream<List<Host>> watchList() async* {
+    yield await list();
+    yield* _db
+        .tableUpdates(
+          TableUpdateQuery.onAllTables([
+            _db.hosts,
+            _db.cachedFacts,
+            _db.hostTags,
+          ]),
+        )
+        .asyncMap((_) => list());
+  }
+
+  List<Host> _hostsFromRows(
+    List<HostRow> rows,
+    List<CachedFactsRow> facts,
+    List<HostTagRow> tags,
+  ) {
     final byHost = {for (final f in facts) f.hostId: f};
     final tagsByHost = <String, List<String>>{};
     for (final t in tags) {
@@ -291,6 +313,12 @@ class HostRepository {
     return row?.lastHostId;
   }
 
+  Stream<String?> watchLastHostId() {
+    return (_db.select(_db.appSettings)..where((t) => t.id.equals(1)))
+        .watchSingleOrNull()
+        .map((row) => row?.lastHostId);
+  }
+
   Future<AppSettingsRow?> _settings() {
     return (_db.select(_db.appSettings)..where((t) => t.id.equals(1)))
         .getSingleOrNull();
@@ -460,6 +488,24 @@ class HostRepository {
           ..orderBy([(t) => OrderingTerm.desc(t.viewedAt)])
           ..limit(20))
         .get();
+    return _hostsFromRecentRows(rows);
+  }
+
+  Stream<List<Host>> watchRecentHosts() async* {
+    yield await recentHosts();
+    yield* _db
+        .tableUpdates(
+          TableUpdateQuery.onAllTables([
+            _db.recents,
+            _db.hosts,
+            _db.cachedFacts,
+            _db.hostTags,
+          ]),
+        )
+        .asyncMap((_) => recentHosts());
+  }
+
+  Future<List<Host>> _hostsFromRecentRows(List<RecentRow> rows) async {
     final seen = <String>{};
     final hosts = <Host>[];
     for (final row in rows) {

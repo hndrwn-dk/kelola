@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/app.dart';
@@ -91,6 +92,9 @@ void main() {
     expect(find.text('2 FAILED'), findsOneWidget);
     expect(find.byType(OsIcon), findsWidgets);
     expect(find.byType(SectionSlab), findsNWidgets(3));
+    await db.close();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('healthy group over 8 hosts collapses until the header is tapped',
@@ -132,5 +136,8 @@ void main() {
 
     expect(find.text('ok-1'), findsOneWidget);
     expect(find.text('ok-9'), findsOneWidget);
+    await db.close();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 }
