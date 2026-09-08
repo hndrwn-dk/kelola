@@ -18,10 +18,13 @@ import 'package:kelola/domain/enrollment/key_install_script.dart';
 import 'package:kelola/domain/enrollment/password_auth_failure.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/presentation/enrollment/password_key_install_flow.dart';
 import 'package:kelola/presentation/screens/enrollment_screen.dart';
+import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/screens/host_key_mismatch_screen.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
@@ -303,6 +306,95 @@ void main() {
   );
 
   testWidgets(
+    'already present + verify OK navigates to dashboard; audit already_present',
+    (tester) async {
+      final db = KelolaDatabase.memory();
+      addTearDown(() async {
+        await db.close();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+      });
+      final repo = HostRepository(db);
+      final host = await repo.insert(
+        alias: 'pi',
+        address: '127.0.0.1',
+        port: 22,
+        username: 'pi',
+      );
+      final pool = _AlreadyPresentVerifiedPool(repository: repo);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            hostRepositoryProvider.overrideWithValue(repo),
+            sessionPoolProvider.overrideWithValue(pool),
+            enrollmentProvider.overrideWith(_ReadyEnrollment.new),
+          ],
+          child: KelolaApp(
+            home: Consumer(
+              builder: (context, ref, _) {
+                return Scaffold(
+                  body: TextButton(
+                    onPressed: () async {
+                      final verified = await runPasswordKeyInstallFlow(
+                        context: context,
+                        ref: ref,
+                        hostId: host.id,
+                      );
+                      if (!context.mounted || !verified) {
+                        return;
+                      }
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              HostDashboardScreen(hostId: host.id),
+                        ),
+                      );
+                    },
+                    child: const Text('start'),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('start'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'secret');
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Install this key?'), findsOneWidget);
+      await tester.tap(find.text('Install this key'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Key already present'), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      // Host dashboard starts a CPU timer — avoid pumpAndSettle.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(HostDashboardScreen), findsOneWidget);
+
+      final audits = await repo.listAudit();
+      final keyInstall = audits.where(
+        (a) => a.command.startsWith('kelola-key-install'),
+      );
+      expect(keyInstall, hasLength(1));
+      expect(keyInstall.single.command, 'kelola-key-install:already_present');
+      expect(keyInstall.single.title.toLowerCase(), contains('already'));
+      expect(keyInstall.single.title.toLowerCase(), isNot(contains('added')));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    },
+  );
+
+  testWidgets(
     'append exec exception shows append failure not password auth retry',
     (tester) async {
       final db = KelolaDatabase.memory();
@@ -475,6 +567,66 @@ class _VerifyMismatchPool extends SshSessionPool {
       seenFingerprint: 'seen-fp',
       algorithm: 'ssh-ed25519',
     );
+  }
+}
+
+/// Bootstrap returns exit-3 alreadyPresent; fresh key verify succeeds.
+class _AlreadyPresentVerifiedPool extends SshSessionPool {
+  _AlreadyPresentVerifiedPool({required HostRepository repository})
+      : super(
+          repository: repository,
+          signer: _BoomSigner(),
+          hostKeys: HostKeyPolicy(repository),
+          publicBlob: () => Uint8List.fromList(List.filled(64, 1)),
+        );
+
+  @override
+  Future<T> runPasswordBootstrap<T>({
+    required Host host,
+    required EphemeralPassword password,
+    required UnknownHostKeyHandler onUnknownHostKey,
+    required Future<T> Function(SSHClient client) body,
+  }) async {
+    lastHostKeyAccepted = true;
+    lastServerAuthMethods = const {'password'};
+    return body(_FakeSshClient());
+  }
+
+  @override
+  Future<KeyInstallAppendResult> appendAuthorizedKeysLine({
+    required SSHClient client,
+    required String keyBody,
+    required String fullLine,
+  }) async {
+    return const KeyInstallAppendResult(
+      kind: KeyInstallAppendKind.alreadyPresent,
+      homeMode: 'drwx------',
+      createdSsh: false,
+    );
+  }
+
+  @override
+  Future<T> verifyFreshKeyAuth<T>(
+    Host host,
+    Probe<T> probe, {
+    HostFacts? facts,
+    UnknownHostKeyHandler? onUnknownHostKey,
+  }) async {
+    return HostFacts.undiscovered as T;
+  }
+
+  @override
+  Future<T> execute<T>(
+    Host host,
+    Probe<T> probe, {
+    HostFacts? facts,
+    UnknownHostKeyHandler? onUnknownHostKey,
+    void Function(int done, int? total)? onProgress,
+    TransferCancel? cancel,
+    ProbeScope scope = ProbeScope.host,
+  }) async {
+    // Dashboard refresh must not open a real socket in widget tests.
+    return HostFacts.undiscovered as T;
   }
 }
 

@@ -36,11 +36,21 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
       _error = null;
     });
     try {
-      await runPasswordKeyInstallFlow(
+      final verified = await runPasswordKeyInstallFlow(
         context: context,
         ref: ref,
         hostId: widget.hostId,
       );
+      if (!mounted) {
+        return;
+      }
+      if (verified) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(
+            builder: (_) => HostDashboardScreen(hostId: widget.hostId),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _error = describeSshError(e));
