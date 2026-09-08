@@ -17,6 +17,33 @@ void main() {
     expect(() => assertSafeKeyInstallToken('AAAA', label: 'body'), returnsNormally);
   });
 
+  test('buildKeyInstallScript rejects unsafe comment in fullLine', () {
+    const unsafeComments = [
+      "ecdsa-sha2-nistp256 AAAA kel'ola",
+      'ecdsa-sha2-nistp256 AAAA kel"ola',
+      r'ecdsa-sha2-nistp256 AAAA kel\ola',
+      'ecdsa-sha2-nistp256 AAAA kel ola',
+      'ecdsa-sha2-nistp256 AAAA kel\nola',
+    ];
+    for (final fullLine in unsafeComments) {
+      expect(
+        () => buildKeyInstallScript(keyBody: body, fullLine: fullLine),
+        throwsArgumentError,
+        reason: fullLine,
+      );
+    }
+  });
+
+  test('buildKeyInstallRemoteCommand rejects unsafe comment in fullLine', () {
+    expect(
+      () => buildKeyInstallRemoteCommand(
+        keyBody: body,
+        fullLine: 'ecdsa-sha2-nistp256 AAAA kel ola',
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('remote command invokes sh not bash', () {
     final cmd = buildKeyInstallRemoteCommand(keyBody: body, fullLine: line);
     expect(cmd.contains('bash'), isFalse);
@@ -74,10 +101,10 @@ void main() {
   });
 
   test('POSIX sh: second run exits 3 and does not duplicate', () async {
-    if (!Platform.isLinux && !Platform.isMacOS) return;
     final dir = await Directory.systemTemp.createTemp('kelola-ak-id-');
     addTearDown(() => dir.delete(recursive: true));
     final home = dir.path;
+    Directory('$home/.ssh').createSync();
     final script = buildKeyInstallScript(keyBody: body, fullLine: line);
     final scriptFile = File('${dir.path}/install.sh')..writeAsStringSync(script);
     Future<ProcessResult> run() => Process.run(
@@ -110,15 +137,36 @@ void main() {
     expect(mode, 0x1C0); // 0700
   });
 
-  test('parseKeyInstallAppendResult maps exit and stdout', () {
+  test('parseKeyInstallAppendResult maps exit 0 to appended with stdout fields', () {
     final a = parseKeyInstallAppendResult(
       exitCode: 0,
       stdout: 'HOME_MODE=drwx------\nCREATED_SSH=1\n',
     );
     expect(a.kind, KeyInstallAppendKind.appended);
+    expect(a.homeMode, 'drwx------');
     expect(a.createdSsh, isTrue);
     expect(homeModeGroupOrWorldWritable('drwxrwxr-x'), isTrue);
     expect(homeModeGroupOrWorldWritable('drwxr-xr-x'), isFalse);
     expect(homeModeGroupOrWorldWritable('drwxr-xr-x.'), isFalse);
+  });
+
+  test('parseKeyInstallAppendResult maps exit 3 to alreadyPresent', () {
+    final a = parseKeyInstallAppendResult(
+      exitCode: 3,
+      stdout: 'HOME_MODE=drwx------\nCREATED_SSH=0\n',
+    );
+    expect(a.kind, KeyInstallAppendKind.alreadyPresent);
+    expect(a.homeMode, 'drwx------');
+    expect(a.createdSsh, isFalse);
+  });
+
+  test('parseKeyInstallAppendResult maps non-0/3 exit to failed', () {
+    final a = parseKeyInstallAppendResult(
+      exitCode: 1,
+      stdout: 'HOME_MODE=drwx------\nCREATED_SSH=0\n',
+    );
+    expect(a.kind, KeyInstallAppendKind.failed);
+    expect(a.homeMode, 'drwx------');
+    expect(a.createdSsh, isFalse);
   });
 }
