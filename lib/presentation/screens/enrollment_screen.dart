@@ -6,6 +6,7 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/presentation/enrollment/password_key_install_flow.dart';
 import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/screens/host_key_mismatch_screen.dart';
 import 'package:kelola/presentation/ssh_host_key_flow.dart';
@@ -25,6 +26,31 @@ class EnrollmentScreen extends ConsumerStatefulWidget {
 class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
   String? _error;
   bool _busy = false;
+
+  Future<void> _installWithPassword() async {
+    if (_busy) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await runPasswordKeyInstallFlow(
+        context: context,
+        ref: ref,
+        hostId: widget.hostId,
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = describeSshError(e));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
 
   Future<void> _test() async {
     setState(() {
@@ -189,9 +215,10 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
           ],
           const SizedBox(height: 18),
           FilledButton(
-            // Wired in Task 9.
-            onPressed: null,
-            child: const Text('Install with password'),
+            onPressed: _busy ? null : _installWithPassword,
+            child: Text(
+              _busy ? 'Working…' : 'Install with password',
+            ),
           ),
           const SizedBox(height: 8),
           FilledButton(
