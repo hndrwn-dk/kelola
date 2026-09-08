@@ -237,7 +237,10 @@ Future<void> showKeyInstallReportSheet(
 
 /// Full password-bootstrap install: host key → password → confirm → append →
 /// fresh key verify → report. Clears [EphemeralPassword] on every exit.
-Future<void> runPasswordKeyInstallFlow({
+///
+/// Returns `true` when key-only verification succeeded (append exit 0 or 3).
+/// Appended-vs-already-present is audit-only and does not affect this result.
+Future<bool> runPasswordKeyInstallFlow({
   required BuildContext context,
   required WidgetRef ref,
   required String hostId,
@@ -261,14 +264,14 @@ Future<void> runPasswordKeyInstallFlow({
     final fullLine = enrollment.authorizedKeysLine;
     final blob = enrollment.publicBlob;
     if (fullLine == null || blob == null) {
-      return;
+      return false;
     }
     final keyBody = fullLine.split(RegExp(r'\s+'))[1];
     final fingerprint = OpensshEcdsaP256.fingerprintSha256(blob);
 
     final host = await ref.read(hostRepositoryProvider).get(hostId);
     if (host == null) {
-      return;
+      return false;
     }
 
     final pool = ref.read(sessionPoolProvider);
@@ -282,7 +285,7 @@ Future<void> runPasswordKeyInstallFlow({
       if (!entered) {
         // Sheet already cleared and showed discarded snackbar.
         onPasswordDiscarded?.call();
-        return;
+        return false;
       }
 
       KeyInstallAppendResult? append;
@@ -330,7 +333,7 @@ Future<void> runPasswordKeyInstallFlow({
       } on HostKeyMismatchException catch (e) {
         discardPassword(snackbar: true);
         if (!context.mounted) {
-          return;
+          return false;
         }
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -341,11 +344,11 @@ Future<void> runPasswordKeyInstallFlow({
             ),
           ),
         );
-        return;
+        return false;
       } catch (e) {
         discardPassword();
         if (!context.mounted) {
-          return;
+          return false;
         }
         final failure = classifySshBootstrapError(
           e,
@@ -372,13 +375,13 @@ Future<void> runPasswordKeyInstallFlow({
         if (failure.offerRetry && retry) {
           continue;
         }
-        return;
+        return false;
       }
 
       discardPassword(snackbar: true);
 
       if (append == null) {
-        return;
+        return false;
       }
 
       var verifyOk = false;
@@ -390,7 +393,7 @@ Future<void> runPasswordKeyInstallFlow({
         );
         if (verified == null) {
           // Host-key mismatch UI already shown; do not present stray-key copy.
-          return;
+          return false;
         }
         verifyOk = verified;
       }
@@ -410,11 +413,13 @@ Future<void> runPasswordKeyInstallFlow({
       );
 
       if (!context.mounted) {
-        return;
+        return false;
       }
       await showKeyInstallReportSheet(context, report: report);
-      return;
+      // Navigation success = verified auth, not append exit 0 vs 3.
+      return report.success;
     }
+    return false;
   } finally {
     password.clear();
     WidgetsBinding.instance.removeObserver(lifecycle);
