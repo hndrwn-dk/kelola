@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/app.dart';
+import 'package:kelola/app_version.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/design/kelola_components.dart';
@@ -82,7 +83,7 @@ void main() {
 
     await pumpHosts(tester, db);
 
-    final version = find.text('v0.1.0');
+    final version = find.text('v$kelolaAppVersion');
     final keys = find.text('Keys stay on this device');
     expect(version, findsOneWidget);
     expect(keys, findsOneWidget);

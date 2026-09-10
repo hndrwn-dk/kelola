@@ -59,6 +59,7 @@ readiness/
 # .cursorrules is tracked — design-system hard bans for agents/humans.
 play_console/
 **/play_console/
+bundles_release/
 docs/superpowers/
 .worktrees/
 
