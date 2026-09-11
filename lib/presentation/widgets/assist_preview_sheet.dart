@@ -6,6 +6,7 @@ import 'package:kelola/data/llm/assist_service.dart';
 Future<bool> showAssistPreviewSheet(
   BuildContext context, {
   required AssistPreview preview,
+  required String destinationHost,
 }) async {
   final c = context.kc;
   final ok = await showModalBottomSheet<bool>(
@@ -32,7 +33,7 @@ Future<bool> showAssistPreviewSheet(
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Exactly what will be sent to your configured provider.',
+                    'Exactly what will be sent to $destinationHost.',
                     style: KelolaType.body(color: c.muted, size: 12),
                   ),
                   const SizedBox(height: 10),

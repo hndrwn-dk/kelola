@@ -57,10 +57,9 @@ class AssistService {
     return AssistPreview(system: r.system, user: r.user);
   }
 
-  bool needsCloudPreview(LlmSettings settings) =>
-      gate.needsPreview(settings.provider);
+  bool needsPreview(LlmSettings settings) => gate.needsPreview(settings);
 
-  void approveCloudPreview() => gate.markCloudApproved();
+  void approvePreview(LlmSettings settings) => gate.markApproved(settings);
 
   Future<String> explainFailedUnit({
     required LlmSettings settings,
@@ -152,8 +151,8 @@ class AssistService {
     if (!settings.provider.enabled || !settings.isConfigured) {
       throw StateError('Assist provider is not configured');
     }
-    if (needsCloudPreview(settings)) {
-      throw StateError('Cloud preview not approved');
+    if (needsPreview(settings)) {
+      throw StateError('Preview not approved');
     }
     return _clientFor(settings.provider).complete(
       settings: settings,

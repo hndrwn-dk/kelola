@@ -10,6 +10,22 @@ import 'package:kelola/presentation/widgets/assist_preview_sheet.dart';
 import 'package:kelola/presentation/widgets/llm_output_body.dart';
 import 'package:kelola/providers.dart';
 
+String _previewDestinationHost(LlmSettings settings) {
+  final uri = settings.baseUri;
+  if (uri == null || uri.host.isEmpty) {
+    return 'configured endpoint';
+  }
+  var host = uri.host;
+  final scheme = uri.scheme.toLowerCase();
+  final isDefaultPort = !uri.hasPort ||
+      (scheme == 'http' && uri.port == 80) ||
+      (scheme == 'https' && uri.port == 443);
+  if (!isDefaultPort) {
+    host = '$host:${uri.port}';
+  }
+  return host;
+}
+
 Future<LlmSettings> requireAssistSettings(WidgetRef ref) async {
   final settings = await ref.read(llmSettingsProvider.future);
   if (!settings.provider.enabled || !settings.isConfigured) {
@@ -30,13 +46,17 @@ Future<T?> runAssistWithPreview<T>({
   required Future<T> Function(AssistService service) run,
 }) async {
   final service = ref.read(assistServiceProvider);
-  if (service.needsCloudPreview(settings)) {
+  if (service.needsPreview(settings)) {
     final preview = service.previewPayload(request);
-    final ok = await showAssistPreviewSheet(context, preview: preview);
+    final ok = await showAssistPreviewSheet(
+      context,
+      preview: preview,
+      destinationHost: _previewDestinationHost(settings),
+    );
     if (!ok) {
       return null;
     }
-    service.approveCloudPreview();
+    service.approvePreview(settings);
   }
   return run(service);
 }
