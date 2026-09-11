@@ -19,9 +19,5 @@ enum LlmProvider {
 
   String get storageName => name;
 
-  bool get isLocalClaim => this == LlmProvider.ollama;
-
-  bool get needsCloudPreview => this == LlmProvider.openaiCompatible;
-
   bool get enabled => this != LlmProvider.none;
 }
