@@ -33,10 +33,12 @@ import 'package:kelola/presentation/screens/network_screen.dart';
 import 'package:kelola/presentation/screens/processes_screen.dart';
 import 'package:kelola/presentation/screens/terminal_sheet.dart';
 import 'package:kelola/presentation/screens/snippets_screen.dart';
+import 'package:kelola/presentation/screens/tunnels_screen.dart';
 import 'package:kelola/presentation/screens/units_screen.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/probes/host_action_probe.dart';
+import 'package:kelola/domain/tunnels/active_tunnel.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
 import 'package:kelola/presentation/widgets/diagnostic_pack_sheet.dart';
@@ -603,6 +605,30 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Expanded(
+                  child: ToolTile(
+                    label: 'Tunnels',
+                    meta: _tunnelsMeta(ref),
+                    onTap: () {
+                      final unlocked =
+                          ref.read(entitlementProvider).tunnelsUnlocked;
+                      if (!unlocked) {
+                        showTunnelsLockedExplainer(context);
+                        return;
+                      }
+                      _open((id) => TunnelsScreen(hostId: id));
+                    },
+                  ),
+                ),
+                const SizedBox(width: 7),
+                const Expanded(child: SizedBox.shrink()),
+                const SizedBox(width: 7),
+                const Expanded(child: SizedBox.shrink()),
+              ],
+            ),
             if (host != null) ...[
               const SizedBox(height: 14),
               Text(
@@ -685,6 +711,20 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         ),
       ),
     );
+  }
+
+  String _tunnelsMeta(WidgetRef ref) {
+    final tunnels = ref.watch(activeTunnelsProvider).valueOrNull ?? const [];
+    final n = tunnels
+        .where(
+          (t) =>
+              t.target.hostId == widget.hostId &&
+              t.state != TunnelState.closed &&
+              t.state != TunnelState.failed,
+        )
+        .length;
+    if (n <= 0) return 'forward';
+    return n == 1 ? '1 active' : '$n active';
   }
 
   HealthStatus _pctHealth(int percent) {

@@ -3007,6 +3007,17 @@ class $AuditRecordsTable extends AuditRecords
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _closeReasonMeta = const VerificationMeta(
+    'closeReason',
+  );
+  @override
+  late final GeneratedColumn<String> closeReason = GeneratedColumn<String>(
+    'close_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3022,6 +3033,7 @@ class $AuditRecordsTable extends AuditRecords
     durationMs,
     errorSummary,
     appVersion,
+    closeReason,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3134,6 +3146,15 @@ class $AuditRecordsTable extends AuditRecords
     } else if (isInserting) {
       context.missing(_appVersionMeta);
     }
+    if (data.containsKey('close_reason')) {
+      context.handle(
+        _closeReasonMeta,
+        closeReason.isAcceptableOrUnknown(
+          data['close_reason']!,
+          _closeReasonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3195,6 +3216,10 @@ class $AuditRecordsTable extends AuditRecords
         DriftSqlType.string,
         data['${effectivePrefix}app_version'],
       )!,
+      closeReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}close_reason'],
+      ),
     );
   }
 
@@ -3218,6 +3243,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
   final int durationMs;
   final String? errorSummary;
   final String appVersion;
+  final String? closeReason;
   const AuditRow({
     required this.id,
     required this.timestampUtc,
@@ -3232,6 +3258,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
     required this.durationMs,
     this.errorSummary,
     required this.appVersion,
+    this.closeReason,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3253,6 +3280,9 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
       map['error_summary'] = Variable<String>(errorSummary);
     }
     map['app_version'] = Variable<String>(appVersion);
+    if (!nullToAbsent || closeReason != null) {
+      map['close_reason'] = Variable<String>(closeReason);
+    }
     return map;
   }
 
@@ -3275,6 +3305,9 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
           ? const Value.absent()
           : Value(errorSummary),
       appVersion: Value(appVersion),
+      closeReason: closeReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closeReason),
     );
   }
 
@@ -3297,6 +3330,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
       durationMs: serializer.fromJson<int>(json['durationMs']),
       errorSummary: serializer.fromJson<String?>(json['errorSummary']),
       appVersion: serializer.fromJson<String>(json['appVersion']),
+      closeReason: serializer.fromJson<String?>(json['closeReason']),
     );
   }
   @override
@@ -3316,6 +3350,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
       'durationMs': serializer.toJson<int>(durationMs),
       'errorSummary': serializer.toJson<String?>(errorSummary),
       'appVersion': serializer.toJson<String>(appVersion),
+      'closeReason': serializer.toJson<String?>(closeReason),
     };
   }
 
@@ -3333,6 +3368,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
     int? durationMs,
     Value<String?> errorSummary = const Value.absent(),
     String? appVersion,
+    Value<String?> closeReason = const Value.absent(),
   }) => AuditRow(
     id: id ?? this.id,
     timestampUtc: timestampUtc ?? this.timestampUtc,
@@ -3347,6 +3383,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
     durationMs: durationMs ?? this.durationMs,
     errorSummary: errorSummary.present ? errorSummary.value : this.errorSummary,
     appVersion: appVersion ?? this.appVersion,
+    closeReason: closeReason.present ? closeReason.value : this.closeReason,
   );
   AuditRow copyWithCompanion(AuditRecordsCompanion data) {
     return AuditRow(
@@ -3373,6 +3410,9 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
       appVersion: data.appVersion.present
           ? data.appVersion.value
           : this.appVersion,
+      closeReason: data.closeReason.present
+          ? data.closeReason.value
+          : this.closeReason,
     );
   }
 
@@ -3391,7 +3431,8 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
           ..write('exitCode: $exitCode, ')
           ..write('durationMs: $durationMs, ')
           ..write('errorSummary: $errorSummary, ')
-          ..write('appVersion: $appVersion')
+          ..write('appVersion: $appVersion, ')
+          ..write('closeReason: $closeReason')
           ..write(')'))
         .toString();
   }
@@ -3411,6 +3452,7 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
     durationMs,
     errorSummary,
     appVersion,
+    closeReason,
   );
   @override
   bool operator ==(Object other) =>
@@ -3428,7 +3470,8 @@ class AuditRow extends DataClass implements Insertable<AuditRow> {
           other.exitCode == this.exitCode &&
           other.durationMs == this.durationMs &&
           other.errorSummary == this.errorSummary &&
-          other.appVersion == this.appVersion);
+          other.appVersion == this.appVersion &&
+          other.closeReason == this.closeReason);
 }
 
 class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
@@ -3445,6 +3488,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
   final Value<int> durationMs;
   final Value<String?> errorSummary;
   final Value<String> appVersion;
+  final Value<String?> closeReason;
   final Value<int> rowid;
   const AuditRecordsCompanion({
     this.id = const Value.absent(),
@@ -3460,6 +3504,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
     this.durationMs = const Value.absent(),
     this.errorSummary = const Value.absent(),
     this.appVersion = const Value.absent(),
+    this.closeReason = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   AuditRecordsCompanion.insert({
@@ -3476,6 +3521,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
     this.durationMs = const Value.absent(),
     this.errorSummary = const Value.absent(),
     required String appVersion,
+    this.closeReason = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        timestampUtc = Value(timestampUtc),
@@ -3500,6 +3546,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
     Expression<int>? durationMs,
     Expression<String>? errorSummary,
     Expression<String>? appVersion,
+    Expression<String>? closeReason,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3516,6 +3563,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
       if (durationMs != null) 'duration_ms': durationMs,
       if (errorSummary != null) 'error_summary': errorSummary,
       if (appVersion != null) 'app_version': appVersion,
+      if (closeReason != null) 'close_reason': closeReason,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3534,6 +3582,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
     Value<int>? durationMs,
     Value<String?>? errorSummary,
     Value<String>? appVersion,
+    Value<String?>? closeReason,
     Value<int>? rowid,
   }) {
     return AuditRecordsCompanion(
@@ -3550,6 +3599,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
       durationMs: durationMs ?? this.durationMs,
       errorSummary: errorSummary ?? this.errorSummary,
       appVersion: appVersion ?? this.appVersion,
+      closeReason: closeReason ?? this.closeReason,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3596,6 +3646,9 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
     if (appVersion.present) {
       map['app_version'] = Variable<String>(appVersion.value);
     }
+    if (closeReason.present) {
+      map['close_reason'] = Variable<String>(closeReason.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3618,6 +3671,7 @@ class AuditRecordsCompanion extends UpdateCompanion<AuditRow> {
           ..write('durationMs: $durationMs, ')
           ..write('errorSummary: $errorSummary, ')
           ..write('appVersion: $appVersion, ')
+          ..write('closeReason: $closeReason, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3787,6 +3841,18 @@ class $AppSettingsTable extends AppSettings
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _tunnelIdleMinutesMeta = const VerificationMeta(
+    'tunnelIdleMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> tunnelIdleMinutes = GeneratedColumn<int>(
+    'tunnel_idle_minutes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(10),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3803,6 +3869,7 @@ class $AppSettingsTable extends AppSettings
     llmOpenaiBaseUrl,
     llmOpenaiApiKey,
     llmOpenaiModel,
+    tunnelIdleMinutes,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3927,6 +3994,15 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('tunnel_idle_minutes')) {
+      context.handle(
+        _tunnelIdleMinutesMeta,
+        tunnelIdleMinutes.isAcceptableOrUnknown(
+          data['tunnel_idle_minutes']!,
+          _tunnelIdleMinutesMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3992,6 +4068,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.string,
         data['${effectivePrefix}llm_openai_model'],
       ),
+      tunnelIdleMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tunnel_idle_minutes'],
+      )!,
     );
   }
 
@@ -4018,6 +4098,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   final String? llmOpenaiBaseUrl;
   final String? llmOpenaiApiKey;
   final String? llmOpenaiModel;
+  final int tunnelIdleMinutes;
   const AppSettingsRow({
     required this.id,
     this.lastHostId,
@@ -4033,6 +4114,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     this.llmOpenaiBaseUrl,
     this.llmOpenaiApiKey,
     this.llmOpenaiModel,
+    required this.tunnelIdleMinutes,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4073,6 +4155,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     if (!nullToAbsent || llmOpenaiModel != null) {
       map['llm_openai_model'] = Variable<String>(llmOpenaiModel);
     }
+    map['tunnel_idle_minutes'] = Variable<int>(tunnelIdleMinutes);
     return map;
   }
 
@@ -4114,6 +4197,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       llmOpenaiModel: llmOpenaiModel == null && nullToAbsent
           ? const Value.absent()
           : Value(llmOpenaiModel),
+      tunnelIdleMinutes: Value(tunnelIdleMinutes),
     );
   }
 
@@ -4137,6 +4221,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       llmOpenaiBaseUrl: serializer.fromJson<String?>(json['llmOpenaiBaseUrl']),
       llmOpenaiApiKey: serializer.fromJson<String?>(json['llmOpenaiApiKey']),
       llmOpenaiModel: serializer.fromJson<String?>(json['llmOpenaiModel']),
+      tunnelIdleMinutes: serializer.fromJson<int>(json['tunnelIdleMinutes']),
     );
   }
   @override
@@ -4157,6 +4242,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       'llmOpenaiBaseUrl': serializer.toJson<String?>(llmOpenaiBaseUrl),
       'llmOpenaiApiKey': serializer.toJson<String?>(llmOpenaiApiKey),
       'llmOpenaiModel': serializer.toJson<String?>(llmOpenaiModel),
+      'tunnelIdleMinutes': serializer.toJson<int>(tunnelIdleMinutes),
     };
   }
 
@@ -4175,6 +4261,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     Value<String?> llmOpenaiBaseUrl = const Value.absent(),
     Value<String?> llmOpenaiApiKey = const Value.absent(),
     Value<String?> llmOpenaiModel = const Value.absent(),
+    int? tunnelIdleMinutes,
   }) => AppSettingsRow(
     id: id ?? this.id,
     lastHostId: lastHostId.present ? lastHostId.value : this.lastHostId,
@@ -4202,6 +4289,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     llmOpenaiModel: llmOpenaiModel.present
         ? llmOpenaiModel.value
         : this.llmOpenaiModel,
+    tunnelIdleMinutes: tunnelIdleMinutes ?? this.tunnelIdleMinutes,
   );
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
@@ -4241,6 +4329,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       llmOpenaiModel: data.llmOpenaiModel.present
           ? data.llmOpenaiModel.value
           : this.llmOpenaiModel,
+      tunnelIdleMinutes: data.tunnelIdleMinutes.present
+          ? data.tunnelIdleMinutes.value
+          : this.tunnelIdleMinutes,
     );
   }
 
@@ -4260,7 +4351,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('llmOllamaModel: $llmOllamaModel, ')
           ..write('llmOpenaiBaseUrl: $llmOpenaiBaseUrl, ')
           ..write('llmOpenaiApiKey: $llmOpenaiApiKey, ')
-          ..write('llmOpenaiModel: $llmOpenaiModel')
+          ..write('llmOpenaiModel: $llmOpenaiModel, ')
+          ..write('tunnelIdleMinutes: $tunnelIdleMinutes')
           ..write(')'))
         .toString();
   }
@@ -4281,6 +4373,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     llmOpenaiBaseUrl,
     llmOpenaiApiKey,
     llmOpenaiModel,
+    tunnelIdleMinutes,
   );
   @override
   bool operator ==(Object other) =>
@@ -4299,7 +4392,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.llmOllamaModel == this.llmOllamaModel &&
           other.llmOpenaiBaseUrl == this.llmOpenaiBaseUrl &&
           other.llmOpenaiApiKey == this.llmOpenaiApiKey &&
-          other.llmOpenaiModel == this.llmOpenaiModel);
+          other.llmOpenaiModel == this.llmOpenaiModel &&
+          other.tunnelIdleMinutes == this.tunnelIdleMinutes);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
@@ -4317,6 +4411,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<String?> llmOpenaiBaseUrl;
   final Value<String?> llmOpenaiApiKey;
   final Value<String?> llmOpenaiModel;
+  final Value<int> tunnelIdleMinutes;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.lastHostId = const Value.absent(),
@@ -4332,6 +4427,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.llmOpenaiBaseUrl = const Value.absent(),
     this.llmOpenaiApiKey = const Value.absent(),
     this.llmOpenaiModel = const Value.absent(),
+    this.tunnelIdleMinutes = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -4348,6 +4444,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.llmOpenaiBaseUrl = const Value.absent(),
     this.llmOpenaiApiKey = const Value.absent(),
     this.llmOpenaiModel = const Value.absent(),
+    this.tunnelIdleMinutes = const Value.absent(),
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
@@ -4364,6 +4461,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Expression<String>? llmOpenaiBaseUrl,
     Expression<String>? llmOpenaiApiKey,
     Expression<String>? llmOpenaiModel,
+    Expression<int>? tunnelIdleMinutes,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4380,6 +4478,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (llmOpenaiBaseUrl != null) 'llm_openai_base_url': llmOpenaiBaseUrl,
       if (llmOpenaiApiKey != null) 'llm_openai_api_key': llmOpenaiApiKey,
       if (llmOpenaiModel != null) 'llm_openai_model': llmOpenaiModel,
+      if (tunnelIdleMinutes != null) 'tunnel_idle_minutes': tunnelIdleMinutes,
     });
   }
 
@@ -4398,6 +4497,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<String?>? llmOpenaiBaseUrl,
     Value<String?>? llmOpenaiApiKey,
     Value<String?>? llmOpenaiModel,
+    Value<int>? tunnelIdleMinutes,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -4414,6 +4514,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       llmOpenaiBaseUrl: llmOpenaiBaseUrl ?? this.llmOpenaiBaseUrl,
       llmOpenaiApiKey: llmOpenaiApiKey ?? this.llmOpenaiApiKey,
       llmOpenaiModel: llmOpenaiModel ?? this.llmOpenaiModel,
+      tunnelIdleMinutes: tunnelIdleMinutes ?? this.tunnelIdleMinutes,
     );
   }
 
@@ -4462,6 +4563,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     if (llmOpenaiModel.present) {
       map['llm_openai_model'] = Variable<String>(llmOpenaiModel.value);
     }
+    if (tunnelIdleMinutes.present) {
+      map['tunnel_idle_minutes'] = Variable<int>(tunnelIdleMinutes.value);
+    }
     return map;
   }
 
@@ -4481,7 +4585,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('llmOllamaModel: $llmOllamaModel, ')
           ..write('llmOpenaiBaseUrl: $llmOpenaiBaseUrl, ')
           ..write('llmOpenaiApiKey: $llmOpenaiApiKey, ')
-          ..write('llmOpenaiModel: $llmOpenaiModel')
+          ..write('llmOpenaiModel: $llmOpenaiModel, ')
+          ..write('tunnelIdleMinutes: $tunnelIdleMinutes')
           ..write(')'))
         .toString();
   }
@@ -6258,6 +6363,457 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
   }
 }
 
+class $TunnelTargetsTable extends TunnelTargets
+    with TableInfo<$TunnelTargetsTable, TunnelTargetRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TunnelTargetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remoteHostMeta = const VerificationMeta(
+    'remoteHost',
+  );
+  @override
+  late final GeneratedColumn<String> remoteHost = GeneratedColumn<String>(
+    'remote_host',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remotePortMeta = const VerificationMeta(
+    'remotePort',
+  );
+  @override
+  late final GeneratedColumn<int> remotePort = GeneratedColumn<int>(
+    'remote_port',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _schemeMeta = const VerificationMeta('scheme');
+  @override
+  late final GeneratedColumn<String> scheme = GeneratedColumn<String>(
+    'scheme',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pathMeta = const VerificationMeta('path');
+  @override
+  late final GeneratedColumn<String> path = GeneratedColumn<String>(
+    'path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    hostId,
+    label,
+    remoteHost,
+    remotePort,
+    scheme,
+    path,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'tunnel_targets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TunnelTargetRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_labelMeta);
+    }
+    if (data.containsKey('remote_host')) {
+      context.handle(
+        _remoteHostMeta,
+        remoteHost.isAcceptableOrUnknown(data['remote_host']!, _remoteHostMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_remoteHostMeta);
+    }
+    if (data.containsKey('remote_port')) {
+      context.handle(
+        _remotePortMeta,
+        remotePort.isAcceptableOrUnknown(data['remote_port']!, _remotePortMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_remotePortMeta);
+    }
+    if (data.containsKey('scheme')) {
+      context.handle(
+        _schemeMeta,
+        scheme.isAcceptableOrUnknown(data['scheme']!, _schemeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_schemeMeta);
+    }
+    if (data.containsKey('path')) {
+      context.handle(
+        _pathMeta,
+        path.isAcceptableOrUnknown(data['path']!, _pathMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TunnelTargetRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TunnelTargetRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      )!,
+      remoteHost: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_host'],
+      )!,
+      remotePort: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}remote_port'],
+      )!,
+      scheme: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scheme'],
+      )!,
+      path: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}path'],
+      )!,
+    );
+  }
+
+  @override
+  $TunnelTargetsTable createAlias(String alias) {
+    return $TunnelTargetsTable(attachedDatabase, alias);
+  }
+}
+
+class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
+  final String id;
+  final String hostId;
+  final String label;
+  final String remoteHost;
+  final int remotePort;
+  final String scheme;
+  final String path;
+  const TunnelTargetRow({
+    required this.id,
+    required this.hostId,
+    required this.label,
+    required this.remoteHost,
+    required this.remotePort,
+    required this.scheme,
+    required this.path,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['host_id'] = Variable<String>(hostId);
+    map['label'] = Variable<String>(label);
+    map['remote_host'] = Variable<String>(remoteHost);
+    map['remote_port'] = Variable<int>(remotePort);
+    map['scheme'] = Variable<String>(scheme);
+    map['path'] = Variable<String>(path);
+    return map;
+  }
+
+  TunnelTargetsCompanion toCompanion(bool nullToAbsent) {
+    return TunnelTargetsCompanion(
+      id: Value(id),
+      hostId: Value(hostId),
+      label: Value(label),
+      remoteHost: Value(remoteHost),
+      remotePort: Value(remotePort),
+      scheme: Value(scheme),
+      path: Value(path),
+    );
+  }
+
+  factory TunnelTargetRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TunnelTargetRow(
+      id: serializer.fromJson<String>(json['id']),
+      hostId: serializer.fromJson<String>(json['hostId']),
+      label: serializer.fromJson<String>(json['label']),
+      remoteHost: serializer.fromJson<String>(json['remoteHost']),
+      remotePort: serializer.fromJson<int>(json['remotePort']),
+      scheme: serializer.fromJson<String>(json['scheme']),
+      path: serializer.fromJson<String>(json['path']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'hostId': serializer.toJson<String>(hostId),
+      'label': serializer.toJson<String>(label),
+      'remoteHost': serializer.toJson<String>(remoteHost),
+      'remotePort': serializer.toJson<int>(remotePort),
+      'scheme': serializer.toJson<String>(scheme),
+      'path': serializer.toJson<String>(path),
+    };
+  }
+
+  TunnelTargetRow copyWith({
+    String? id,
+    String? hostId,
+    String? label,
+    String? remoteHost,
+    int? remotePort,
+    String? scheme,
+    String? path,
+  }) => TunnelTargetRow(
+    id: id ?? this.id,
+    hostId: hostId ?? this.hostId,
+    label: label ?? this.label,
+    remoteHost: remoteHost ?? this.remoteHost,
+    remotePort: remotePort ?? this.remotePort,
+    scheme: scheme ?? this.scheme,
+    path: path ?? this.path,
+  );
+  TunnelTargetRow copyWithCompanion(TunnelTargetsCompanion data) {
+    return TunnelTargetRow(
+      id: data.id.present ? data.id.value : this.id,
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      label: data.label.present ? data.label.value : this.label,
+      remoteHost: data.remoteHost.present
+          ? data.remoteHost.value
+          : this.remoteHost,
+      remotePort: data.remotePort.present
+          ? data.remotePort.value
+          : this.remotePort,
+      scheme: data.scheme.present ? data.scheme.value : this.scheme,
+      path: data.path.present ? data.path.value : this.path,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TunnelTargetRow(')
+          ..write('id: $id, ')
+          ..write('hostId: $hostId, ')
+          ..write('label: $label, ')
+          ..write('remoteHost: $remoteHost, ')
+          ..write('remotePort: $remotePort, ')
+          ..write('scheme: $scheme, ')
+          ..write('path: $path')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, hostId, label, remoteHost, remotePort, scheme, path);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TunnelTargetRow &&
+          other.id == this.id &&
+          other.hostId == this.hostId &&
+          other.label == this.label &&
+          other.remoteHost == this.remoteHost &&
+          other.remotePort == this.remotePort &&
+          other.scheme == this.scheme &&
+          other.path == this.path);
+}
+
+class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
+  final Value<String> id;
+  final Value<String> hostId;
+  final Value<String> label;
+  final Value<String> remoteHost;
+  final Value<int> remotePort;
+  final Value<String> scheme;
+  final Value<String> path;
+  final Value<int> rowid;
+  const TunnelTargetsCompanion({
+    this.id = const Value.absent(),
+    this.hostId = const Value.absent(),
+    this.label = const Value.absent(),
+    this.remoteHost = const Value.absent(),
+    this.remotePort = const Value.absent(),
+    this.scheme = const Value.absent(),
+    this.path = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TunnelTargetsCompanion.insert({
+    required String id,
+    required String hostId,
+    required String label,
+    required String remoteHost,
+    required int remotePort,
+    required String scheme,
+    this.path = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       hostId = Value(hostId),
+       label = Value(label),
+       remoteHost = Value(remoteHost),
+       remotePort = Value(remotePort),
+       scheme = Value(scheme);
+  static Insertable<TunnelTargetRow> custom({
+    Expression<String>? id,
+    Expression<String>? hostId,
+    Expression<String>? label,
+    Expression<String>? remoteHost,
+    Expression<int>? remotePort,
+    Expression<String>? scheme,
+    Expression<String>? path,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (hostId != null) 'host_id': hostId,
+      if (label != null) 'label': label,
+      if (remoteHost != null) 'remote_host': remoteHost,
+      if (remotePort != null) 'remote_port': remotePort,
+      if (scheme != null) 'scheme': scheme,
+      if (path != null) 'path': path,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TunnelTargetsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? hostId,
+    Value<String>? label,
+    Value<String>? remoteHost,
+    Value<int>? remotePort,
+    Value<String>? scheme,
+    Value<String>? path,
+    Value<int>? rowid,
+  }) {
+    return TunnelTargetsCompanion(
+      id: id ?? this.id,
+      hostId: hostId ?? this.hostId,
+      label: label ?? this.label,
+      remoteHost: remoteHost ?? this.remoteHost,
+      remotePort: remotePort ?? this.remotePort,
+      scheme: scheme ?? this.scheme,
+      path: path ?? this.path,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (remoteHost.present) {
+      map['remote_host'] = Variable<String>(remoteHost.value);
+    }
+    if (remotePort.present) {
+      map['remote_port'] = Variable<int>(remotePort.value);
+    }
+    if (scheme.present) {
+      map['scheme'] = Variable<String>(scheme.value);
+    }
+    if (path.present) {
+      map['path'] = Variable<String>(path.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TunnelTargetsCompanion(')
+          ..write('id: $id, ')
+          ..write('hostId: $hostId, ')
+          ..write('label: $label, ')
+          ..write('remoteHost: $remoteHost, ')
+          ..write('remotePort: $remotePort, ')
+          ..write('scheme: $scheme, ')
+          ..write('path: $path, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$KelolaDatabase extends GeneratedDatabase {
   _$KelolaDatabase(QueryExecutor e) : super(e);
   $KelolaDatabaseManager get managers => $KelolaDatabaseManager(this);
@@ -6274,6 +6830,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
   late final $SnippetsTable snippets = $SnippetsTable(this);
   late final $HostTagsTable hostTags = $HostTagsTable(this);
   late final $FleetCacheTable fleetCache = $FleetCacheTable(this);
+  late final $TunnelTargetsTable tunnelTargets = $TunnelTargetsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6290,6 +6847,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     snippets,
     hostTags,
     fleetCache,
+    tunnelTargets,
   ];
 }
 
@@ -7709,6 +8267,7 @@ typedef $$AuditRecordsTableCreateCompanionBuilder =
       Value<int> durationMs,
       Value<String?> errorSummary,
       required String appVersion,
+      Value<String?> closeReason,
       Value<int> rowid,
     });
 typedef $$AuditRecordsTableUpdateCompanionBuilder =
@@ -7726,6 +8285,7 @@ typedef $$AuditRecordsTableUpdateCompanionBuilder =
       Value<int> durationMs,
       Value<String?> errorSummary,
       Value<String> appVersion,
+      Value<String?> closeReason,
       Value<int> rowid,
     });
 
@@ -7800,6 +8360,11 @@ class $$AuditRecordsTableFilterComposer
 
   ColumnFilters<String> get appVersion => $composableBuilder(
     column: $table.appVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get closeReason => $composableBuilder(
+    column: $table.closeReason,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -7877,6 +8442,11 @@ class $$AuditRecordsTableOrderingComposer
     column: $table.appVersion,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get closeReason => $composableBuilder(
+    column: $table.closeReason,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AuditRecordsTableAnnotationComposer
@@ -7936,6 +8506,11 @@ class $$AuditRecordsTableAnnotationComposer
     column: $table.appVersion,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get closeReason => $composableBuilder(
+    column: $table.closeReason,
+    builder: (column) => column,
+  );
 }
 
 class $$AuditRecordsTableTableManager
@@ -7982,6 +8557,7 @@ class $$AuditRecordsTableTableManager
                 Value<int> durationMs = const Value.absent(),
                 Value<String?> errorSummary = const Value.absent(),
                 Value<String> appVersion = const Value.absent(),
+                Value<String?> closeReason = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AuditRecordsCompanion(
                 id: id,
@@ -7997,6 +8573,7 @@ class $$AuditRecordsTableTableManager
                 durationMs: durationMs,
                 errorSummary: errorSummary,
                 appVersion: appVersion,
+                closeReason: closeReason,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -8014,6 +8591,7 @@ class $$AuditRecordsTableTableManager
                 Value<int> durationMs = const Value.absent(),
                 Value<String?> errorSummary = const Value.absent(),
                 required String appVersion,
+                Value<String?> closeReason = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AuditRecordsCompanion.insert(
                 id: id,
@@ -8029,6 +8607,7 @@ class $$AuditRecordsTableTableManager
                 durationMs: durationMs,
                 errorSummary: errorSummary,
                 appVersion: appVersion,
+                closeReason: closeReason,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -8072,6 +8651,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<String?> llmOpenaiBaseUrl,
       Value<String?> llmOpenaiApiKey,
       Value<String?> llmOpenaiModel,
+      Value<int> tunnelIdleMinutes,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -8089,6 +8669,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<String?> llmOpenaiBaseUrl,
       Value<String?> llmOpenaiApiKey,
       Value<String?> llmOpenaiModel,
+      Value<int> tunnelIdleMinutes,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -8167,6 +8748,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<String> get llmOpenaiModel => $composableBuilder(
     column: $table.llmOpenaiModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tunnelIdleMinutes => $composableBuilder(
+    column: $table.tunnelIdleMinutes,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8249,6 +8835,11 @@ class $$AppSettingsTableOrderingComposer
     column: $table.llmOpenaiModel,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get tunnelIdleMinutes => $composableBuilder(
+    column: $table.tunnelIdleMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -8323,6 +8914,11 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.llmOpenaiModel,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get tunnelIdleMinutes => $composableBuilder(
+    column: $table.tunnelIdleMinutes,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -8370,6 +8966,7 @@ class $$AppSettingsTableTableManager
                 Value<String?> llmOpenaiBaseUrl = const Value.absent(),
                 Value<String?> llmOpenaiApiKey = const Value.absent(),
                 Value<String?> llmOpenaiModel = const Value.absent(),
+                Value<int> tunnelIdleMinutes = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 lastHostId: lastHostId,
@@ -8385,6 +8982,7 @@ class $$AppSettingsTableTableManager
                 llmOpenaiBaseUrl: llmOpenaiBaseUrl,
                 llmOpenaiApiKey: llmOpenaiApiKey,
                 llmOpenaiModel: llmOpenaiModel,
+                tunnelIdleMinutes: tunnelIdleMinutes,
               ),
           createCompanionCallback:
               ({
@@ -8402,6 +9000,7 @@ class $$AppSettingsTableTableManager
                 Value<String?> llmOpenaiBaseUrl = const Value.absent(),
                 Value<String?> llmOpenaiApiKey = const Value.absent(),
                 Value<String?> llmOpenaiModel = const Value.absent(),
+                Value<int> tunnelIdleMinutes = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 lastHostId: lastHostId,
@@ -8417,6 +9016,7 @@ class $$AppSettingsTableTableManager
                 llmOpenaiBaseUrl: llmOpenaiBaseUrl,
                 llmOpenaiApiKey: llmOpenaiApiKey,
                 llmOpenaiModel: llmOpenaiModel,
+                tunnelIdleMinutes: tunnelIdleMinutes,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -9385,6 +9985,254 @@ typedef $$FleetCacheTableProcessedTableManager =
       FleetCacheRow,
       PrefetchHooks Function()
     >;
+typedef $$TunnelTargetsTableCreateCompanionBuilder =
+    TunnelTargetsCompanion Function({
+      required String id,
+      required String hostId,
+      required String label,
+      required String remoteHost,
+      required int remotePort,
+      required String scheme,
+      Value<String> path,
+      Value<int> rowid,
+    });
+typedef $$TunnelTargetsTableUpdateCompanionBuilder =
+    TunnelTargetsCompanion Function({
+      Value<String> id,
+      Value<String> hostId,
+      Value<String> label,
+      Value<String> remoteHost,
+      Value<int> remotePort,
+      Value<String> scheme,
+      Value<String> path,
+      Value<int> rowid,
+    });
+
+class $$TunnelTargetsTableFilterComposer
+    extends Composer<_$KelolaDatabase, $TunnelTargetsTable> {
+  $$TunnelTargetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteHost => $composableBuilder(
+    column: $table.remoteHost,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get remotePort => $composableBuilder(
+    column: $table.remotePort,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scheme => $composableBuilder(
+    column: $table.scheme,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get path => $composableBuilder(
+    column: $table.path,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$TunnelTargetsTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $TunnelTargetsTable> {
+  $$TunnelTargetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteHost => $composableBuilder(
+    column: $table.remoteHost,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get remotePort => $composableBuilder(
+    column: $table.remotePort,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scheme => $composableBuilder(
+    column: $table.scheme,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get path => $composableBuilder(
+    column: $table.path,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$TunnelTargetsTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $TunnelTargetsTable> {
+  $$TunnelTargetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<String> get remoteHost => $composableBuilder(
+    column: $table.remoteHost,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get remotePort => $composableBuilder(
+    column: $table.remotePort,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get scheme =>
+      $composableBuilder(column: $table.scheme, builder: (column) => column);
+
+  GeneratedColumn<String> get path =>
+      $composableBuilder(column: $table.path, builder: (column) => column);
+}
+
+class $$TunnelTargetsTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $TunnelTargetsTable,
+          TunnelTargetRow,
+          $$TunnelTargetsTableFilterComposer,
+          $$TunnelTargetsTableOrderingComposer,
+          $$TunnelTargetsTableAnnotationComposer,
+          $$TunnelTargetsTableCreateCompanionBuilder,
+          $$TunnelTargetsTableUpdateCompanionBuilder,
+          (
+            TunnelTargetRow,
+            BaseReferences<
+              _$KelolaDatabase,
+              $TunnelTargetsTable,
+              TunnelTargetRow
+            >,
+          ),
+          TunnelTargetRow,
+          PrefetchHooks Function()
+        > {
+  $$TunnelTargetsTableTableManager(
+    _$KelolaDatabase db,
+    $TunnelTargetsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TunnelTargetsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TunnelTargetsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TunnelTargetsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> hostId = const Value.absent(),
+                Value<String> label = const Value.absent(),
+                Value<String> remoteHost = const Value.absent(),
+                Value<int> remotePort = const Value.absent(),
+                Value<String> scheme = const Value.absent(),
+                Value<String> path = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TunnelTargetsCompanion(
+                id: id,
+                hostId: hostId,
+                label: label,
+                remoteHost: remoteHost,
+                remotePort: remotePort,
+                scheme: scheme,
+                path: path,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String hostId,
+                required String label,
+                required String remoteHost,
+                required int remotePort,
+                required String scheme,
+                Value<String> path = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TunnelTargetsCompanion.insert(
+                id: id,
+                hostId: hostId,
+                label: label,
+                remoteHost: remoteHost,
+                remotePort: remotePort,
+                scheme: scheme,
+                path: path,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$TunnelTargetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $TunnelTargetsTable,
+      TunnelTargetRow,
+      $$TunnelTargetsTableFilterComposer,
+      $$TunnelTargetsTableOrderingComposer,
+      $$TunnelTargetsTableAnnotationComposer,
+      $$TunnelTargetsTableCreateCompanionBuilder,
+      $$TunnelTargetsTableUpdateCompanionBuilder,
+      (
+        TunnelTargetRow,
+        BaseReferences<_$KelolaDatabase, $TunnelTargetsTable, TunnelTargetRow>,
+      ),
+      TunnelTargetRow,
+      PrefetchHooks Function()
+    >;
 
 class $KelolaDatabaseManager {
   final _$KelolaDatabase _db;
@@ -9410,4 +10258,6 @@ class $KelolaDatabaseManager {
       $$HostTagsTableTableManager(_db, _db.hostTags);
   $$FleetCacheTableTableManager get fleetCache =>
       $$FleetCacheTableTableManager(_db, _db.fleetCache);
+  $$TunnelTargetsTableTableManager get tunnelTargets =>
+      $$TunnelTargetsTableTableManager(_db, _db.tunnelTargets);
 }

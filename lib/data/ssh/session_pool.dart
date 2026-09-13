@@ -101,8 +101,15 @@ class SshSessionPool {
 
   final Map<String, List<SSHClient>> _pool = {};
   final Map<String, SSHClient> _followClients = {};
+  /// Dedicated key-only SSH clients for tunnels (one per host). Not exec `_pool`.
+  final Map<String, SSHClient> _tunnelClients = {};
   final Map<String, JournalFollowHandle> _follows = {};
   final ProbeAuditPolicy _auditPolicy = ProbeAuditPolicy();
+
+  /// Optional seam: tear down active tunnels before SSH clients disconnect.
+  ///
+  /// Wired by providers so [closeAll] also runs [TunnelManager.closeAll].
+  Future<void> Function()? closeTunnels;
 
   /// True when the most recent client open used password auth.
   /// Cleared at the start of every open via [noteClientOpen].
@@ -148,12 +155,25 @@ class SshSessionPool {
       return true;
     }
     final follow = _followClients[hostId];
-    return follow != null && !follow.isClosed;
+    if (follow != null && !follow.isClosed) {
+      return true;
+    }
+    final tunnel = _tunnelClients[hostId];
+    return tunnel != null && !tunnel.isClosed;
   }
 
   /// Test hook: clients currently held in the key-auth pool for [hostId].
   /// Bootstrap open must leave this at 0.
   int debugPooledCount(String hostId) => _pool[hostId]?.length ?? 0;
+
+  /// Test hook: dedicated tunnel clients held for [hostId] (0 or 1).
+  int debugTunnelClientCount(String hostId) {
+    final client = _tunnelClients[hostId];
+    if (client == null || client.isClosed) {
+      return 0;
+    }
+    return 1;
+  }
 
   int get activeFollowCount =>
       _follows.values.where((h) => h.isOpen).length;
@@ -392,6 +412,42 @@ class SshSessionPool {
       session: session,
       onClosed: () => _followClients.remove(host.id),
     );
+  }
+
+  /// Dedicated key-only SSH client for tunnels on [host].
+  ///
+  /// Separate from the exec [_pool] so long-lived forwards do not consume
+  /// probe slots. Uses [openSession] → [createAndAuthenticateClient] (30s
+  /// keepalive). Never password bootstrap.
+  Future<SSHClient> acquireTunnelClient(
+    Host host, {
+    UnknownHostKeyHandler? onUnknownHostKey,
+  }) async {
+    final existing = _tunnelClients[host.id];
+    if (existing != null && !existing.isClosed) {
+      return existing;
+    }
+    if (existing != null) {
+      _tunnelClients.remove(host.id);
+    }
+    final client = await openSession(
+      host,
+      visiting: {host.id},
+      onUnknownHostKey: onUnknownHostKey,
+    );
+    _tunnelClients[host.id] = client;
+    return client;
+  }
+
+  /// Closes and drops the dedicated tunnel client for [hostId], if any.
+  ///
+  /// Call when the last tunnel for that host is gone so idle SSH sessions
+  /// do not linger after idle/user/fail teardown.
+  Future<void> releaseTunnelClient(String hostId) async {
+    final tunnel = _tunnelClients.remove(hostId);
+    if (tunnel != null && !tunnel.isClosed) {
+      await tunnel.close();
+    }
   }
 
   Future<SSHClient> _acquire(
@@ -665,6 +721,10 @@ class SshSessionPool {
     if (follow != null && !follow.isClosed) {
       await follow.close();
     }
+    final tunnel = _tunnelClients.remove(hostId);
+    if (tunnel != null && !tunnel.isClosed) {
+      await tunnel.close();
+    }
     final list = _pool.remove(hostId) ?? [];
     for (final c in list) {
       await c.close();
@@ -672,7 +732,16 @@ class SshSessionPool {
   }
 
   Future<void> closeAll() async {
-    final ids = {..._pool.keys, ..._followClients.keys, ..._follows.keys};
+    final closer = closeTunnels;
+    if (closer != null) {
+      await closer();
+    }
+    final ids = {
+      ..._pool.keys,
+      ..._followClients.keys,
+      ..._tunnelClients.keys,
+      ..._follows.keys,
+    };
     for (final id in ids) {
       await disconnect(id);
     }

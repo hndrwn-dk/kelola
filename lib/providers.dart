@@ -1,22 +1,34 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
+import 'package:kelola/data/db/tunnel_repository.dart';
 import 'package:kelola/data/keystore/hardware_signer.dart';
 import 'package:kelola/data/keystore/method_channel_hardware_signer.dart';
 import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/openssh_ecdsa.dart';
 import 'package:kelola/data/ssh/session_pool.dart';
+import 'package:kelola/data/ssh/tunnel_bridge.dart';
+import 'package:kelola/data/ssh/tunnel_manager.dart';
 import 'package:kelola/data/widget/home_widget_bridge.dart';
 import 'package:kelola/data/llm/assist_service.dart';
 import 'package:kelola/data/llm/dart_io_llm_http.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/incident/correlation.dart';
 import 'package:kelola/domain/llm/preview_gate.dart';
 import 'package:kelola/domain/llm/settings.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
+import 'package:kelola/domain/tunnels/active_tunnel.dart';
+import 'package:kelola/domain/tunnels/tunnel_close_reason.dart';
+import 'package:kelola/domain/tunnels/tunnel_target.dart';
+
+final entitlementProvider = Provider<Entitlement>((ref) {
+  return const OpenEntitlement();
+});
 
 final databaseProvider = Provider<KelolaDatabase>((ref) {
   final db = KelolaDatabase();
@@ -156,6 +168,90 @@ final sessionPoolProvider = Provider<SshSessionPool>((ref) {
   );
   ref.onDispose(pool.closeAll);
   return pool;
+});
+
+final tunnelRepositoryProvider = Provider<TunnelRepository>((ref) {
+  return TunnelRepository(ref.watch(databaseProvider));
+});
+
+final tunnelBridgeProvider = Provider<TunnelBridge>((ref) {
+  return MethodChannelTunnelBridge();
+});
+
+/// Clamped idle minutes from settings — resolved before [tunnelManagerProvider].
+final tunnelIdleMinutesProvider = FutureProvider<int>((ref) {
+  return ref.watch(tunnelRepositoryProvider).idleMinutes();
+});
+
+final tunnelManagerProvider = Provider<TunnelSessionApi>((ref) {
+  final pool = ref.watch(sessionPoolProvider);
+  // Awaited via FutureProvider: do not construct against default 10 while pending.
+  final idleMinutes = ref.watch(tunnelIdleMinutesProvider).requireValue;
+
+  final manager = TunnelManager(
+    pool: pool,
+    hosts: ref.watch(hostRepositoryProvider),
+    idleMinutes: () => idleMinutes,
+  );
+
+  Future<void>? shuttingDown;
+  Future<void> shutdown() {
+    return shuttingDown ??= () async {
+      try {
+        await manager.dispose();
+      } finally {
+        if (identical(pool.closeTunnels, shutdown)) {
+          pool.closeTunnels = null;
+        }
+      }
+    }();
+  }
+
+  // Keep seam wired through dispose/closeAll so sessionPool.closeAll still
+  // awaits tunnel teardown before disconnecting SSH clients.
+  pool.closeTunnels = shutdown;
+
+  ref.onDispose(() {
+    unawaited(shutdown());
+  });
+  return manager;
+});
+
+/// Keeps FGS notification in sync and routes native Stop all / task-removed.
+final tunnelFgsSyncProvider = Provider<TunnelFgsSync>((ref) {
+  final bridge = ref.watch(tunnelBridgeProvider);
+  final manager = ref.watch(tunnelManagerProvider);
+  final sync = TunnelFgsSync(
+    bridge: bridge,
+    tunnels: manager.watch(),
+  );
+  sync.attach();
+  bridge.setNativeHandler((event) async {
+    switch (event) {
+      case TunnelNativeEvent.stopAll:
+        await manager.closeAll(reason: TunnelCloseReason.user);
+      case TunnelNativeEvent.taskRemoved:
+        await manager.closeAll(reason: TunnelCloseReason.termination);
+    }
+  });
+  ref.onDispose(() {
+    bridge.setNativeHandler(null);
+    unawaited(sync.dispose());
+  });
+  return sync;
+});
+
+final activeTunnelsProvider = StreamProvider<List<ActiveTunnel>>((ref) async* {
+  // Ensure idle minutes (and thus TunnelManager) are loaded before watching.
+  await ref.watch(tunnelIdleMinutesProvider.future);
+  // Ensure FGS sync + native handlers stay alive with the active list.
+  ref.watch(tunnelFgsSyncProvider);
+  yield* ref.watch(tunnelManagerProvider).watch();
+});
+
+final tunnelTargetsProvider =
+    StreamProvider.family<List<TunnelTarget>, String>((ref, hostId) {
+  return ref.watch(tunnelRepositoryProvider).watchForHost(hostId);
 });
 
 /// Live host membership and attention from Drift table watches.

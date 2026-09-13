@@ -37,6 +37,24 @@ CREATE TABLE app_settings (
 );
 ''';
 
+/// audit_records as of schema 4 (pre close_reason; from < 13 adds that column).
+const _v4AuditRecordsSql = '''
+CREATE TABLE audit_records (
+  id TEXT NOT NULL PRIMARY KEY,
+  timestamp_utc INTEGER NOT NULL,
+  host_id TEXT NOT NULL,
+  host_alias TEXT NOT NULL,
+  remote_user TEXT NOT NULL,
+  command TEXT NOT NULL,
+  risk TEXT NOT NULL,
+  used_sudo INTEGER NOT NULL CHECK (used_sudo IN (0, 1)),
+  exit_code INTEGER NULL,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  error_summary TEXT NULL,
+  app_version TEXT NOT NULL
+);
+''';
+
 /// cached_facts as of schema 4 (pre journal_access; from < 12 adds that column).
 const _v4CachedFactsSql = '''
 CREATE TABLE cached_facts (
@@ -121,6 +139,7 @@ void main() {
     final raw = sqlite3.openInMemory();
     raw.execute(_v4HostsSql);
     raw.execute(_v4AppSettingsSql);
+    raw.execute(_v4AuditRecordsSql);
     raw.execute(_v4CachedFactsSql);
     raw.execute('PRAGMA user_version = 4');
 
@@ -143,7 +162,7 @@ void main() {
     expect(tablesAfter, isNotEmpty);
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 12);
+    expect(version.data['user_version'], 13);
 
     final cols = await db.customSelect('PRAGMA table_info(search_index)').get();
     final names = cols.map((r) => r.read<String>('name')).toSet();
@@ -153,7 +172,7 @@ void main() {
         await db.customSelect('PRAGMA table_info(app_settings)').get();
     expect(
       settingsCols.map((r) => r.read<String>('name')).toSet(),
-      contains('widget_enabled'),
+      containsAll(['widget_enabled', 'tunnel_idle_minutes']),
     );
 
     final tagTable = await db.customSelect(
@@ -171,9 +190,21 @@ void main() {
       fleetCols.map((r) => r.read<String>('name')).toSet(),
       containsAll(['mem_percent', 'security_updates', 'containers_down']),
     );
+
+    final tunnelTable = await db.customSelect(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='tunnel_targets'",
+    ).get();
+    expect(tunnelTable, isNotEmpty);
+
+    final auditCols =
+        await db.customSelect('PRAGMA table_info(audit_records)').get();
+    expect(
+      auditCols.map((r) => r.read<String>('name')).toSet(),
+      contains('close_reason'),
+    );
   });
 
-  test('onCreate v12 matches schema migrated from v1', () async {
+  test('onCreate current schema matches schema migrated from v1', () async {
     final created = KelolaDatabase.memory();
     addTearDown(created.close);
     await created.customSelect('SELECT 1').get();

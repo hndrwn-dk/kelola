@@ -12,6 +12,7 @@ class MainActivity : FlutterFragmentActivity() {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(HardwareSignerPlugin())
         flutterEngine.plugins.add(KelolaWidgetPlugin())
+        flutterEngine.plugins.add(TunnelPlugin())
         links = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "com.tursinalabs.kelola/links",

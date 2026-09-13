@@ -18,6 +18,7 @@ part 'database.g.dart';
     Snippets,
     HostTags,
     FleetCache,
+    TunnelTargets,
   ],
 )
 class KelolaDatabase extends _$KelolaDatabase {
@@ -28,7 +29,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -109,6 +110,11 @@ UPDATE cached_facts SET journal_access = CASE
   WHEN journal_readable = 1 THEN 'plain'
   ELSE 'unknown' END
 ''');
+          }
+          if (from < 13) {
+            await m.createTable(tunnelTargets);
+            await m.addColumn(appSettings, appSettings.tunnelIdleMinutes);
+            await m.addColumn(auditRecords, auditRecords.closeReason);
           }
         },
       );
