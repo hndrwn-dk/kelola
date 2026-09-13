@@ -16,6 +16,7 @@ import 'package:kelola/domain/snippets/starters.dart';
 import 'package:kelola/domain/llm/provider.dart';
 import 'package:kelola/domain/llm/settings.dart';
 import 'package:kelola/domain/units/service_unit.dart';
+import 'package:kelola/app_version.dart';
 import 'package:uuid/uuid.dart';
 
 class HostRepository {
@@ -548,7 +549,7 @@ class HostRepository {
             risk: risk,
             usedSudo: usedSudo,
             closeReason: Value(closeReason),
-            appVersion: '0.1.0',
+            appVersion: kelolaAppVersion,
           ),
         );
     return id;
@@ -602,7 +603,7 @@ class HostRepository {
             durationMs: Value(durationMs),
             errorSummary: Value(errorSummary),
             closeReason: Value(closeReason),
-            appVersion: '0.1.0',
+            appVersion: kelolaAppVersion,
           ),
         );
   }
