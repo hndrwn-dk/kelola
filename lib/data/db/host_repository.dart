@@ -165,6 +165,8 @@ class HostRepository {
           .go();
       await (_db.delete(_db.hostTags)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.fleetCache)..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(_db.tunnelTargets)..where((t) => t.hostId.equals(id)))
+          .go();
       await (_db.delete(_db.recents)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.pins)..where((t) => t.hostId.equals(id))).go();
       final last = await lastHostId();
@@ -531,6 +533,7 @@ class HostRepository {
     required String risk,
     required bool usedSudo,
     String title = '',
+    String? closeReason,
   }) async {
     final id = _uuid.v7();
     await _db.into(_db.auditRecords).insert(
@@ -544,6 +547,7 @@ class HostRepository {
             command: command,
             risk: risk,
             usedSudo: usedSudo,
+            closeReason: Value(closeReason),
             appVersion: '0.1.0',
           ),
         );
@@ -556,6 +560,7 @@ class HostRepository {
     int durationMs = 0,
     String? errorSummary,
     String? title,
+    String? closeReason,
   }) {
     return (_db.update(_db.auditRecords)..where((t) => t.id.equals(id))).write(
       AuditRecordsCompanion(
@@ -563,6 +568,8 @@ class HostRepository {
         durationMs: Value(durationMs),
         errorSummary: Value(errorSummary),
         title: title == null ? const Value.absent() : Value(title),
+        closeReason:
+            closeReason == null ? const Value.absent() : Value(closeReason),
       ),
     );
   }
@@ -578,6 +585,7 @@ class HostRepository {
     int? exitCode,
     int durationMs = 0,
     String? errorSummary,
+    String? closeReason,
   }) {
     return _db.into(_db.auditRecords).insert(
           AuditRecordsCompanion.insert(
@@ -593,6 +601,7 @@ class HostRepository {
             exitCode: Value(exitCode),
             durationMs: Value(durationMs),
             errorSummary: Value(errorSummary),
+            closeReason: Value(closeReason),
             appVersion: '0.1.0',
           ),
         );
@@ -640,6 +649,7 @@ class HostRepository {
       appVersion: row.appVersion,
       exitCode: row.exitCode,
       errorSummary: row.errorSummary,
+      closeReason: row.closeReason,
     );
   }
 
@@ -967,6 +977,7 @@ class HostRepository {
     Value<String?> llmOpenaiBaseUrl = const Value.absent(),
     Value<String?> llmOpenaiApiKey = const Value.absent(),
     Value<String?> llmOpenaiModel = const Value.absent(),
+    Value<int> tunnelIdleMinutes = const Value.absent(),
   }) {
     return AppSettingsCompanion(
       id: const Value(1),
@@ -1003,6 +1014,9 @@ class HostRepository {
       llmOpenaiModel: llmOpenaiModel.present
           ? llmOpenaiModel
           : Value(existing?.llmOpenaiModel),
+      tunnelIdleMinutes: tunnelIdleMinutes.present
+          ? tunnelIdleMinutes
+          : Value(existing?.tunnelIdleMinutes ?? 10),
     );
   }
 

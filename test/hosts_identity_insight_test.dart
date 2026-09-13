@@ -26,6 +26,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> flushDriftStreams(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  }
+
   testWidgets('hosts root shows Kelola mark and wordmark with search and add only',
       (tester) async {
     final db = KelolaDatabase.memory();
@@ -48,6 +53,7 @@ void main() {
     expect(find.byTooltip('Add host'), findsOneWidget);
     expect(find.byTooltip('Audit'), findsNothing);
     expect(find.byIcon(Icons.receipt_long_rounded), findsNothing);
+    await flushDriftStreams(tester);
   });
 
   testWidgets('empty 7-day audit hides the insight row', (tester) async {
@@ -67,6 +73,7 @@ void main() {
     expect(find.textContaining('7 days'), findsNothing);
     expect(find.text('AUDIT'), findsNothing);
     expect(find.text('INSIGHTS AUDIT'), findsNothing);
+    await flushDriftStreams(tester);
   });
 
   testWidgets('hosts footer shows version and keys line on one row',
@@ -111,6 +118,7 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const Key('hosts-colophon-hairline')), findsOneWidget);
+    await flushDriftStreams(tester);
   });
 
   testWidgets('insight row uses alert band and opens cross-host audit',
@@ -179,6 +187,7 @@ void main() {
     expect(find.byType(AuditScreen), findsOneWidget);
     expect(find.text('Audit · All hosts'), findsOneWidget);
     expect(find.text('ALL HOSTS'), findsOneWidget);
+    await flushDriftStreams(tester);
   });
 
   testWidgets('host dashboard does not show the Kelola wordmark', (tester) async {

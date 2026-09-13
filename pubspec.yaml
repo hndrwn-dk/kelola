@@ -20,6 +20,7 @@ dependencies:
   collection: ^1.19.1
   crypto: ^3.0.6
   share_plus: ^10.1.4
+  url_launcher: ^6.3.1
   flutter_markdown: ^0.7.7+1
 
 dev_dependencies:

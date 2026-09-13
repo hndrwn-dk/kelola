@@ -36,6 +36,11 @@ void main() {
     expect(find.byType(HostsScreen), findsOneWidget);
   }
 
+  Future<void> flushDriftStreams(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  }
+
   testWidgets('long-press offers Edit host next to Remove', (tester) async {
     await pumpHosts(tester);
 
@@ -49,6 +54,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(EditHostScreen), findsOneWidget);
+    await flushDriftStreams(tester);
   });
 
   testWidgets('swipe toward edit opens the host editor', (tester) async {
@@ -58,5 +64,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(EditHostScreen), findsOneWidget);
+    await flushDriftStreams(tester);
   });
 }

@@ -69,7 +69,7 @@ void main() {
     expect(pack, contains('nginx.service'));
     expect(pack, contains('borgmatic.service'));
     expect(pack, contains('df -PT'));
-    expect(pack, contains('kelola: 0.1.0'));
+    expect(pack, contains('kelola: 0.2.3'));
     expect(pack, contains('flutter: 3.47'));
     expect(pack, contains('<HOST_'));
     expect(pack, isNot(contains('nas-01')));

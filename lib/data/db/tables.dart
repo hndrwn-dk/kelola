@@ -92,6 +92,7 @@ class AuditRecords extends Table {
   IntColumn get durationMs => integer().withDefault(const Constant(0))();
   TextColumn get errorSummary => text().nullable()();
   TextColumn get appVersion => text()();
+  TextColumn get closeReason => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -116,6 +117,8 @@ class AppSettings extends Table {
   TextColumn get llmOpenaiBaseUrl => text().nullable()();
   TextColumn get llmOpenaiApiKey => text().nullable()();
   TextColumn get llmOpenaiModel => text().nullable()();
+  IntColumn get tunnelIdleMinutes =>
+      integer().withDefault(const Constant(10))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -178,4 +181,18 @@ class FleetCache extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {hostId};
+}
+
+@DataClassName('TunnelTargetRow')
+class TunnelTargets extends Table {
+  TextColumn get id => text()();
+  TextColumn get hostId => text().references(Hosts, #id)();
+  TextColumn get label => text()();
+  TextColumn get remoteHost => text()();
+  IntColumn get remotePort => integer()();
+  TextColumn get scheme => text()(); // 'http' | 'https' — never int enum
+  TextColumn get path => text().withDefault(const Constant(''))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
 }

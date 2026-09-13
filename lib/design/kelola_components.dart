@@ -919,6 +919,10 @@ class _KelolaSheetState extends State<KelolaSheet> {
             if (_childHeight == h) {
               return;
             }
+            // Lock after first measure to avoid constrain/measure oscillation.
+            if (_childHeight != null) {
+              return;
+            }
             setState(() => _childHeight = h);
           },
           child: widget.child,

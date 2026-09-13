@@ -13,6 +13,7 @@ class AuditEvent {
     this.title = '',
     this.exitCode,
     this.errorSummary,
+    this.closeReason,
   });
 
   final String id;
@@ -28,6 +29,8 @@ class AuditEvent {
   final String appVersion;
   final int? exitCode;
   final String? errorSummary;
+  final String? closeReason;
 
-  bool get orphan => exitCode == null && errorSummary == null;
+  bool get orphan =>
+      exitCode == null && errorSummary == null && closeReason == null;
 }
