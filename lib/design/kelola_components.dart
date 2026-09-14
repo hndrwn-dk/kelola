@@ -1163,6 +1163,7 @@ class KelolaInput extends StatelessWidget {
     this.focusNode,
     this.onChanged,
     this.onSubmitted,
+    this.error,
   });
 
   final String label;
@@ -1174,6 +1175,7 @@ class KelolaInput extends StatelessWidget {
   final FocusNode? focusNode;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
@@ -1181,6 +1183,8 @@ class KelolaInput extends StatelessWidget {
     final valueStyle = mono
         ? KelolaType.mono(color: c.text, size: 13)
         : KelolaType.display(color: c.text, size: 15);
+    final invalid = error != null && error!.isNotEmpty;
+    final borderColor = invalid ? c.red : c.line;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1208,18 +1212,22 @@ class KelolaInput extends StatelessWidget {
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(KelolaRadii.sm),
-              borderSide: BorderSide(color: c.line),
+              borderSide: BorderSide(color: borderColor),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(KelolaRadii.sm),
-              borderSide: BorderSide(color: c.line),
+              borderSide: BorderSide(color: borderColor),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(KelolaRadii.sm),
-              borderSide: BorderSide(color: c.amber),
+              borderSide: BorderSide(color: invalid ? c.red : c.amber),
             ),
           ),
         ),
+        if (invalid) ...[
+          const SizedBox(height: 6),
+          Text(error!, style: KelolaType.body(color: c.red, size: 12)),
+        ],
       ],
     );
   }
