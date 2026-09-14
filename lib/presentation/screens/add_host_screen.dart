@@ -60,7 +60,10 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
     }
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
-        builder: (_) => EnrollmentScreen(hostId: host.id),
+        builder: (_) => EnrollmentScreen(
+          hostId: host.id,
+          hostAlias: host.alias,
+        ),
       ),
     );
   }

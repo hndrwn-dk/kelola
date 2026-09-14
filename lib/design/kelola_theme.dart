@@ -173,6 +173,9 @@ ThemeData buildKelolaDarkTheme() {
       onSurface: c.text,
     ),
     dividerColor: c.line,
+    actionIconTheme: ActionIconThemeData(
+      backButtonIconBuilder: (context) => const Icon(Icons.arrow_back, size: 22),
+    ),
     dialogTheme: DialogThemeData(
       backgroundColor: c.surface,
       surfaceTintColor: c.surface,

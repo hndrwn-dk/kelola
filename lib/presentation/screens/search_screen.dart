@@ -42,7 +42,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         backgroundColor: c.ink,
         foregroundColor: c.text,
         elevation: 0,
+        toolbarHeight: 64,
         title: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(

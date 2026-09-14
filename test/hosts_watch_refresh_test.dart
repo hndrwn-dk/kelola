@@ -240,7 +240,7 @@ void main() {
   });
 
   testWidgets(
-      'attention change while Hosts visible does not reorder under scroll',
+      'attention change while Hosts visible moves the host to the matching group',
       (tester) async {
     final now = DateTime.now().toUtc();
     final healthy = await repo.insert(
@@ -289,9 +289,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('NEEDS ATTENTION'), findsNothing);
+    expect(find.text('NEEDS ATTENTION'), findsOneWidget);
     expect(find.text('stay-put'), findsOneWidget);
     expect(find.text('2 FAILED'), findsOneWidget);
+    expect(find.text('anchor'), findsOneWidget);
     await settleDispose(tester);
   });
 

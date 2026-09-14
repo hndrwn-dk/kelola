@@ -49,6 +49,10 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
 
     return KelolaPage(
       title: 'Host details',
+      bar: KelolaHostAppBar(
+        hostAlias: host.alias,
+        title: 'Host details',
+      ),
       body: ListView(
         padding: kelolaScrollPadding(context, top: 8),
         children: [

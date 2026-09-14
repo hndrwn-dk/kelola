@@ -22,6 +22,7 @@ import 'package:kelola/domain/enrollment/ephemeral_password.dart';
 import 'package:kelola/domain/enrollment/key_install_script.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/probes/journal_probe.dart';
+import 'package:kelola/domain/probes/snippet_probe.dart';
 import 'package:kelola/domain/probes/key_install_append_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
@@ -84,12 +85,12 @@ class SshSessionPool {
     this.maxPerHost = 3,
     JournalFollowOpener? followOpener,
     CorrelationStore? correlation,
-  })  : _repository = repository,
-        _signer = signer,
-        _hostKeys = hostKeys,
-        _publicBlob = publicBlob,
-        _followOpener = followOpener,
-        _correlation = correlation ?? CorrelationStore();
+  }) : _repository = repository,
+       _signer = signer,
+       _hostKeys = hostKeys,
+       _publicBlob = publicBlob,
+       _followOpener = followOpener,
+       _correlation = correlation ?? CorrelationStore();
 
   final HostRepository _repository;
   final HardwareSigner _signer;
@@ -101,6 +102,7 @@ class SshSessionPool {
 
   final Map<String, List<SSHClient>> _pool = {};
   final Map<String, SSHClient> _followClients = {};
+
   /// Dedicated key-only SSH clients for tunnels (one per host). Not exec `_pool`.
   final Map<String, SSHClient> _tunnelClients = {};
   final Map<String, JournalFollowHandle> _follows = {};
@@ -175,8 +177,7 @@ class SshSessionPool {
     return 1;
   }
 
-  int get activeFollowCount =>
-      _follows.values.where((h) => h.isOpen).length;
+  int get activeFollowCount => _follows.values.where((h) => h.isOpen).length;
 
   bool hasActiveFollow(String hostId) {
     final handle = _follows[hostId];
@@ -247,7 +248,9 @@ class SshSessionPool {
           await sftp.close();
         }
       } else {
-        final result = await client.runWithResult(command).timeout(probe.timeout);
+        final result = await client
+            .runWithResult(command)
+            .timeout(probe.timeout);
         exitCode = result.exitCode;
         if (probe is JournalProbe) {
           logJournalProbeReceive(
@@ -256,10 +259,11 @@ class SshSessionPool {
             stderr: result.stderr,
           );
         }
-        parsed = probe.parse(
-          utf8.decode(result.stdout, allowMalformed: true),
-          utf8.decode(result.stderr, allowMalformed: true),
-          result.exitCode ?? -1,
+        parsed = parseProbeExec(
+          probe,
+          stdout: utf8.decode(result.stdout, allowMalformed: true),
+          stderr: utf8.decode(result.stderr, allowMalformed: true),
+          exitCode: result.exitCode,
         );
       }
       _auditPolicy.onSuccess(host.id);
@@ -569,7 +573,8 @@ class SshSessionPool {
           ];
 
     final passwordRequest = onPasswordRequest;
-    final FutureOr<String?> Function()? passwordHandler = passwordRequest == null
+    final FutureOr<String?> Function()? passwordHandler =
+        passwordRequest == null
         ? null
         : gatedPasswordRequest(
             hostKeyAccepted: hostKeyGate,
@@ -609,7 +614,7 @@ class SshSessionPool {
     required String username,
     required List<SSHIdentity>? identities,
     required Future<bool> Function(String type, Uint8List fingerprint)
-        onVerifyHostKey,
+    onVerifyHostKey,
     FutureOr<String?> Function()? onPasswordRequest,
   }) async {
     final client = SSHClient(
@@ -753,9 +758,8 @@ class _DartSshFollowChannel implements JournalFollowChannel {
     required SSHClient client,
     required SSHSession session,
     required this.onClosed,
-  })  : _client = client,
-        _session = session {
-    // Drain stderr so a full stderr window cannot stall stdout.
+  }) : _client = client,
+       _session = session {
     _stderrSub = _session.stderr.listen((_) {}, onError: (_) {});
   }
 

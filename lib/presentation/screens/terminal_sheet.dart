@@ -201,11 +201,10 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Terminal', style: KelolaType.display(color: c.text, size: 18)),
-            const SizedBox(height: 4),
-            Text(
-              '${widget.host.alias} · NO PTY · AUDITED',
-              style: KelolaType.mono(color: c.dim, size: 9.5, letterSpacing: 0.6),
+            KelolaHostIdentity(
+              hostAlias: widget.host.alias,
+              title: 'Terminal',
+              contextLine: 'NO PTY',
             ),
             const SizedBox(height: 10),
             if (_busy)

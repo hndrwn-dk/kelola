@@ -1,3 +1,4 @@
+import 'package:kelola/domain/containers/container_engine.dart';
 import 'package:kelola/domain/containers/container_list_parser.dart';
 import 'package:kelola/domain/containers/container_row.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
@@ -12,19 +13,15 @@ class ContainerListProbe extends Probe<ContainerInventory> {
 
   @override
   String command(HostFacts facts) {
-    return r'''
+    return (r'''
 LC_ALL=C
 echo "---ENGINE---"
 command -v k3s kubectl docker podman crictl nerdctl 2>/dev/null || true
 echo "---PODS---"
 if command -v k3s >/dev/null 2>&1; then
-  sudo -n k3s kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null \
-    || k3s kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null \
-    || true
+  sudo -n k3s kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || k3s kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || true
 elif command -v kubectl >/dev/null 2>&1; then
-  kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null \
-    || sudo -n kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null \
-    || true
+  kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || sudo -n kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || true
 fi
 echo "---PS_DOCKER---"
 if command -v docker >/dev/null 2>&1; then
@@ -37,11 +34,40 @@ if command -v docker >/dev/null 2>&1; then
   fi
 fi
 echo "---PS_PODMAN---"
+user_ok=0
+root_ok=0
+sock_ok=0
+sock=/run/podman/podman.sock
 if command -v podman >/dev/null 2>&1; then
-  podman ps -a --format json 2>/dev/null || sudo -n podman ps -a --format json 2>/dev/null || true
+  ''' +
+        podmanUserSession +
+        r'''
+  if user_json=$(podman ps -a --format json 2>/dev/null); then
+    user_ok=1
+    printf '%s\n' "$user_json"
+  fi
+fi
+echo "---PS_PODMAN_SOCK---"
+if command -v podman >/dev/null 2>&1 && [ -S "$sock" ] && [ -r "$sock" ]; then
+  if sock_json=$(podman --remote --url "unix://$sock" ps -a --format json 2>/dev/null); then
+    sock_ok=1
+    printf '%s\n' "$sock_json"
+  fi
+fi
+echo "---PS_PODMAN_ROOT---"
+if command -v podman >/dev/null 2>&1; then
+  if root_json=$(sudo -n podman ps -a --format json 2>/dev/null); then
+    root_ok=1
+    printf '%s\n' "$root_json"
+  fi
+  if [ -S "$sock" ] && [ ! -r "$sock" ] && [ "$sock_ok" -eq 0 ] && [ "$root_ok" -eq 0 ]; then
+    echo "---PODMAN_SOCK_DENIED---"
+  elif [ "$user_ok" -eq 0 ] && [ "$root_ok" -eq 0 ] && [ "$sock_ok" -eq 0 ]; then
+    echo "---PODMAN_DENIED---"
+  fi
 fi
 echo "---PS---"
-''';
+''').replaceAll('\r\n', '\n');
   }
 
   @override

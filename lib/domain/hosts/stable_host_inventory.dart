@@ -1,10 +1,9 @@
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_inventory_view.dart';
 
-/// Projects live host rows into inventory buckets without reshuffling on
-/// every attention write. Re-bucket only when [allowReorder] is true or the
-/// membership set changes (add/remove). New hosts land in not-checked until
-/// the next explicit reorder (pull-to-refresh).
+/// Keeps order inside a bucket stable, but never leaves a host in a bucket
+/// that disagrees with its live attention. The row subtitle and the group
+/// header both come from the current host.
 class StableHostInventory {
   Set<String>? _memberIds;
   List<String> _needsIds = const [];
@@ -21,60 +20,51 @@ class StableHostInventory {
     final membershipChanged =
         _memberIds == null || !_sameMembers(_memberIds!, members);
 
-    if (allowReorder || membershipChanged) {
-      if (!allowReorder && membershipChanged && _memberIds != null) {
-        _applyMembershipDelta(byId, members);
-        _memberIds = members;
-        return _viewFromFrozen(byId);
-      }
-      final view = HostInventoryView.build(live, now: now);
-      _capture(view);
+    final liveView = HostInventoryView.build(live, now: now);
+    if (allowReorder || _memberIds == null) {
+      _capture(liveView);
       _memberIds = members;
-      return view;
+      return liveView;
     }
-
-    return _viewFromFrozen(byId);
+    if (membershipChanged) {
+      _memberIds = members;
+    }
+    return _placeByLiveBucket(liveView);
   }
 
-  void _applyMembershipDelta(Map<String, Host> byId, Set<String> members) {
-    bool keep(String id) => members.contains(id);
-    _needsIds = _needsIds.where(keep).toList();
-    _healthyIds = _healthyIds.where(keep).toList();
-    _uncheckedIds = _uncheckedIds.where(keep).toList();
-    final known = {..._needsIds, ..._healthyIds, ..._uncheckedIds};
-    for (final id in members) {
-      if (!known.contains(id)) {
-        _uncheckedIds = [..._uncheckedIds, id];
-      }
+  /// Bucket comes from the same live host the row subtitle uses. Order
+  /// inside a bucket stays put so a refresh does not reshuffle the list.
+  HostInventoryView _placeByLiveBucket(HostInventoryView live) {
+    List<Host> order(List<Host> group, List<String> previous) {
+      final remaining = {for (final host in group) host.id: host};
+      final kept = <Host>[
+        for (final id in previous)
+          if (remaining.containsKey(id)) remaining.remove(id)!,
+      ];
+      final added = remaining.values.toList()
+        ..sort(
+          (a, b) => a.alias.toLowerCase().compareTo(b.alias.toLowerCase()),
+        );
+      return [...kept, ...added];
     }
-    // Drop ids that somehow lack a live row.
-    _needsIds = _needsIds.where(byId.containsKey).toList();
-    _healthyIds = _healthyIds.where(byId.containsKey).toList();
-    _uncheckedIds = _uncheckedIds.where(byId.containsKey).toList();
+
+    final needs = order(live.needsAttention, _needsIds);
+    final healthy = order(live.healthy, _healthyIds);
+    final unchecked = order(live.notChecked, _uncheckedIds);
+    _needsIds = needs.map((host) => host.id).toList();
+    _healthyIds = healthy.map((host) => host.id).toList();
+    _uncheckedIds = unchecked.map((host) => host.id).toList();
+    return HostInventoryView(
+      needsAttention: needs,
+      healthy: healthy,
+      notChecked: unchecked,
+    );
   }
 
   void _capture(HostInventoryView view) {
     _needsIds = view.needsAttention.map((h) => h.id).toList();
     _healthyIds = view.healthy.map((h) => h.id).toList();
     _uncheckedIds = view.notChecked.map((h) => h.id).toList();
-  }
-
-  HostInventoryView _viewFromFrozen(Map<String, Host> byId) {
-    Host? take(String id) => byId[id];
-    return HostInventoryView(
-      needsAttention: [
-        for (final id in _needsIds)
-          if (take(id) != null) take(id)!,
-      ],
-      healthy: [
-        for (final id in _healthyIds)
-          if (take(id) != null) take(id)!,
-      ],
-      notChecked: [
-        for (final id in _uncheckedIds)
-          if (take(id) != null) take(id)!,
-      ],
-    );
   }
 
   static bool _sameMembers(Set<String> a, Set<String> b) {

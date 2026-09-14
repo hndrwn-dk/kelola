@@ -10,23 +10,21 @@ import 'package:kelola/domain/probes/snippet_probe.dart';
 import 'package:kelola/domain/snippets/run_snippet.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
 import 'package:kelola/presentation/host_session.dart';
-import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
+import 'package:kelola/presentation/widgets/kelola_chrome.dart'
+    show KelolaEmpty;
+import 'package:kelola/presentation/widgets/snippet_list_actions.dart';
 import 'package:kelola/providers.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
 class SnippetsScreen extends ConsumerStatefulWidget {
-  const SnippetsScreen({
-    super.key,
-    required this.host,
-    this.onExecute,
-  });
+  const SnippetsScreen({super.key, required this.host, this.onExecute});
 
   final Host host;
 
   /// Test seam. When set, Run hands this the same probe the preview shows
-  /// and does not open an SSH session.
-  final Future<void> Function(SnippetProbe probe)? onExecute;
+  /// and does not open an SSH session. A returned result is the transcript.
+  final Future<CommandRunnerResult?> Function(SnippetProbe probe)? onExecute;
 
   @override
   ConsumerState<SnippetsScreen> createState() => _SnippetsScreenState();
@@ -65,24 +63,9 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     final c = context.kc;
     return Scaffold(
       backgroundColor: c.ink,
-      appBar: AppBar(
-        backgroundColor: c.ink,
-        foregroundColor: c.text,
-        elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Snippets', style: KelolaType.display(color: c.text, size: 16)),
-            Text(
-              widget.host.alias,
-              style: KelolaType.mono(
-                color: c.dim,
-                size: 8.5,
-                letterSpacing: 0.9,
-              ),
-            ),
-          ],
-        ),
+      appBar: KelolaHostAppBar(
+        hostAlias: widget.host.alias,
+        title: 'Snippets',
       ),
       body: Column(
         children: [
@@ -93,56 +76,56 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
               color: c.amber,
             ),
           Expanded(
-            child: _items.isEmpty && !_busy
-                ? Center(
+            child: ListView(
+              padding: kelolaScrollPadding(context),
+              children: [
+                if (_error != null) ...[
+                  KelolaError(message: _error!, sudoUser: widget.host.username),
+                  const SizedBox(height: 12),
+                ],
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'New snippet',
+                  meta: 'template · {{unit}} {{path}} {{port}} {{host}}',
+                  onTap: _busy ? null : _create,
+                ),
+                const SizedBox(height: 6),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Export JSON',
+                  meta: '${_items.length} templates',
+                  onTap: _items.isEmpty ? null : _export,
+                ),
+                const SizedBox(height: 6),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Import JSON',
+                  meta: 'merge into library',
+                  onTap: _busy ? null : _import,
+                ),
+                const SizedBox(height: 6),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Restore starter snippets',
+                  meta: 'put back missing starters',
+                  onTap: _busy ? null : _restore,
+                ),
+                const SizedBox(height: 12),
+                const SectionSlab('Library'),
+                const SizedBox(height: 6),
+                if (_items.isEmpty && !_busy)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 24),
                     child: KelolaEmpty(
                       body: 'Add a snippet. It will be risk-classified and never auto-run.',
                     ),
-                  )
-                : ListView(
-                    padding: kelolaScrollPadding(context),
-                    children: [
-                      if (_error != null) ...[
-                        KelolaError(
-                          message: _error!,
-                          sudoUser: widget.host.username,
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      ServiceRow(
-                        risk: RiskLevel.read,
-                        name: 'New snippet',
-                        meta: 'template · {{unit}} {{path}} {{port}} {{host}}',
-                        onTap: _busy ? null : _create,
-                      ),
-                      const SizedBox(height: 6),
-                      ServiceRow(
-                        risk: RiskLevel.read,
-                        name: 'Export JSON',
-                        meta: '${_items.length} templates',
-                        onTap: _items.isEmpty ? null : _export,
-                      ),
-                      const SizedBox(height: 6),
-                      ServiceRow(
-                        risk: RiskLevel.read,
-                        name: 'Import JSON',
-                        meta: 'merge into library',
-                        onTap: _busy ? null : _import,
-                      ),
-                      const SizedBox(height: 12),
-                      const SectionSlab('Library'),
-                      const SizedBox(height: 6),
-                      for (final snippet in _items) ...[
-                        ServiceRow(
-                          risk: _previewRisk(snippet),
-                          name: snippet.name,
-                          meta: snippet.starter ? 'starter · tap to run' : 'tap to run',
-                          onTap: _busy ? null : () => _openRun(snippet),
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-                    ],
                   ),
+                for (final snippet in _items) ...[
+                  _snippetRow(c, snippet),
+                  const SizedBox(height: 6),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -202,10 +185,115 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   }
 
   Future<void> _export() {
-    return Share.share(
-      encodeSnippets(_items),
-      subject: 'Kelola snippets',
+    return Share.share(encodeSnippets(_items), subject: 'Kelola snippets');
+  }
+
+  Widget _snippetRow(KelolaColors c, Snippet snippet) {
+    return Dismissible(
+      key: ValueKey(snippet.id),
+      direction: DismissDirection.horizontal,
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 16),
+        decoration: BoxDecoration(
+          color: c.amber.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(KelolaRadii.md),
+        ),
+        child: Text(
+          'EDIT',
+          style: KelolaType.mono(
+            color: c.amber,
+            size: 11,
+            weight: FontWeight.w500,
+          ),
+        ),
+      ),
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16),
+        decoration: BoxDecoration(
+          color: c.red.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(KelolaRadii.md),
+        ),
+        child: Text(
+          'REMOVE',
+          style: KelolaType.mono(
+            color: c.red,
+            size: 11,
+            weight: FontWeight.w500,
+          ),
+        ),
+      ),
+      confirmDismiss: (dir) async {
+        if (dir == DismissDirection.startToEnd) {
+          await _edit(snippet);
+        } else {
+          await _remove(snippet);
+        }
+        return false;
+      },
+      dismissThresholds: const {
+        DismissDirection.startToEnd: 0.25,
+        DismissDirection.endToStart: 0.25,
+      },
+      child: ServiceRow(
+        risk: _previewRisk(snippet),
+        name: snippet.name,
+        meta: snippet.starter ? 'starter · tap to run' : 'tap to run',
+        onTap: _busy ? null : () => _openRun(snippet),
+        onLongPress: _busy ? null : () => _actions(snippet),
+      ),
     );
+  }
+
+  Future<void> _actions(Snippet snippet) async {
+    final action = await showSnippetListActions(context, name: snippet.name);
+    if (!mounted || action == null) {
+      return;
+    }
+    switch (action) {
+      case SnippetListAction.edit:
+        await _edit(snippet);
+      case SnippetListAction.remove:
+        await _remove(snippet);
+    }
+  }
+
+  Future<void> _edit(Snippet snippet) async {
+    final edited = await _editSnippet(context, snippet);
+    if (edited == null || !mounted) {
+      return;
+    }
+    await ref
+        .read(hostRepositoryProvider)
+        .upsertSnippet(
+          Snippet(
+            id: snippet.id,
+            name: edited.name,
+            template: edited.template,
+            starter: false,
+          ),
+        );
+    await _load();
+  }
+
+  Future<void> _remove(Snippet snippet) async {
+    final ok = await showMutateConfirm(
+      context,
+      title: 'Remove ${snippet.name}?',
+      body: 'This cannot be undone.',
+      confirmLabel: 'Remove',
+    );
+    if (!ok || !mounted) {
+      return;
+    }
+    await ref.read(hostRepositoryProvider).deleteSnippet(snippet.id);
+    await _load();
+  }
+
+  Future<void> _restore() async {
+    await ref.read(hostRepositoryProvider).restoreStarterSnippets();
+    await _load();
   }
 
   Future<void> _import() async {
@@ -234,7 +322,7 @@ class _SnippetRunSheet extends ConsumerStatefulWidget {
 
   final Host host;
   final Snippet snippet;
-  final Future<void> Function(SnippetProbe probe)? onExecute;
+  final Future<CommandRunnerResult?> Function(SnippetProbe probe)? onExecute;
 
   @override
   ConsumerState<_SnippetRunSheet> createState() => _SnippetRunSheetState();
@@ -270,11 +358,11 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
   }
 
   SnippetBindings get _bindings => SnippetBindings(
-        unit: _unit.text.trim().isEmpty ? null : _unit.text.trim(),
-        path: _path.text.trim().isEmpty ? null : _path.text.trim(),
-        port: _port.text.trim().isEmpty ? null : _port.text.trim(),
-        host: _hostAlias.text.trim().isEmpty ? null : _hostAlias.text.trim(),
-      );
+    unit: _unit.text.trim().isEmpty ? null : _unit.text.trim(),
+    path: _path.text.trim().isEmpty ? null : _path.text.trim(),
+    port: _port.text.trim().isEmpty ? null : _port.text.trim(),
+    host: _hostAlias.text.trim().isEmpty ? null : _hostAlias.text.trim(),
+  );
 
   SnippetRender get _render =>
       renderSnippet(widget.snippet.template, _bindings);
@@ -301,14 +389,9 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
     final probe = _probe;
     return Scaffold(
       backgroundColor: c.ink,
-      appBar: AppBar(
-        backgroundColor: c.ink,
-        foregroundColor: c.text,
-        elevation: 0,
-        title: Text(
-          widget.snippet.name,
-          style: KelolaType.display(color: c.text, size: 16),
-        ),
+      appBar: KelolaHostAppBar(
+        hostAlias: widget.host.alias,
+        title: widget.snippet.name,
       ),
       body: ListView(
         padding: kelolaScrollPadding(context),
@@ -382,6 +465,10 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
             const SizedBox(height: 12),
             KelolaError(message: _error!, sudoUser: widget.host.username),
           ],
+          if (_busy && _out == null) ...[
+            const SizedBox(height: 12),
+            Text('Running', style: KelolaType.mono(color: c.muted, size: 10.5)),
+          ],
           if (_out != null) ...[
             const SizedBox(height: 12),
             RiskBand(
@@ -398,20 +485,27 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
   }
 
   Future<void> _run(SnippetProbe probe) async {
-    final allowed = await _confirm(context, probe);
-    if (!allowed || !mounted) {
-      return;
-    }
-    final execute = widget.onExecute;
-    if (execute != null) {
-      await execute(probe);
-      return;
+    if (probe.risk != RiskLevel.read) {
+      final allowed = await _confirm(context, probe);
+      if (!allowed || !mounted) {
+        return;
+      }
     }
     setState(() {
       _busy = true;
       _error = null;
+      _out = null;
     });
     try {
+      final execute = widget.onExecute;
+      if (execute != null) {
+        final result = await execute(probe);
+        if (!mounted || result == null) {
+          return;
+        }
+        setState(() => _out = formatCommandRun(probe.commandLine, result));
+        return;
+      }
       await ref.read(enrollmentProvider.notifier).ensureKey();
       if (!mounted) {
         return;
@@ -419,12 +513,8 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
       final result = await runSnippet<CommandRunnerResult>(
         host: widget.host,
         probe: probe,
-        execute: <T>(host, p) => runHostProbe<T>(
-          ref: ref,
-          context: context,
-          host: host,
-          probe: p,
-        ),
+        execute: <T>(host, p) =>
+            runHostProbe<T>(ref: ref, context: context, host: host, probe: p),
         scope: ProbeScope.host,
       );
       if (!mounted) {
@@ -460,7 +550,10 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
     }
   }
 
-  Future<bool> _confirmDestructive(BuildContext context, SnippetProbe probe) async {
+  Future<bool> _confirmDestructive(
+    BuildContext context,
+    SnippetProbe probe,
+  ) async {
     var confirmed = false;
     await showModalBottomSheet<void>(
       context: context,
@@ -474,8 +567,7 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
             title: 'Run ${probe.name}?',
             consequence:
                 'This will end your session and may make ${widget.host.alias} unreachable.',
-            warning:
-                'You will lose access immediately. Recovery needs physical or console access to the machine.',
+            warning: 'You will lose access immediately. Recovery needs physical or console access to the machine.',
             confirmToken: widget.host.alias,
             onConfirmed: () => confirmed = true,
           ),
@@ -486,57 +578,94 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
   }
 }
 
+class _SnippetDraft {
+  const _SnippetDraft({required this.name, required this.template});
+
+  final String name;
+  final String template;
+}
+
 Future<Snippet?> _editSnippet(BuildContext context, Snippet current) async {
-  final name = TextEditingController(text: current.name);
-  final template = TextEditingController(text: current.template);
-  final c = context.kc;
-  final ok = await showModalBottomSheet<bool>(
+  final draft = await showModalBottomSheet<_SnippetDraft>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: c.ink,
-    builder: (ctx) {
-      return KelolaSheet(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              KelolaInput(label: 'Name', controller: name),
-              const SizedBox(height: 10),
-              KelolaInput(
-                label: 'Template',
-                controller: template,
-                mono: true,
-                hint: 'systemctl status {{unit}}',
-              ),
-              const SizedBox(height: 12),
-              ServiceRow(
-                risk: RiskLevel.read,
-                name: 'Save',
-                meta: 'library only · not run',
-                onTap: () => Navigator.of(ctx).pop(true),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
+    backgroundColor: context.kc.ink,
+    builder: (ctx) => KelolaSheet(child: _SnippetEditor(current: current)),
   );
-  final saved = ok == true &&
-      name.text.trim().isNotEmpty &&
-      template.text.trim().isNotEmpty;
-  final snippet = saved
-      ? Snippet(
-          id: current.id,
-          name: name.text.trim(),
-          template: template.text.trim(),
-          starter: current.starter,
-        )
-      : null;
-  name.dispose();
-  template.dispose();
-  return snippet;
+  if (draft == null) {
+    return null;
+  }
+  if (draft.name.isEmpty || draft.template.isEmpty) {
+    return null;
+  }
+  return Snippet(
+    id: current.id,
+    name: draft.name,
+    template: draft.template,
+    starter: current.starter,
+  );
+}
+
+class _SnippetEditor extends StatefulWidget {
+  const _SnippetEditor({required this.current});
+
+  final Snippet current;
+
+  @override
+  State<_SnippetEditor> createState() => _SnippetEditorState();
+}
+
+class _SnippetEditorState extends State<_SnippetEditor> {
+  late final TextEditingController _name;
+  late final TextEditingController _template;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.current.name);
+    _template = TextEditingController(text: widget.current.template);
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _template.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    Navigator.of(context).pop(
+      _SnippetDraft(name: _name.text.trim(), template: _template.text.trim()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          KelolaInput(label: 'Name', controller: _name),
+          const SizedBox(height: 10),
+          KelolaInput(
+            label: 'Template',
+            controller: _template,
+            mono: true,
+            hint: 'systemctl status {{unit}}',
+          ),
+          const SizedBox(height: 12),
+          ServiceRow(
+            risk: RiskLevel.read,
+            name: 'Save',
+            meta: 'library only · not run',
+            onTap: _save,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 Future<String?> _promptJson(BuildContext context) async {
@@ -554,11 +683,7 @@ Future<String?> _promptJson(BuildContext context) async {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              KelolaInput(
-                label: 'JSON',
-                controller: raw,
-                mono: true,
-              ),
+              KelolaInput(label: 'JSON', controller: raw, mono: true),
               const SizedBox(height: 12),
               ServiceRow(
                 risk: RiskLevel.read,

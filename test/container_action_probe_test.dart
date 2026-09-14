@@ -78,5 +78,8 @@ void main() {
         .command(HostFacts.undiscovered);
     expect(cmd, contains('podman'));
     expect(cmd.indexOf('podman'), lessThan(cmd.indexOf('sudo -n')));
+    expect(cmd, contains('--remote --url "unix://\$sock"'));
+    expect(cmd.indexOf('--remote'), lessThan(cmd.indexOf('sudo -n')));
+    expect(cmd, isNot(contains('\r')));
   });
 }

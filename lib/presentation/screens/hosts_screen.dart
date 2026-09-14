@@ -25,6 +25,7 @@ import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/screens/fleet_screen.dart';
 import 'package:kelola/presentation/screens/llm_settings_screen.dart';
 import 'package:kelola/presentation/screens/search_screen.dart';
+import 'package:kelola/presentation/screens/settings_screen.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
 import 'package:kelola/presentation/widgets/host_list_actions.dart';
 import 'package:kelola/presentation/widgets/incident_sheet.dart';
@@ -154,8 +155,11 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         allowReorder: _takeAllowReorder(),
       );
     }
-    final summary = inventory?.summary;
     final plan = _plan(liveList ?? const []);
+    final displayed = inventory == null
+        ? null
+        : splitUnmonitored(inventory, plan.isMonitored);
+    final summary = displayed?.summary;
     final selected =
         ref.watch(fleetProbeSelectionProvider).valueOrNull ?? const <String>{};
 
@@ -181,6 +185,17 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                         );
                       },
                     ),
+                  IconButton(
+                    tooltip: 'Settings',
+                    icon: const Icon(Icons.settings_outlined),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SettingsScreen(),
+                        ),
+                      );
+                    },
+                  ),
                   IconButton(
                     tooltip: 'Search',
                     icon: const Icon(Icons.search_rounded),
@@ -274,7 +289,14 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                         }
                       }
                     }
-                    return _inventory(c, list, view, resume, plan, selected);
+                    return _inventory(
+                      c,
+                      list,
+                      splitUnmonitored(view, plan.isMonitored),
+                      resume,
+                      plan,
+                      selected,
+                    );
                   },
                   loading: () => Center(
                     child: CircularProgressIndicator(color: c.amber),
@@ -377,11 +399,12 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   Widget _inventory(
     KelolaColors c,
     List<Host> list,
-    HostInventoryView view,
+    DisplayedInventory displayed,
     Host? resume,
     FleetProbePlan plan,
     Set<String> selected,
   ) {
+    final view = displayed.monitored;
     return RefreshIndicator(
       color: c.amber,
       onRefresh: () => _refresh(list),
@@ -426,6 +449,20 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   plan,
                   selected,
                 ),
+                if (displayed.unmonitored.isNotEmpty) ...[
+                  HostGroupTray(
+                    label: 'Not monitored',
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < displayed.unmonitored.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 8),
+                          _hostRow(c, displayed.unmonitored[i], plan, selected),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 ..._groupBlock(
                   c,
                   HostInventoryBucket.healthy,
@@ -564,7 +601,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             status: health,
             leading: OsIcon.forOsId(host.osId),
             name: host.alias,
-            meta: host.subtitle,
+            meta: unmonitored ? host.endpoint : host.subtitle,
             pillText: pill,
             pillStatus: health,
             compact: true,

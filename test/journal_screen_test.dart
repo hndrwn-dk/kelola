@@ -183,7 +183,7 @@ void main() {
     await pumpLogs(tester);
 
     expect(find.textContaining('hi from syslog'), findsOneWidget);
-    expect(find.text('SYSLOG · ALL'), findsOneWidget);
+    expect(find.textContaining('SYSLOG · ALL'), findsOneWidget);
     expect(
       tester.widget<FilterPill>(find.widgetWithText(FilterPill, 'SYSTEM')).enabled,
       isFalse,

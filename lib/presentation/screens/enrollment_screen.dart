@@ -15,9 +15,14 @@ import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
 
 class EnrollmentScreen extends ConsumerStatefulWidget {
-  const EnrollmentScreen({super.key, required this.hostId});
+  const EnrollmentScreen({
+    super.key,
+    required this.hostId,
+    this.hostAlias,
+  });
 
   final String hostId;
+  final String? hostAlias;
 
   @override
   ConsumerState<EnrollmentScreen> createState() => _EnrollmentScreenState();
@@ -161,7 +166,10 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
 
     return KelolaPage(
       title: 'Add the key',
-      kicker: 'ONE KEY PER PHONE',
+      bar: KelolaHostAppBar(
+        hostAlias: widget.hostAlias ?? '',
+        title: 'Add the key',
+      ),
       busy: _busy,
       body: ListView(
         padding: kelolaScrollPadding(

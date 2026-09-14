@@ -12,7 +12,10 @@ class CommandRunnerResult {
 
   final String stdout;
   final String stderr;
-  final int exitCode;
+
+  /// Null when the connection died before the server returned a status.
+  /// Never a numeric stand-in for that case.
+  final int? exitCode;
 }
 
 /// One-shot SSH exec. Not a PTY, not a login shell, not M9.

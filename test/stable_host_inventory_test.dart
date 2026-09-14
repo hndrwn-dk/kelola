@@ -23,7 +23,36 @@ Host _host(
 void main() {
   final now = DateTime.utc(2026, 9, 9, 4);
 
-  test('attention change without allowReorder keeps bucket position', () {
+  test('a host that becomes unreachable leaves healthy immediately', () {
+    final stable = StableHostInventory();
+    stable.project(
+      [
+        _host(
+          'ok',
+          attention: HostAttention.healthy,
+          attentionAt: now.subtract(const Duration(minutes: 1)),
+        ),
+      ],
+      allowReorder: true,
+      now: now,
+    );
+    final next = stable.project(
+      [
+        _host(
+          'ok',
+          attention: HostAttention.unreachable,
+          attentionAt: now,
+        ),
+      ],
+      allowReorder: false,
+      now: now,
+    );
+    expect(next.healthy, isEmpty);
+    expect(next.needsAttention.map((h) => h.alias), ['ok']);
+    expect(next.summary, '1 host · 1 needs attention');
+  });
+
+  test('attention change without allowReorder keeps surviving order', () {
     final stable = StableHostInventory();
     final first = stable.project(
       [
@@ -52,9 +81,9 @@ void main() {
       allowReorder: false,
       now: now,
     );
-    expect(moved.healthy.map((h) => h.alias), ['ok']);
-    expect(moved.healthy.first.attention, HostAttention.failedUnits);
-    expect(moved.needsAttention, isEmpty);
+    expect(moved.healthy, isEmpty);
+    expect(moved.needsAttention.map((h) => h.alias), ['ok']);
+    expect(moved.notChecked.map((h) => h.alias), ['pending']);
   });
 
   test('allowReorder re-buckets after attention change', () {

@@ -8,6 +8,19 @@ import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/presentation/ssh_host_key_flow.dart';
 import 'package:kelola/providers.dart';
 
+String watchedHostAlias(WidgetRef ref, String hostId) {
+  final hosts = ref.watch(hostsProvider).asData?.value;
+  if (hosts == null) {
+    return '';
+  }
+  for (final host in hosts) {
+    if (host.id == hostId) {
+      return host.alias;
+    }
+  }
+  return '';
+}
+
 Future<T> runHostProbe<T>({
   required WidgetRef ref,
   required BuildContext context,

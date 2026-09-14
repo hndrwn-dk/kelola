@@ -560,27 +560,9 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
 
     return Scaffold(
       backgroundColor: c.ink,
-      appBar: AppBar(
-        backgroundColor: c.ink,
-        foregroundColor: c.text,
-        elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Tunnels',
-              style: KelolaType.display(color: c.text, size: 16),
-            ),
-            Text(
-              (_hostAlias ?? widget.hostId).toUpperCase(),
-              style: KelolaType.mono(
-                color: c.dim,
-                size: 8.5,
-                letterSpacing: 0.9,
-              ),
-            ),
-          ],
-        ),
+      appBar: KelolaHostAppBar(
+        hostAlias: _hostAlias ?? '',
+        title: 'Tunnels',
         actions: [
           TextButton(
             onPressed: () => _openEditor(),

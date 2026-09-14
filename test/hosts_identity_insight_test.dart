@@ -50,6 +50,7 @@ void main() {
     expect(find.text('Kelola'), findsOneWidget);
     expect(find.text('Hosts'), findsOneWidget);
     expect(find.byTooltip('Search'), findsOneWidget);
+    expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Add host'), findsOneWidget);
     expect(find.byTooltip('Audit'), findsNothing);
     expect(find.byIcon(Icons.receipt_long_rounded), findsNothing);
@@ -90,7 +91,7 @@ void main() {
 
     await pumpHosts(tester, db);
 
-    final version = find.text('v$kelolaAppVersion');
+    final version = find.text('v$kelolaAppVersion · std');
     final keys = find.text('Keys stay on this device');
     expect(version, findsOneWidget);
     expect(keys, findsOneWidget);

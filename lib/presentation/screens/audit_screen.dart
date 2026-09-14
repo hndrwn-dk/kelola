@@ -77,7 +77,9 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
         backgroundColor: c.ink,
         foregroundColor: c.text,
         elevation: 0,
+        toolbarHeight: 64,
         title: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: KelolaType.display(color: c.text, size: 16)),

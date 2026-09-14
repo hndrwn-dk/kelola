@@ -137,6 +137,7 @@ void main() {
             host: host,
             onExecute: (SnippetProbe probe) async {
               executed.add(probe.commandLine);
+              return null;
             },
           ),
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:kelola/design/kelola_components.dart' show KelolaBackButton;
 import 'package:kelola/presentation/theme/kelola_fonts.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart';
 
@@ -20,7 +21,7 @@ class KelolaBar extends StatelessWidget implements PreferredSizeWidget {
   final Widget? titleWidget;
 
   @override
-  Size get preferredSize => Size.fromHeight(subtitle == null ? 52 : 60);
+  Size get preferredSize => Size.fromHeight(subtitle == null ? 56 : 64);
 
   @override
   Widget build(BuildContext context) {
@@ -41,11 +42,7 @@ class KelolaBar extends StatelessWidget implements PreferredSizeWidget {
               if (leading != null)
                 leading!
               else if (canPop)
-                IconButton(
-                  tooltip: 'Back',
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-                  onPressed: () => Navigator.of(context).pop(),
-                )
+                const KelolaBackButton()
               else
                 const SizedBox(width: 10),
               Expanded(
@@ -86,6 +83,7 @@ class KelolaPage extends StatelessWidget {
     this.kickerWidget,
     this.actions,
     this.leading,
+    this.bar,
     this.top,
     this.busy = false,
     this.fab,
@@ -96,6 +94,7 @@ class KelolaPage extends StatelessWidget {
   final Widget? kickerWidget;
   final List<Widget>? actions;
   final Widget? leading;
+  final PreferredSizeWidget? bar;
   final Widget? top;
   final bool busy;
   final Widget? fab;
@@ -103,32 +102,28 @@ class KelolaPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<KelolaColors>()!;
+    final colors = Theme.of(context).extension<KelolaColors>();
     final canPop = Navigator.of(context).canPop();
     return Scaffold(
       floatingActionButton: fab,
-      appBar: AppBar(
-        leading: leading ??
-            (canPop
-                ? IconButton(
-                    tooltip: 'Back',
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-                    onPressed: () => Navigator.of(context).pop(),
-                  )
-                : null),
-        automaticallyImplyLeading: leading == null && canPop,
+      appBar: bar ??
+          AppBar(
+        toolbarHeight: kicker == null && kickerWidget == null ? 56 : 64,
+        leading: leading ?? (canPop ? const KelolaBackButton() : null),
+        automaticallyImplyLeading: false,
         title: kicker == null && kickerWidget == null
             ? Text(title)
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  kickerWidget ??
-                      Text(kicker!, style: KelolaFonts.eyebrow(colors)),
                   Text(
                     title,
                     style: KelolaFonts.title(size: 17),
                     overflow: TextOverflow.ellipsis,
                   ),
+                  kickerWidget ??
+                      Text(kicker!, style: KelolaFonts.eyebrow(colors!)),
                 ],
               ),
         actions: actions,

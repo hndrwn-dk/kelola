@@ -29,7 +29,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Terminal'), findsOneWidget);
+    expect(find.text('east-worker-uat'), findsOneWidget);
+    expect(find.textContaining('Terminal'), findsOneWidget);
     expect(find.textContaining('NO PTY'), findsOneWidget);
     expect(find.text(commandRunnerEmptyCopy), findsOneWidget);
     expect(find.text('connected…'), findsNothing);

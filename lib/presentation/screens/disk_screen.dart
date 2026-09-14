@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart'
-    show KelolaError, kelolaScrollPadding;
+    show KelolaError, KelolaHostAppBar, kelolaScrollPadding;
 import 'package:kelola/domain/disk/disk_snapshot.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -124,9 +124,14 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<KelolaColors>()!;
+    final mounts = _mounts.length;
     return KelolaPage(
       title: 'Disk',
-      kicker: 'DF THEN DU',
+      bar: KelolaHostAppBar(
+        hostAlias: watchedHostAlias(ref, widget.hostId),
+        title: 'Disk',
+        contextLine: mounts == 0 ? null : '$mounts filesystems',
+      ),
       busy: _loading,
       body: RefreshIndicator(
         onRefresh: _load,
