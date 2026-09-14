@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:kelola/domain/probes/snippet_probe.dart';
+import 'package:kelola/domain/units/shell_quote.dart';
 
 class Snippet {
   const Snippet({
@@ -63,20 +64,66 @@ Set<String> snippetPlaceholders(String template) {
   };
 }
 
+class SnippetRender {
+  const SnippetRender({
+    required this.commandLine,
+    required this.emptyPlaceholders,
+  });
+
+  /// Null when a required placeholder is blank. Never a quoted empty argument.
+  final String? commandLine;
+  final Set<String> emptyPlaceholders;
+
+  bool get canRun => commandLine != null;
+}
+
+String? _bindingValue(SnippetBindings bindings, String name) {
+  return switch (name) {
+    'unit' => bindings.unit,
+    'path' => bindings.path,
+    'port' => bindings.port,
+    'host' => bindings.host,
+    _ => null,
+  };
+}
+
+/// One render for preview and execution. Static template text is unchanged.
+/// Each placeholder value is POSIX single-quoted via [shellSingleQuote].
+SnippetRender renderSnippet(String template, SnippetBindings bindings) {
+  final needed = snippetPlaceholders(template);
+  final empty = <String>{};
+  final values = <String, String>{};
+  for (final name in needed) {
+    final raw = _bindingValue(bindings, name);
+    if (raw == null || raw.trim().isEmpty) {
+      empty.add(name);
+      continue;
+    }
+    values[name] = raw;
+  }
+  if (empty.isNotEmpty) {
+    return SnippetRender(commandLine: null, emptyPlaceholders: empty);
+  }
+  final line = template.replaceAllMapped(_placeholder, (match) {
+    return shellSingleQuote(values[match.group(1)!]!);
+  });
+  return SnippetRender(commandLine: line, emptyPlaceholders: const {});
+}
+
 String expandSnippetTemplate(String template, SnippetBindings bindings) {
-  return template
-      .replaceAll('{{unit}}', bindings.unit ?? '{{unit}}')
-      .replaceAll('{{path}}', bindings.path ?? '{{path}}')
-      .replaceAll('{{port}}', bindings.port ?? '{{port}}')
-      .replaceAll('{{host}}', bindings.host ?? '{{host}}');
+  final rendered = renderSnippet(template, bindings);
+  final line = rendered.commandLine;
+  if (line == null) {
+    throw SnippetUnboundException(template);
+  }
+  return line;
 }
 
 SnippetProbe snippetToProbe(Snippet snippet, SnippetBindings bindings) {
-  final line = expandSnippetTemplate(snippet.template, bindings);
-  if (_placeholder.hasMatch(line)) {
-    throw SnippetUnboundException(line);
-  }
-  return SnippetProbe(name: snippet.name, commandLine: line);
+  return SnippetProbe(
+    name: snippet.name,
+    commandLine: expandSnippetTemplate(snippet.template, bindings),
+  );
 }
 
 String encodeSnippets(List<Snippet> items) {

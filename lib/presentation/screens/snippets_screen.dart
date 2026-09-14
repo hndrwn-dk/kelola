@@ -16,9 +16,17 @@ import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
 class SnippetsScreen extends ConsumerStatefulWidget {
-  const SnippetsScreen({super.key, required this.host});
+  const SnippetsScreen({
+    super.key,
+    required this.host,
+    this.onExecute,
+  });
 
   final Host host;
+
+  /// Test seam. When set, Run hands this the same probe the preview shows
+  /// and does not open an SSH session.
+  final Future<void> Function(SnippetProbe probe)? onExecute;
 
   @override
   ConsumerState<SnippetsScreen> createState() => _SnippetsScreenState();
@@ -166,7 +174,11 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       builder: (ctx) => KelolaSheet(
         child: SizedBox(
           height: kelolaSheetBodyHeight(ctx),
-          child: _SnippetRunSheet(host: widget.host, snippet: snippet),
+          child: _SnippetRunSheet(
+            host: widget.host,
+            snippet: snippet,
+            onExecute: widget.onExecute,
+          ),
         ),
       ),
     );
@@ -214,10 +226,15 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
 }
 
 class _SnippetRunSheet extends ConsumerStatefulWidget {
-  const _SnippetRunSheet({required this.host, required this.snippet});
+  const _SnippetRunSheet({
+    required this.host,
+    required this.snippet,
+    this.onExecute,
+  });
 
   final Host host;
   final Snippet snippet;
+  final Future<void> Function(SnippetProbe probe)? onExecute;
 
   @override
   ConsumerState<_SnippetRunSheet> createState() => _SnippetRunSheetState();
@@ -259,12 +276,23 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
         host: _hostAlias.text.trim().isEmpty ? null : _hostAlias.text.trim(),
       );
 
+  SnippetRender get _render =>
+      renderSnippet(widget.snippet.template, _bindings);
+
+  /// Preview and execution both use this probe. Null means do not run.
   SnippetProbe? get _probe {
     try {
       return snippetToProbe(widget.snippet, _bindings);
     } on SnippetUnboundException {
       return null;
     }
+  }
+
+  String? _fieldError(String name) {
+    if (_render.emptyPlaceholders.contains(name)) {
+      return 'Required';
+    }
+    return null;
   }
 
   @override
@@ -291,6 +319,7 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
               controller: _unit,
               mono: true,
               hint: 'nginx.service',
+              error: _fieldError('unit'),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 10),
@@ -301,6 +330,7 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
               controller: _path,
               mono: true,
               hint: '/',
+              error: _fieldError('path'),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 10),
@@ -312,6 +342,7 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
               mono: true,
               hint: '443',
               keyboardType: TextInputType.number,
+              error: _fieldError('port'),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 10),
@@ -321,6 +352,7 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
               label: 'host',
               controller: _hostAlias,
               mono: true,
+              error: _fieldError('host'),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 10),
@@ -368,6 +400,11 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
   Future<void> _run(SnippetProbe probe) async {
     final allowed = await _confirm(context, probe);
     if (!allowed || !mounted) {
+      return;
+    }
+    final execute = widget.onExecute;
+    if (execute != null) {
+      await execute(probe);
       return;
     }
     setState(() {
