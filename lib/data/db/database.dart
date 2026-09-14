@@ -29,62 +29,62 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (Migrator m) async {
-          await m.createAll();
-        },
-        onUpgrade: (Migrator m, int from, int to) async {
-          if (from < 2) {
-            await m.addColumn(hosts, hosts.failedUnitCount);
-            await m.addColumn(hosts, hosts.diskRootPercent);
-            await m.addColumn(hosts, hosts.attentionAt);
-          }
-          if (from < 3) {
-            await m.addColumn(auditRecords, auditRecords.title);
-          }
-          if (from < 4) {
-            await m.addColumn(hosts, hosts.sudoNeedsPassword);
-          }
-          if (from < 5) {
-            await m.createTable(searchIndexCache);
-          }
-          if (from < 6) {
-            await m.createTable(snippets);
-          }
-          if (from < 7) {
-            await m.addColumn(appSettings, appSettings.widgetEnabled);
-          }
-          if (from < 8) {
-            await m.addColumn(appSettings, appSettings.llmProvider);
-            await m.addColumn(appSettings, appSettings.llmBaseUrl);
-            await m.addColumn(appSettings, appSettings.llmApiKey);
-            await m.addColumn(appSettings, appSettings.llmModel);
-          }
-          if (from < 9) {
-            await m.createTable(hostTags);
-            await m.createTable(fleetCache);
-          }
-          // Only exact-9 needs ALTER: from < 9 createTable(fleet_cache) already emits the wide table.
-          if (from == 9) {
-            await m.addColumn(fleetCache, fleetCache.nprocCores);
-            await m.addColumn(fleetCache, fleetCache.memPercent);
-            await m.addColumn(fleetCache, fleetCache.highDiskJson);
-            await m.addColumn(fleetCache, fleetCache.securityUpdates);
-            await m.addColumn(fleetCache, fleetCache.containersDown);
-            await m.addColumn(fleetCache, fleetCache.containersUnhealthy);
-            await m.addColumn(fleetCache, fleetCache.uptimeSeconds);
-            await m.addColumn(fleetCache, fleetCache.rebootRequired);
-          }
-          if (from < 11) {
-            await m.addColumn(appSettings, appSettings.llmOllamaBaseUrl);
-            await m.addColumn(appSettings, appSettings.llmOllamaModel);
-            await m.addColumn(appSettings, appSettings.llmOpenaiBaseUrl);
-            await m.addColumn(appSettings, appSettings.llmOpenaiApiKey);
-            await m.addColumn(appSettings, appSettings.llmOpenaiModel);
-            await customStatement('''
+    onCreate: (Migrator m) async {
+      await m.createAll();
+    },
+    onUpgrade: (Migrator m, int from, int to) async {
+      if (from < 2) {
+        await m.addColumn(hosts, hosts.failedUnitCount);
+        await m.addColumn(hosts, hosts.diskRootPercent);
+        await m.addColumn(hosts, hosts.attentionAt);
+      }
+      if (from < 3) {
+        await m.addColumn(auditRecords, auditRecords.title);
+      }
+      if (from < 4) {
+        await m.addColumn(hosts, hosts.sudoNeedsPassword);
+      }
+      if (from < 5) {
+        await m.createTable(searchIndexCache);
+      }
+      if (from < 6) {
+        await m.createTable(snippets);
+      }
+      if (from < 7) {
+        await m.addColumn(appSettings, appSettings.widgetEnabled);
+      }
+      if (from < 8) {
+        await m.addColumn(appSettings, appSettings.llmProvider);
+        await m.addColumn(appSettings, appSettings.llmBaseUrl);
+        await m.addColumn(appSettings, appSettings.llmApiKey);
+        await m.addColumn(appSettings, appSettings.llmModel);
+      }
+      if (from < 9) {
+        await m.createTable(hostTags);
+        await m.createTable(fleetCache);
+      }
+      // Only exact-9 needs ALTER: from < 9 createTable(fleet_cache) already emits the wide table.
+      if (from == 9) {
+        await m.addColumn(fleetCache, fleetCache.nprocCores);
+        await m.addColumn(fleetCache, fleetCache.memPercent);
+        await m.addColumn(fleetCache, fleetCache.highDiskJson);
+        await m.addColumn(fleetCache, fleetCache.securityUpdates);
+        await m.addColumn(fleetCache, fleetCache.containersDown);
+        await m.addColumn(fleetCache, fleetCache.containersUnhealthy);
+        await m.addColumn(fleetCache, fleetCache.uptimeSeconds);
+        await m.addColumn(fleetCache, fleetCache.rebootRequired);
+      }
+      if (from < 11) {
+        await m.addColumn(appSettings, appSettings.llmOllamaBaseUrl);
+        await m.addColumn(appSettings, appSettings.llmOllamaModel);
+        await m.addColumn(appSettings, appSettings.llmOpenaiBaseUrl);
+        await m.addColumn(appSettings, appSettings.llmOpenaiApiKey);
+        await m.addColumn(appSettings, appSettings.llmOpenaiModel);
+        await customStatement('''
 UPDATE app_settings SET
   llm_ollama_base_url = CASE
     WHEN llm_provider = 'ollama' THEN llm_base_url
@@ -102,20 +102,36 @@ UPDATE app_settings SET
     WHEN llm_provider IN ('openaiCompatible', 'openai') THEN llm_model
     ELSE llm_openai_model END
 ''');
-          }
-          if (from < 12) {
-            await m.addColumn(cachedFacts, cachedFacts.journalAccess);
-            await customStatement('''
+      }
+      if (from < 12) {
+        await m.addColumn(cachedFacts, cachedFacts.journalAccess);
+        await customStatement('''
 UPDATE cached_facts SET journal_access = CASE
   WHEN journal_readable = 1 THEN 'plain'
   ELSE 'unknown' END
 ''');
-          }
-          if (from < 13) {
-            await m.createTable(tunnelTargets);
-            await m.addColumn(appSettings, appSettings.tunnelIdleMinutes);
-            await m.addColumn(auditRecords, auditRecords.closeReason);
-          }
-        },
-      );
+      }
+      if (from < 13) {
+        await m.createTable(tunnelTargets);
+        await m.addColumn(appSettings, appSettings.tunnelIdleMinutes);
+        await m.addColumn(auditRecords, auditRecords.closeReason);
+      }
+      if (from < 14) {
+        await m.addColumn(appSettings, appSettings.snippetLibraryReady);
+        await customStatement('''
+INSERT INTO app_settings (id, snippet_library_ready)
+SELECT 1, CASE WHEN (SELECT COUNT(*) FROM snippets) > 0 THEN 1 ELSE 0 END
+WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE id = 1)
+''');
+        await customStatement('''
+UPDATE app_settings
+SET snippet_library_ready = CASE
+  WHEN (SELECT COUNT(*) FROM snippets) > 0 THEN 1
+  ELSE snippet_library_ready
+END
+WHERE id = 1
+''');
+      }
+    },
+  );
 }

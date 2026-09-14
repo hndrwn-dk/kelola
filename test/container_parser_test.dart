@@ -62,18 +62,96 @@ podman
     expect(row.running, isFalse);
   });
 
-  test('list probe queries docker and podman separately, podman without sudo first',
+  test('rootless empty does not hide a rootful podman container', () {
+    const raw = '''
+---ENGINE---
+podman
+---PS_PODMAN---
+[]
+---PS_PODMAN_ROOT---
+[{"Id":"root1","Names":["web"],"Image":"nginx","State":"running","Status":"Up 1 hour"}]
+''';
+    final inv = const ContainerListParser().parse(raw);
+    expect(inv.rows, hasLength(1));
+    expect(inv.rows.single.names, 'web');
+    expect(inv.rows.single.engine, 'podman');
+    expect(inv.podmanDenied, isFalse);
+  });
+
+  test('podman installed but both stores unreachable is denied, not empty success',
+      () {
+    const raw = '''
+---ENGINE---
+/usr/bin/podman
+---PS_PODMAN---
+---PS_PODMAN_ROOT---
+---PODMAN_DENIED---
+''';
+    final inv = const ContainerListParser().parse(raw);
+    expect(inv.rows, isEmpty);
+    expect(inv.engines, ['podman']);
+    expect(inv.podmanDenied, isTrue);
+  });
+
+  test('readable system socket lists rootful containers without sudo', () {
+    const raw = '''
+---ENGINE---
+podman
+---PS_PODMAN---
+[]
+---PS_PODMAN_SOCK---
+[{"Id":"sock1","Names":["web"],"Image":"nginx","State":"running","Status":"Up"}]
+---PS_PODMAN_ROOT---
+''';
+    final inv = const ContainerListParser().parse(raw);
+    expect(inv.rows.single.names, 'web');
+    expect(inv.podmanSocketDenied, isFalse);
+  });
+
+  test('unreadable system socket is the podman-group denial', () {
+    const raw = '''
+---ENGINE---
+podman
+---PS_PODMAN---
+[]
+---PS_PODMAN_SOCK---
+---PS_PODMAN_ROOT---
+---PODMAN_SOCK_DENIED---
+''';
+    final inv = const ContainerListParser().parse(raw);
+    expect(inv.rows, isEmpty);
+    expect(inv.podmanSocketDenied, isTrue);
+    expect(inv.podmanDenied, isFalse);
+  });
+
+  test('kubectl jsonpath newline is a shell escape, not a real line break', () {
+    final cmd = const ContainerListProbe().command(HostFacts.undiscovered);
+    expect(cmd, contains(r'{"\n"}'));
+    expect(cmd, isNot(contains('{"\n"}')));
+    expect(
+      cmd.split('\n').where((line) => line.trimLeft().startsWith('||')),
+      isEmpty,
+    );
+  });
+
+  test('list probe queries user and root podman stores, and sets the runtime dir',
       () {
     const probe = ContainerListProbe();
     final cmd = probe.command(HostFacts.undiscovered);
     expect(cmd, contains("docker ps -a --format '{{json .}}'"));
     expect(cmd, contains('podman ps -a --format json'));
+    expect(cmd, contains('XDG_RUNTIME_DIR'));
+    expect(cmd, contains('---PS_PODMAN_ROOT---'));
+    expect(cmd, contains('---PS_PODMAN_SOCK---'));
+    expect(cmd, contains('unix://\$sock'));
+    expect(cmd, contains('sock=/run/podman/podman.sock'));
+    expect(cmd, contains('---PODMAN_SOCK_DENIED---'));
+    expect(cmd, contains('---PODMAN_DENIED---'));
     expect(cmd, isNot(contains('elif command -v podman')));
+    expect(cmd, isNot(contains('podman ps -a --format json 2>/dev/null || sudo')));
     final podmanIdx = cmd.indexOf('podman ps -a --format json');
     final sudoPodman = cmd.indexOf('sudo -n podman ps');
     expect(podmanIdx, greaterThan(-1));
-    if (sudoPodman >= 0) {
-      expect(podmanIdx, lessThan(sudoPodman));
-    }
+    expect(sudoPodman, greaterThan(podmanIdx));
   });
 }

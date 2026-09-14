@@ -9,7 +9,7 @@ String describeSshError(Object error) {
     return error.message;
   }
   if (error is TimeoutException) {
-    return 'Timed out waiting for SSH login. Pin the host key promptly, and check that the phone can reach the host address.';
+    return 'Timed out waiting for SSH login. Check Wi-Fi/VPN and that the host is up.';
   }
   if (error is SocketException) {
     return _describeSocketException(error);
@@ -28,20 +28,17 @@ String describeSshError(Object error) {
     return 'Server closed the handshake: ${error.message}';
   }
   if (error is SSHHostkeyError) {
-    return 'The host key was rejected.';
+    return 'The host key was rejected. Confirm the fingerprint before continuing.';
   }
   if (error is SSHAuthAbortError) {
     final reason = error.reason;
     if (reason is SSHDisconnectError) {
-      return 'Server closed the handshake: ${reason.message}';
+      return 'Server closed the connection: ${reason.message}';
     }
     if (reason is SSHHostkeyError) {
-      return 'The host key was rejected.';
+      return 'The host key was rejected. Confirm the fingerprint before continuing.';
     }
-    if (reason != null) {
-      return 'Connection closed before login (${reason.runtimeType}: $reason).';
-    }
-    return 'Connection closed before login. Usually the host-key prompt failed during handshake, or this phone and the server share no cipher/KEX.';
+    return 'Connection closed before login. Try again.';
   }
   return error.toString();
 }
@@ -53,10 +50,10 @@ String _describeSocketException(SocketException error) {
   final code = error.osError?.errorCode;
 
   if (code == 113 || hay.contains('no route to host')) {
-    return 'No route to $where. The phone cannot reach it yet — common right after reboot. Kelola still uses the saved SSH port; the raw socket port is a local ephemeral port, not SSH.';
+    return 'No route to $where. Check Wi-Fi/VPN.';
   }
   if (code == 111 || hay.contains('connection refused')) {
-    return 'Connection refused by $where. sshd may still be starting after reboot. Kelola uses the host\'s saved SSH port.';
+    return 'Connection refused by $where. Check that the host is up.';
   }
   if (code == 110 || hay.contains('timed out') || hay.contains('timeout')) {
     return 'Timed out reaching $where. Check Wi-Fi/VPN and that the host is up.';

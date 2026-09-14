@@ -316,38 +316,41 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
 
     return KelolaPage(
       title: host?.alias ?? 'Host',
-      kickerWidget: showKicker
-          ? KickerLine(
-              machine: machine,
-              readOnly: readOnly,
-              onToggleReadOnly:
-                  host == null ? null : () => _toggleReadOnly(host),
-            )
-          : null,
+      bar: KelolaHostAppBar(
+        hostAlias: host?.alias ?? '',
+        title: 'Host',
+        actions: [
+          HostDashboardMenuButton(
+            onNote: _editNote,
+            onEdit: _openEdit,
+            onDetails: _openDetails,
+            onDiagnostic: host == null
+                ? null
+                : () => openDiagnosticPack(context, ref, host),
+            onAudit: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => AuditScreen(hostId: widget.hostId),
+                ),
+              );
+            },
+            onRemove: host == null ? () {} : () => _deleteHost(host),
+          ),
+        ],
+      ),
       busy: _loading,
-      actions: [
-        HostDashboardMenuButton(
-          onNote: _editNote,
-          onEdit: _openEdit,
-          onDetails: _openDetails,
-          onDiagnostic: host == null
-              ? null
-              : () => openDiagnosticPack(context, ref, host),
-          onAudit: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => AuditScreen(hostId: widget.hostId),
-              ),
-            );
-          },
-          onRemove: host == null ? () {} : () => _deleteHost(host),
-        ),
-      ],
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
           padding: kelolaScrollPadding(context, top: 8),
           children: [
+            if (showKicker)
+              KickerLine(
+                machine: machine,
+                readOnly: readOnly,
+                onToggleReadOnly:
+                    host == null ? null : () => _toggleReadOnly(host),
+              ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),

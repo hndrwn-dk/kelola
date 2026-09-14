@@ -20,7 +20,7 @@ class OpenEntitlement implements Entitlement {
   Future<ProPurchaseResult> restore() async => ProPurchaseResult.unavailable;
 
   @override
-  String get sourceLabel => 'open-source';
+  String get sourceLabel => 'std';
 
   @override
   void dispose() {}

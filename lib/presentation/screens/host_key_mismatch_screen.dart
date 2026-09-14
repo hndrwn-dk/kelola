@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/presentation/theme/kelola_fonts.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart';
+import 'package:kelola/design/kelola_components.dart' hide RiskBand;
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/presentation/widgets/risk_band.dart';
 
@@ -22,7 +23,10 @@ class HostKeyMismatchScreen extends StatelessWidget {
     final colors = Theme.of(context).extension<KelolaColors>()!;
     return KelolaPage(
       title: 'Host key changed',
-      kicker: 'DO NOT CONTINUE BLINDLY',
+      bar: KelolaHostAppBar(
+        hostAlias: hostAlias,
+        title: 'Host key changed',
+      ),
       body: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(

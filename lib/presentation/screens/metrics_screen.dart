@@ -177,20 +177,10 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
 
     return Scaffold(
       backgroundColor: c.ink,
-      appBar: AppBar(
-        backgroundColor: c.ink,
-        foregroundColor: c.text,
-        elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Metrics', style: KelolaType.display(color: c.text, size: 16)),
-            Text(
-              _kicker,
-              style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
-            ),
-          ],
-        ),
+      appBar: KelolaHostAppBar(
+        hostAlias: watchedHostAlias(ref, widget.hostId),
+        title: 'Metrics',
+        contextLine: _kicker,
       ),
       body: Column(
         children: [

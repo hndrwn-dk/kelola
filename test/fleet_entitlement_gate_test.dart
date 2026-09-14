@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/app.dart';
+import 'package:kelola/app_version.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
@@ -59,7 +60,7 @@ class _ScriptedEntitlement implements Entitlement {
   Future<ProPurchaseResult> restore() async => ProPurchaseResult.unavailable;
 
   @override
-  String get sourceLabel => 'open-source';
+  String get sourceLabel => 'std';
 }
 
 class _ExistsSigner implements HardwareSigner {
@@ -247,6 +248,11 @@ void main() {
     ];
     await selection.write({hosts[0].id});
 
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await pumpScreen(tester, const HostsScreen());
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -397,15 +403,18 @@ void main() {
     expect(find.textContaining('http'), findsNothing);
   });
 
-  testWidgets('colophon source label is on its own line', (tester) async {
+  testWidgets('colophon build token sits on the version line', (tester) async {
     await pumpScreen(tester, const HostsScreen());
     await tester.pump(const Duration(milliseconds: 100));
 
-    final label = find.text('open-source');
+    final label = find.text('v$kelolaAppVersion · std');
     expect(label, findsOneWidget);
+    expect(find.text('open-source'), findsNothing);
+    expect(find.text('std'), findsNothing);
+    final row = find.ancestor(of: label, matching: find.byType(Row)).first;
     expect(
-      find.ancestor(of: label, matching: find.byType(Row)),
-      findsNothing,
+      find.descendant(of: row, matching: find.text('Keys stay on this device')),
+      findsOneWidget,
     );
 
     await tester.pumpWidget(const SizedBox.shrink());

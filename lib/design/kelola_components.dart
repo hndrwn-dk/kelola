@@ -2275,6 +2275,114 @@ class ProLockedCard extends StatelessWidget {
   }
 }
 
+/// Android back arrow. Screens must not pick their own icon.
+class KelolaBackButton extends StatelessWidget {
+  const KelolaBackButton({super.key});
+
+  static const icon = Icons.arrow_back;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Back',
+      icon: const Icon(icon, size: 22),
+      onPressed: () => Navigator.of(context).maybePop(),
+    );
+  }
+}
+
+/// Hostname for any screen that operates on one host. Shared so a new
+/// host-scoped screen cannot invent a quieter header.
+class KelolaHostIdentity extends StatelessWidget {
+  const KelolaHostIdentity({
+    super.key,
+    required this.hostAlias,
+    required this.title,
+    this.contextLine,
+  });
+
+  static const aliasKey = Key('kelola-host-alias');
+
+  final String hostAlias;
+  final String title;
+  final String? contextLine;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    final alias = hostAlias.trim();
+    final primary = alias.isEmpty ? title : alias;
+    final bits = <String>[
+      if (alias.isNotEmpty) title,
+      if (contextLine != null && contextLine!.trim().isNotEmpty)
+        contextLine!.trim(),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          primary,
+          key: aliasKey,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: KelolaType.display(color: c.text, size: 16),
+        ),
+        if (bits.isNotEmpty)
+          Text(
+            bits.join(' · '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: KelolaType.body(color: c.muted, size: 12).copyWith(height: 1.2),
+          ),
+      ],
+    );
+  }
+}
+
+/// Compact host-scoped app bar. Hostname is the readable title, not a
+/// dim subtitle. Height stays one toolbar so the body starts below it.
+class KelolaHostAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const KelolaHostAppBar({
+    super.key,
+    required this.hostAlias,
+    required this.title,
+    this.contextLine,
+    this.actions,
+  });
+
+  static const barHeight = 56.0;
+
+  final String hostAlias;
+  final String title;
+  final String? contextLine;
+  final List<Widget>? actions;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(barHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return AppBar(
+      toolbarHeight: barHeight,
+      backgroundColor: c.ink,
+      foregroundColor: c.text,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      automaticallyImplyLeading: false,
+      leading: Navigator.canPop(context) ? const KelolaBackButton() : null,
+      titleSpacing: 0,
+      title: KelolaHostIdentity(
+        hostAlias: hostAlias,
+        title: title,
+        contextLine: contextLine,
+      ),
+      actions: actions,
+    );
+  }
+}
+
 /// Pinned Hosts colophon: version and keys on one adjacent row. No app name.
 class HostsColophon extends StatelessWidget {
   const HostsColophon({
@@ -2315,19 +2423,17 @@ class HostsColophon extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text('v$version', style: _colophonStyle(c)),
+                Text(
+                  sourceLabel == null || sourceLabel!.isEmpty
+                      ? 'v$version'
+                      : 'v$version · $sourceLabel',
+                  style: _colophonStyle(c),
+                ),
                 const SizedBox(width: 8),
                 Text('Keys stay on this device', style: _colophonStyle(c)),
               ],
             ),
           ),
-          if (sourceLabel != null && sourceLabel!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(sourceLabel!, style: _colophonStyle(c)),
-            ),
-          ],
         ],
       ),
     );

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/presentation/theme/kelola_fonts.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart';
+import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
 
@@ -22,7 +24,10 @@ class TofuScreen extends ConsumerWidget {
     final colors = Theme.of(context).extension<KelolaColors>()!;
     return KelolaPage(
       title: 'Unknown host key',
-      kicker: 'TRUST ON FIRST USE',
+      bar: KelolaHostAppBar(
+        hostAlias: watchedHostAlias(ref, hostId),
+        title: 'Unknown host key',
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

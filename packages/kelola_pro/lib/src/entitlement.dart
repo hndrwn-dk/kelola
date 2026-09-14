@@ -17,8 +17,8 @@ abstract class Entitlement {
   Future<ProPurchaseResult> purchase();
   Future<ProPurchaseResult> restore();
 
-  /// Shown in the hosts colophon so a build can be verified on device.
-  /// Stub: 'open-source'. Paid builds: 'play-billing'.
+  /// Build variant token in the hosts colophon. Not an entitlement status.
+  /// Stub: 'std'. Billing builds: 'ext'.
   String get sourceLabel;
 
   void dispose();

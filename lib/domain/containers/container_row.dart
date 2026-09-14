@@ -48,9 +48,19 @@ class ContainerInventory {
     required this.rows,
     this.engines = const [],
     this.dockerDenied = false,
+    this.podmanDenied = false,
+    this.podmanSocketDenied = false,
   });
 
   final List<ContainerRow> rows;
   final List<String> engines;
   final bool dockerDenied;
+
+  /// Podman is installed, but neither the user store nor a passwordless
+  /// root store could be listed. An empty user store is not this.
+  final bool podmanDenied;
+
+  /// System socket exists, but this SSH user cannot read it. Same shape
+  /// as the docker group: membership, then a new session.
+  final bool podmanSocketDenied;
 }

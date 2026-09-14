@@ -115,27 +115,10 @@ class _ContainerImagesScreenState extends ConsumerState<ContainerImagesScreen> {
 
     return Scaffold(
       backgroundColor: c.ink,
-      appBar: AppBar(
-        backgroundColor: c.ink,
-        foregroundColor: c.text,
-        elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Images',
-              style: KelolaType.display(color: c.text, size: 16),
-            ),
-            Text(
-              '$engine · ${_inv.images.length} IMAGES',
-              style: KelolaType.mono(
-                color: c.dim,
-                size: 8.5,
-                letterSpacing: 0.9,
-              ),
-            ),
-          ],
-        ),
+      appBar: KelolaHostAppBar(
+        hostAlias: widget.host.alias,
+        title: 'Images',
+        contextLine: '$engine · ${_inv.images.length} images',
       ),
       body: Column(
         children: [

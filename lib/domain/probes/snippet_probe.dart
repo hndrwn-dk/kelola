@@ -38,6 +38,24 @@ class SnippetProbe extends Probe<CommandRunnerResult> {
   Duration get timeout => const Duration(seconds: 45);
 }
 
+/// Snippet and one-shot command runs keep a missing exit status as null.
+/// Other probes still receive a number; they are not this display path.
+T parseProbeExec<T>(
+  Probe<T> probe, {
+  required String stdout,
+  required String stderr,
+  required int? exitCode,
+}) {
+  if (probe is SnippetProbe || probe is CommandRunnerProbe) {
+    return commandRunFromExec(
+      stdout: stdout,
+      stderr: stderr,
+      exitCode: exitCode,
+    ) as T;
+  }
+  return probe.parse(stdout, stderr, exitCode ?? -1);
+}
+
 RiskLevel classifySnippetCommand(String command) {
   final c = command.toLowerCase();
   if (_destructive(c)) {
@@ -60,8 +78,7 @@ bool _destructive(String c) {
     return true;
   }
   final lockoutHit = _mentionsLockout(c);
-  if (lockoutHit &&
-      RegExp(r'\b(stop|disable|restart|mask)\b').hasMatch(c)) {
+  if (lockoutHit && RegExp(r'\b(stop|disable|restart|mask)\b').hasMatch(c)) {
     return true;
   }
   return false;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
@@ -213,14 +214,9 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
     final host = _host;
     return Scaffold(
       backgroundColor: c.ink,
-      appBar: AppBar(
-        backgroundColor: c.ink,
-        foregroundColor: c.text,
-        elevation: 0,
-        title: Text(
-          'Edit host',
-          style: KelolaType.display(color: c.text, size: 16),
-        ),
+      appBar: KelolaHostAppBar(
+        hostAlias: host?.alias ?? watchedHostAlias(ref, widget.hostId),
+        title: 'Edit host',
       ),
       body: _loading
           ? Center(child: CircularProgressIndicator(color: c.amber))

@@ -61,31 +61,30 @@ class HostRepository {
     for (final list in tagsByHost.values) {
       list.sort();
     }
-    return rows
-        .map((r) {
-          final fact = byHost[r.id];
-          return _toHost(
-            r,
-            prettyName: fact?.prettyName ?? fact?.osId,
-            osId: fact?.osId,
-            tags: tagsByHost[r.id] ?? const [],
-          );
-        })
-        .toList();
+    return rows.map((r) {
+      final fact = byHost[r.id];
+      return _toHost(
+        r,
+        prettyName: fact?.prettyName ?? fact?.osId,
+        osId: fact?.osId,
+        tags: tagsByHost[r.id] ?? const [],
+      );
+    }).toList();
   }
 
   Future<Host?> get(String id) async {
-    final row = await (_db.select(_db.hosts)..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.hosts,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
     if (row == null) {
       return null;
     }
-    final fact = await (_db.select(_db.cachedFacts)
-          ..where((t) => t.hostId.equals(id)))
-        .getSingleOrNull();
-    final tags = await (_db.select(_db.hostTags)
-          ..where((t) => t.hostId.equals(id)))
-        .get();
+    final fact = await (_db.select(
+      _db.cachedFacts,
+    )..where((t) => t.hostId.equals(id))).getSingleOrNull();
+    final tags = await (_db.select(
+      _db.hostTags,
+    )..where((t) => t.hostId.equals(id))).get();
     final tagList = tags.map((t) => t.tag).toList()..sort();
     return _toHost(
       row,
@@ -106,7 +105,9 @@ class HostRepository {
   }) async {
     final id = _uuid.v7();
     final now = DateTime.now().toUtc();
-    await _db.into(_db.hosts).insert(
+    await _db
+        .into(_db.hosts)
+        .insert(
           HostsCompanion.insert(
             id: id,
             alias: alias,
@@ -123,9 +124,9 @@ class HostRepository {
   }
 
   Future<void> updateNote(String id, String? note) {
-    return (_db.update(_db.hosts)..where((t) => t.id.equals(id))).write(
-      HostsCompanion(note: Value(note)),
-    );
+    return (_db.update(
+      _db.hosts,
+    )..where((t) => t.id.equals(id))).write(HostsCompanion(note: Value(note)));
   }
 
   Future<void> updateAttention({
@@ -141,16 +142,18 @@ class HostRepository {
       HostsCompanion(
         attention: Value(attention.name),
         lastRttMs: rttMs != null ? Value(rttMs) : const Value.absent(),
-        lastSeenAt:
-            lastSeenAt != null ? Value(lastSeenAt) : const Value.absent(),
+        lastSeenAt: lastSeenAt != null
+            ? Value(lastSeenAt)
+            : const Value.absent(),
         failedUnitCount: failedUnitCount != null
             ? Value(failedUnitCount)
             : const Value.absent(),
         diskRootPercent: diskRootPercent != null
             ? Value(diskRootPercent)
             : const Value.absent(),
-        attentionAt:
-            attentionAt != null ? Value(attentionAt) : const Value.absent(),
+        attentionAt: attentionAt != null
+            ? Value(attentionAt)
+            : const Value.absent(),
       ),
     );
   }
@@ -160,14 +163,19 @@ class HostRepository {
       await (_db.update(_db.hosts)..where((t) => t.jumpHostId.equals(id)))
           .write(const HostsCompanion(jumpHostId: Value(null)));
       await (_db.delete(_db.hostKeys)..where((t) => t.hostId.equals(id))).go();
-      await (_db.delete(_db.cachedFacts)..where((t) => t.hostId.equals(id)))
-          .go();
-      await (_db.delete(_db.searchIndexCache)..where((t) => t.hostId.equals(id)))
-          .go();
+      await (_db.delete(
+        _db.cachedFacts,
+      )..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(
+        _db.searchIndexCache,
+      )..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.hostTags)..where((t) => t.hostId.equals(id))).go();
-      await (_db.delete(_db.fleetCache)..where((t) => t.hostId.equals(id))).go();
-      await (_db.delete(_db.tunnelTargets)..where((t) => t.hostId.equals(id)))
-          .go();
+      await (_db.delete(
+        _db.fleetCache,
+      )..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(
+        _db.tunnelTargets,
+      )..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.recents)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.pins)..where((t) => t.hostId.equals(id))).go();
       final last = await lastHostId();
@@ -206,9 +214,9 @@ class HostRepository {
   }
 
   Future<PinnedHostKey?> pinnedKey(String hostId) async {
-    final row = await (_db.select(_db.hostKeys)
-          ..where((t) => t.hostId.equals(hostId)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.hostKeys,
+    )..where((t) => t.hostId.equals(hostId))).getSingleOrNull();
     if (row == null) {
       return null;
     }
@@ -223,7 +231,9 @@ class HostRepository {
     required String algorithm,
     required String fingerprint,
   }) {
-    return _db.into(_db.hostKeys).insertOnConflictUpdate(
+    return _db
+        .into(_db.hostKeys)
+        .insertOnConflictUpdate(
           HostKeysCompanion.insert(
             hostId: hostId,
             algorithm: algorithm,
@@ -236,7 +246,9 @@ class HostRepository {
   Future<void> saveFacts(String hostId, HostFacts facts) async {
     final previous = await this.facts(hostId);
     final merged = coalesceJournalAccess(facts, previous);
-    await _db.into(_db.cachedFacts).insertOnConflictUpdate(
+    await _db
+        .into(_db.cachedFacts)
+        .insertOnConflictUpdate(
           CachedFactsCompanion.insert(
             hostId: hostId,
             osId: merged.osId,
@@ -256,13 +268,14 @@ class HostRepository {
   }
 
   Future<HostFacts?> facts(String hostId) async {
-    final row = await (_db.select(_db.cachedFacts)
-          ..where((t) => t.hostId.equals(hostId)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.cachedFacts,
+    )..where((t) => t.hostId.equals(hostId))).getSingleOrNull();
     if (row == null) {
       return null;
     }
-    final access = JournalAccess.values.asNameMap()[row.journalAccess] ??
+    final access =
+        JournalAccess.values.asNameMap()[row.journalAccess] ??
         (row.journalReadable ? JournalAccess.plain : JournalAccess.unknown);
     return HostFacts(
       osId: row.osId,
@@ -280,7 +293,9 @@ class HostRepository {
   }
 
   Future<void> touchRecent(Host host) async {
-    await _db.into(_db.recents).insert(
+    await _db
+        .into(_db.recents)
+        .insert(
           RecentsCompanion.insert(
             kind: 'host',
             hostId: host.id,
@@ -288,31 +303,31 @@ class HostRepository {
             viewedAt: DateTime.now().toUtc(),
           ),
         );
-    final extras = await (_db.select(_db.recents)
-          ..where((t) => t.kind.equals('host'))
-          ..orderBy([(t) => OrderingTerm.desc(t.viewedAt)]))
-        .get();
+    final extras =
+        await (_db.select(_db.recents)
+              ..where((t) => t.kind.equals('host'))
+              ..orderBy([(t) => OrderingTerm.desc(t.viewedAt)]))
+            .get();
     if (extras.length > 10) {
       final drop = extras.sublist(10);
-      await (_db.delete(_db.recents)
-            ..where((t) => t.id.isIn(drop.map((e) => e.id))))
-          .go();
+      await (_db.delete(
+        _db.recents,
+      )..where((t) => t.id.isIn(drop.map((e) => e.id)))).go();
     }
   }
 
   Future<void> setLastHost(String? id) async {
-    await _db.into(_db.appSettings).insertOnConflictUpdate(
-          AppSettingsCompanion(
-            id: const Value(1),
-            lastHostId: Value(id),
-          ),
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
+          AppSettingsCompanion(id: const Value(1), lastHostId: Value(id)),
         );
   }
 
   Future<String?> lastHostId() async {
-    final row = await (_db.select(_db.appSettings)
-          ..where((t) => t.id.equals(1)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.appSettings,
+    )..where((t) => t.id.equals(1))).getSingleOrNull();
     return row?.lastHostId;
   }
 
@@ -323,8 +338,9 @@ class HostRepository {
   }
 
   Future<AppSettingsRow?> _settings() {
-    return (_db.select(_db.appSettings)..where((t) => t.id.equals(1)))
-        .getSingleOrNull();
+    return (_db.select(
+      _db.appSettings,
+    )..where((t) => t.id.equals(1))).getSingleOrNull();
   }
 
   Future<void> saveDeviceKey({
@@ -332,7 +348,9 @@ class HostRepository {
     required String backend,
   }) async {
     final existing = await _settings();
-    await _db.into(_db.appSettings).insertOnConflictUpdate(
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           _appSettingsWrite(
             existing,
             publicKeySpkiB64: Value(blobB64),
@@ -352,7 +370,9 @@ class HostRepository {
 
   Future<void> clearDeviceKey() async {
     final existing = await _settings();
-    await _db.into(_db.appSettings).insertOnConflictUpdate(
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           _appSettingsWrite(
             existing,
             publicKeySpkiB64: const Value(null),
@@ -388,7 +408,8 @@ class HostRepository {
 
     final aliasChanged =
         nextAlias != null && nextAlias.isNotEmpty && nextAlias != current.alias;
-    final addressChanged = nextAddress != null &&
+    final addressChanged =
+        nextAddress != null &&
         nextAddress.isNotEmpty &&
         nextAddress != current.address;
     final portChanged = port != null && port != current.port;
@@ -422,8 +443,9 @@ class HostRepository {
         ),
       );
       if (addressChanged) {
-        await (_db.delete(_db.hostKeys)..where((t) => t.hostId.equals(id)))
-            .go();
+        await (_db.delete(
+          _db.hostKeys,
+        )..where((t) => t.hostId.equals(id))).go();
       }
     });
 
@@ -460,7 +482,10 @@ class HostRepository {
       );
     }
     if (userChanged) {
-      await audit(HostEditAudit.changedUsername(nextUser!), 'host-edit username');
+      await audit(
+        HostEditAudit.changedUsername(nextUser!),
+        'host-edit username',
+      );
     }
     if (addressChanged) {
       await audit(HostEditAudit.changedAddress, 'host-edit address');
@@ -486,11 +511,12 @@ class HostRepository {
   }
 
   Future<List<Host>> recentHosts() async {
-    final rows = await (_db.select(_db.recents)
-          ..where((t) => t.kind.equals('host'))
-          ..orderBy([(t) => OrderingTerm.desc(t.viewedAt)])
-          ..limit(20))
-        .get();
+    final rows =
+        await (_db.select(_db.recents)
+              ..where((t) => t.kind.equals('host'))
+              ..orderBy([(t) => OrderingTerm.desc(t.viewedAt)])
+              ..limit(20))
+            .get();
     return _hostsFromRecentRows(rows);
   }
 
@@ -537,7 +563,9 @@ class HostRepository {
     String? closeReason,
   }) async {
     final id = _uuid.v7();
-    await _db.into(_db.auditRecords).insert(
+    await _db
+        .into(_db.auditRecords)
+        .insert(
           AuditRecordsCompanion.insert(
             id: id,
             timestampUtc: DateTime.now().toUtc(),
@@ -569,8 +597,9 @@ class HostRepository {
         durationMs: Value(durationMs),
         errorSummary: Value(errorSummary),
         title: title == null ? const Value.absent() : Value(title),
-        closeReason:
-            closeReason == null ? const Value.absent() : Value(closeReason),
+        closeReason: closeReason == null
+            ? const Value.absent()
+            : Value(closeReason),
       ),
     );
   }
@@ -588,7 +617,9 @@ class HostRepository {
     String? errorSummary,
     String? closeReason,
   }) {
-    return _db.into(_db.auditRecords).insert(
+    return _db
+        .into(_db.auditRecords)
+        .insert(
           AuditRecordsCompanion.insert(
             id: _uuid.v7(),
             timestampUtc: DateTime.now().toUtc(),
@@ -698,12 +729,12 @@ class HostRepository {
   }
 
   Future<List<String>> listFailedUnitNames(String hostId) async {
-    final rows = await (_db.select(_db.searchIndexCache)
-          ..where(
-            (t) =>
-                t.hostId.equals(hostId) & t.kind.equals(searchKindFailedUnit),
-          ))
-        .get();
+    final rows =
+        await (_db.select(_db.searchIndexCache)..where(
+              (t) =>
+                  t.hostId.equals(hostId) & t.kind.equals(searchKindFailedUnit),
+            ))
+            .get();
     return [for (final r in rows) r.name];
   }
 
@@ -714,16 +745,18 @@ class HostRepository {
     required DateTime at,
   }) {
     return _db.transaction(() async {
-      await (_db.delete(_db.searchIndexCache)
-            ..where((t) => t.hostId.equals(hostId) & t.kind.equals(kind)))
-          .go();
+      await (_db.delete(
+        _db.searchIndexCache,
+      )..where((t) => t.hostId.equals(hostId) & t.kind.equals(kind))).go();
       final seen = <String>{};
       for (final raw in names) {
         final name = raw.trim();
         if (name.isEmpty || !seen.add(name)) {
           continue;
         }
-        await _db.into(_db.searchIndexCache).insert(
+        await _db
+            .into(_db.searchIndexCache)
+            .insert(
               SearchIndexCacheCompanion.insert(
                 hostId: hostId,
                 kind: kind,
@@ -737,9 +770,9 @@ class HostRepository {
 
   Future<List<SearchUnit>> listSearchUnits() async {
     final aliases = await _hostAliases();
-    final rows = await (_db.select(_db.searchIndexCache)
-          ..where((t) => t.kind.equals(searchKindUnit)))
-        .get();
+    final rows = await (_db.select(
+      _db.searchIndexCache,
+    )..where((t) => t.kind.equals(searchKindUnit))).get();
     return rows
         .map(
           (row) => SearchUnit(
@@ -760,9 +793,9 @@ class HostRepository {
 
   Future<List<SearchContainer>> listSearchContainers() async {
     final aliases = await _hostAliases();
-    final rows = await (_db.select(_db.searchIndexCache)
-          ..where((t) => t.kind.equals(searchKindContainer)))
-        .get();
+    final rows = await (_db.select(
+      _db.searchIndexCache,
+    )..where((t) => t.kind.equals(searchKindContainer))).get();
     return rows
         .map(
           (row) => SearchContainer(
@@ -817,19 +850,21 @@ class HostRepository {
   }
 
   Future<void> setHostTags(String hostId, List<String> tags) async {
-    final cleaned = tags
-        .map((t) => t.trim().toLowerCase())
-        .where((t) => t.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final cleaned =
+        tags
+            .map((t) => t.trim().toLowerCase())
+            .where((t) => t.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     await _db.transaction(() async {
-      await (_db.delete(_db.hostTags)..where((t) => t.hostId.equals(hostId)))
-          .go();
+      await (_db.delete(
+        _db.hostTags,
+      )..where((t) => t.hostId.equals(hostId))).go();
       for (final tag in cleaned) {
-        await _db.into(_db.hostTags).insert(
-              HostTagsCompanion.insert(hostId: hostId, tag: tag),
-            );
+        await _db
+            .into(_db.hostTags)
+            .insert(HostTagsCompanion.insert(hostId: hostId, tag: tag));
       }
     });
   }
@@ -841,7 +876,9 @@ class HostRepository {
   }
 
   Future<void> saveFleetCache(FleetHostHealth health) async {
-    await _db.into(_db.fleetCache).insertOnConflictUpdate(
+    await _db
+        .into(_db.fleetCache)
+        .insertOnConflictUpdate(
           FleetCacheCompanion.insert(
             hostId: health.hostId,
             reachable: health.reachable,
@@ -906,11 +943,10 @@ class HostRepository {
 
   Future<void> setWidgetEnabled(bool value) async {
     final existing = await _settings();
-    await _db.into(_db.appSettings).insertOnConflictUpdate(
-          _appSettingsWrite(
-            existing,
-            widgetEnabled: Value(value),
-          ),
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
+          _appSettingsWrite(existing, widgetEnabled: Value(value)),
         );
   }
 
@@ -952,7 +988,9 @@ class HostRepository {
 
   Future<void> saveLlmSettingsBundle(LlmSettingsBundle bundle) async {
     final existing = await _settings();
-    await _db.into(_db.appSettings).insertOnConflictUpdate(
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
           _appSettingsWrite(
             existing,
             llmProvider: Value(bundle.activeProvider.storageName),
@@ -979,17 +1017,15 @@ class HostRepository {
     Value<String?> llmOpenaiApiKey = const Value.absent(),
     Value<String?> llmOpenaiModel = const Value.absent(),
     Value<int> tunnelIdleMinutes = const Value.absent(),
+    Value<bool> snippetLibraryReady = const Value.absent(),
   }) {
     return AppSettingsCompanion(
       id: const Value(1),
-      lastHostId: lastHostId.present
-          ? lastHostId
-          : Value(existing?.lastHostId),
+      lastHostId: lastHostId.present ? lastHostId : Value(existing?.lastHostId),
       publicKeySpkiB64: publicKeySpkiB64.present
           ? publicKeySpkiB64
           : Value(existing?.publicKeySpkiB64),
-      keyBackend:
-          keyBackend.present ? keyBackend : Value(existing?.keyBackend),
+      keyBackend: keyBackend.present ? keyBackend : Value(existing?.keyBackend),
       widgetEnabled: widgetEnabled.present
           ? widgetEnabled
           : Value(existing?.widgetEnabled ?? false),
@@ -1018,22 +1054,71 @@ class HostRepository {
       tunnelIdleMinutes: tunnelIdleMinutes.present
           ? tunnelIdleMinutes
           : Value(existing?.tunnelIdleMinutes ?? 10),
+      snippetLibraryReady: snippetLibraryReady.present
+          ? snippetLibraryReady
+          : Value(existing?.snippetLibraryReady ?? false),
     );
   }
 
   Future<List<Snippet>> listSnippets() async {
-    var rows = await _db.select(_db.snippets).get();
-    if (rows.isEmpty) {
+    final settings = await _settingsRow();
+    if (settings == null || !settings.snippetLibraryReady) {
       await seedShippedSnippets();
-      rows = await _db.select(_db.snippets).get();
+      await _markSnippetLibraryReady();
     }
+    final rows = await _db.select(_db.snippets).get();
     return rows.map(_toSnippet).toList();
+  }
+
+  /// Inserts shipped starters that are missing. Never updates an existing
+  /// row, so an edited starter stays user-owned.
+  Future<int> restoreStarterSnippets() async {
+    final existing = await _db.select(_db.snippets).get();
+    final ids = existing.map((row) => row.id).toSet();
+    var added = 0;
+    final now = DateTime.now().toUtc();
+    for (final starter in shippedSnippets) {
+      if (ids.contains(starter.id)) {
+        continue;
+      }
+      await _db
+          .into(_db.snippets)
+          .insert(
+            SnippetsCompanion(
+              id: Value(starter.id),
+              name: Value(starter.name),
+              template: Value(starter.template),
+              starter: const Value(true),
+              updatedAt: Value(now),
+            ),
+          );
+      added++;
+    }
+    await _markSnippetLibraryReady();
+    return added;
+  }
+
+  Future<AppSettingsRow?> _settingsRow() {
+    return (_db.select(
+      _db.appSettings,
+    )..where((t) => t.id.equals(1))).getSingleOrNull();
+  }
+
+  Future<void> _markSnippetLibraryReady() async {
+    final existing = await _settingsRow();
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
+          _appSettingsWrite(existing, snippetLibraryReady: const Value(true)),
+        );
   }
 
   Future<void> seedShippedSnippets() async {
     final now = DateTime.now().toUtc();
     for (final s in shippedSnippets) {
-      await _db.into(_db.snippets).insertOnConflictUpdate(
+      await _db
+          .into(_db.snippets)
+          .insertOnConflictUpdate(
             SnippetsCompanion(
               id: Value(s.id),
               name: Value(s.name),
@@ -1046,7 +1131,9 @@ class HostRepository {
   }
 
   Future<void> upsertSnippet(Snippet snippet) {
-    return _db.into(_db.snippets).insertOnConflictUpdate(
+    return _db
+        .into(_db.snippets)
+        .insertOnConflictUpdate(
           SnippetsCompanion(
             id: Value(snippet.id),
             name: Value(snippet.name),

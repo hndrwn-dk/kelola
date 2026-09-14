@@ -114,27 +114,10 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
 
     return Scaffold(
       backgroundColor: c.ink,
-      appBar: AppBar(
-        backgroundColor: c.ink,
-        foregroundColor: c.text,
-        elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Containers',
-              style: KelolaType.display(color: c.text, size: 16),
-            ),
-            Text(
-              kicker,
-              style: KelolaType.mono(
-                color: c.dim,
-                size: 8.5,
-                letterSpacing: 0.9,
-              ),
-            ),
-          ],
-        ),
+      appBar: KelolaHostAppBar(
+        hostAlias: watchedHostAlias(ref, widget.hostId),
+        title: 'Containers',
+        contextLine: kicker,
         actions: [
           IconButton(
             tooltip: 'Images',
@@ -246,14 +229,51 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
       );
     }
 
-    if (!_loading && view.isEmpty && _error == null) {
+    if (_inv.podmanSocketDenied) {
       children.add(
-        KelolaEmpty(
-          body: _inv.rows.isEmpty && !_inv.dockerDenied && _q.isEmpty
-              ? 'No docker or podman containers found. Pull to refresh after installing an engine.'
-              : containerListEmptyCopy(_filter, query: _q),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: ActionableError(
+            title: 'Cannot list Podman',
+            body:
+                'Podman is installed, but this SSH user cannot read the system socket. '
+                'Kelola will not prompt for a sudo password. Add the user to the podman group, '
+                'and set the socket group to podman if it is still owned by root. '
+                'Then start a new SSH session — group membership '
+                'does not apply to the current session.',
+            snippet: 'sudo usermod -aG podman $user',
+          ),
         ),
       );
+    } else if (_inv.podmanDenied) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: ActionableError(
+            title: 'Cannot list Podman',
+            body:
+                'Podman is installed, but this SSH session cannot see containers. '
+                'User containers need a runtime directory. Root containers need passwordless sudo for podman.',
+            snippet: 'loginctl enable-linger $user',
+          ),
+        ),
+      );
+    }
+
+    if (!_loading && view.isEmpty && _error == null) {
+      final explained = (_inv.dockerDenied ||
+              _inv.podmanDenied ||
+              _inv.podmanSocketDenied) &&
+          _q.isEmpty;
+      if (!explained) {
+        children.add(
+          KelolaEmpty(
+            body: _inv.rows.isEmpty && _q.isEmpty
+                ? 'No docker or podman containers found. Pull to refresh after installing an engine.'
+                : containerListEmptyCopy(_filter, query: _q),
+          ),
+        );
+      }
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: kelolaScrollPadding(context),

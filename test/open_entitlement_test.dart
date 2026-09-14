@@ -7,7 +7,7 @@ void main() {
 
     expect(entitlement.isUnlocked(ProFeature.tunnels), isTrue);
     expect(entitlement.isUnlocked(ProFeature.fleetUnlimited), isTrue);
-    expect(entitlement.sourceLabel, 'open-source');
+    expect(entitlement.sourceLabel, 'std');
     expect(await entitlement.purchase(), ProPurchaseResult.unavailable);
     expect(await entitlement.restore(), ProPurchaseResult.unavailable);
 

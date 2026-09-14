@@ -71,7 +71,15 @@ echo "---CONTAINERS---"
 if command -v docker >/dev/null 2>&1; then
   docker ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null || true
 elif command -v podman >/dev/null 2>&1; then
+  uid=\$(id -u)
+  if [ -z "\${XDG_RUNTIME_DIR:-}" ] && [ -d "/run/user/\$uid" ]; then
+    export XDG_RUNTIME_DIR="/run/user/\$uid"
+  fi
   podman ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null || true
+  sock=/run/podman/podman.sock
+  if [ -S "\$sock" ] && [ -r "\$sock" ]; then
+    podman --remote --url "unix://\$sock" ps -a --format '{{.State}}\t{{.Status}}\t{{.Names}}' 2>/dev/null || true
+  fi
 fi
 echo "---REBOOT---"
 if [ -f /var/run/reboot-required ]; then echo 1; else echo 0; fi

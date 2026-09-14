@@ -106,8 +106,8 @@ class AppSettings extends Table {
   TextColumn get keyBackend => text().nullable()();
   BoolColumn get widgetEnabled =>
       boolean().withDefault(const Constant(false))();
-  TextColumn get llmProvider =>
-      text().withDefault(const Constant('none'))();
+  TextColumn get llmProvider => text().withDefault(const Constant('none'))();
+
   /// Legacy shared fields — no longer written; kept for migration from < 11.
   TextColumn get llmBaseUrl => text().nullable()();
   TextColumn get llmApiKey => text().nullable()();
@@ -119,6 +119,11 @@ class AppSettings extends Table {
   TextColumn get llmOpenaiModel => text().nullable()();
   IntColumn get tunnelIdleMinutes =>
       integer().withDefault(const Constant(10))();
+
+  /// True after the snippet library has been seeded once. Stops an empty
+  /// table from resurrecting starters the user deleted.
+  BoolColumn get snippetLibraryReady =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

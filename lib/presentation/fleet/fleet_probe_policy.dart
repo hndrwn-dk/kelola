@@ -1,3 +1,6 @@
+import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/host_inventory_view.dart';
+
 /// Free-fleet cap lives in the app so public and private builds cannot diverge.
 const kFreeFleetHostLimit = 3;
 
@@ -86,5 +89,52 @@ FleetProbePlan planFleetProbes({
     showChoosePrompt: false,
     selectedHostIds: chosen,
     selectionAtCap: chosen.length >= kFreeFleetHostLimit,
+  );
+}
+
+class DisplayedInventory {
+  const DisplayedInventory({
+    required this.monitored,
+    required this.unmonitored,
+  });
+
+  final HostInventoryView monitored;
+  final List<Host> unmonitored;
+
+  String get summary {
+    final base = monitored.summary;
+    if (unmonitored.isEmpty) {
+      return base;
+    }
+    return '$base · ${unmonitored.length} not monitored';
+  }
+}
+
+/// Unmonitored hosts are an overlay, not a stored health. They must not
+/// sit in healthy or needs-attention, and this does not write the database.
+DisplayedInventory splitUnmonitored(
+  HostInventoryView view,
+  bool Function(String hostId) isMonitored,
+) {
+  final skipped = <Host>[];
+  List<Host> keep(List<Host> hosts) {
+    final kept = <Host>[];
+    for (final host in hosts) {
+      if (isMonitored(host.id)) {
+        kept.add(host);
+      } else {
+        skipped.add(host);
+      }
+    }
+    return kept;
+  }
+
+  return DisplayedInventory(
+    monitored: HostInventoryView(
+      needsAttention: keep(view.needsAttention),
+      healthy: keep(view.healthy),
+      notChecked: keep(view.notChecked),
+    ),
+    unmonitored: skipped,
   );
 }

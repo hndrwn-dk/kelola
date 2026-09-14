@@ -70,6 +70,7 @@ void main() {
         .readAsStringSync();
     expect(src, contains('HostDashboardMenuButton'));
     expect(src, contains('KickerLine'));
+    expect(src, isNot(contains('contextLine: machine')));
     expect(src, isNot(contains("value: 'ro'")));
   });
 

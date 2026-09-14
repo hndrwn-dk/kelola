@@ -86,36 +86,43 @@ CREATE TABLE "app_settings" ("id" INTEGER NOT NULL, "last_host_id" TEXT NULL, "p
 
 Future<Map<String, Object?>> _schemaSnapshot(KelolaDatabase db) async {
   final version = await db.customSelect('PRAGMA user_version').getSingle();
-  final tables = await db.customSelect(
-    "SELECT name FROM sqlite_master "
-    "WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
-    "ORDER BY name",
-  ).get();
+  final tables = await db
+      .customSelect(
+        "SELECT name FROM sqlite_master "
+        "WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
+        "ORDER BY name",
+      )
+      .get();
   final tableNames = tables.map((r) => r.read<String>('name')).toList();
 
   final columns = <String, List<Map<String, Object?>>>{};
   for (final name in tableNames) {
     final cols = await db.customSelect('PRAGMA table_info("$name")').get();
-    final list = cols
-        .map(
-          (c) => <String, Object?>{
-            'name': c.read<String>('name'),
-            'type': c.read<String>('type'),
-            'notnull': c.read<int>('notnull'),
-            'dflt_value': c.data['dflt_value'],
-            'pk': c.read<int>('pk'),
-          },
-        )
-        .toList()
-      ..sort((a, b) => (a['name']! as String).compareTo(b['name']! as String));
+    final list =
+        cols
+            .map(
+              (c) => <String, Object?>{
+                'name': c.read<String>('name'),
+                'type': c.read<String>('type'),
+                'notnull': c.read<int>('notnull'),
+                'dflt_value': c.data['dflt_value'],
+                'pk': c.read<int>('pk'),
+              },
+            )
+            .toList()
+          ..sort(
+            (a, b) => (a['name']! as String).compareTo(b['name']! as String),
+          );
     columns[name] = list;
   }
 
-  final indexes = await db.customSelect(
-    "SELECT name, tbl_name, sql FROM sqlite_master "
-    "WHERE type = 'index' AND name NOT LIKE 'sqlite_%' "
-    "ORDER BY name",
-  ).get();
+  final indexes = await db
+      .customSelect(
+        "SELECT name, tbl_name, sql FROM sqlite_master "
+        "WHERE type = 'index' AND name NOT LIKE 'sqlite_%' "
+        "ORDER BY name",
+      )
+      .get();
   final indexList = indexes
       .map(
         (r) => <String, Object?>{
@@ -156,48 +163,63 @@ void main() {
     addTearDown(db.close);
     await db.customSelect('SELECT 1').get();
 
-    final tablesAfter = await db.customSelect(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'",
-    ).get();
+    final tablesAfter = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'",
+        )
+        .get();
     expect(tablesAfter, isNotEmpty);
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 13);
+    expect(version.data['user_version'], 14);
 
     final cols = await db.customSelect('PRAGMA table_info(search_index)').get();
     final names = cols.map((r) => r.read<String>('name')).toSet();
     expect(names, containsAll(['host_id', 'kind', 'name', 'indexed_at']));
 
-    final settingsCols =
-        await db.customSelect('PRAGMA table_info(app_settings)').get();
+    final settingsCols = await db
+        .customSelect('PRAGMA table_info(app_settings)')
+        .get();
     expect(
       settingsCols.map((r) => r.read<String>('name')).toSet(),
-      containsAll(['widget_enabled', 'tunnel_idle_minutes']),
+      containsAll([
+        'widget_enabled',
+        'tunnel_idle_minutes',
+        'snippet_library_ready',
+      ]),
     );
 
-    final tagTable = await db.customSelect(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='host_tags'",
-    ).get();
+    final tagTable = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='host_tags'",
+        )
+        .get();
     expect(tagTable, isNotEmpty);
-    final fleetTable = await db.customSelect(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='fleet_cache'",
-    ).get();
+    final fleetTable = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='fleet_cache'",
+        )
+        .get();
     expect(fleetTable, isNotEmpty);
 
-    final fleetCols =
-        await db.customSelect('PRAGMA table_info(fleet_cache)').get();
+    final fleetCols = await db
+        .customSelect('PRAGMA table_info(fleet_cache)')
+        .get();
     expect(
       fleetCols.map((r) => r.read<String>('name')).toSet(),
       containsAll(['mem_percent', 'security_updates', 'containers_down']),
     );
 
-    final tunnelTable = await db.customSelect(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='tunnel_targets'",
-    ).get();
+    final tunnelTable = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='tunnel_targets'",
+        )
+        .get();
     expect(tunnelTable, isNotEmpty);
 
-    final auditCols =
-        await db.customSelect('PRAGMA table_info(audit_records)').get();
+    final auditCols = await db
+        .customSelect('PRAGMA table_info(audit_records)')
+        .get();
     expect(
       auditCols.map((r) => r.read<String>('name')).toSet(),
       contains('close_reason'),
@@ -210,10 +232,11 @@ void main() {
     await created.customSelect('SELECT 1').get();
 
     final raw = sqlite3.openInMemory();
-    for (final stmt in _v1SchemaSql
-        .split(';')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)) {
+    for (final stmt
+        in _v1SchemaSql
+            .split(';')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)) {
       raw.execute(stmt);
     }
     raw.execute('PRAGMA user_version = 1');
@@ -230,14 +253,13 @@ void main() {
 
     final colsA = a['columns']! as Map<String, List<Map<String, Object?>>>;
     final colsB = b['columns']! as Map<String, List<Map<String, Object?>>>;
-    expect(colsB.keys.toList()..sort(), colsA.keys.toList()..sort(),
-        reason: 'column table keys');
+    expect(
+      colsB.keys.toList()..sort(),
+      colsA.keys.toList()..sort(),
+      reason: 'column table keys',
+    );
     for (final table in colsA.keys) {
-      expect(
-        colsB[table],
-        colsA[table],
-        reason: 'columns for $table',
-      );
+      expect(colsB[table], colsA[table], reason: 'columns for $table');
     }
   });
 }

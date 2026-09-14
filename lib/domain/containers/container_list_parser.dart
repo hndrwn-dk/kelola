@@ -21,18 +21,39 @@ class ContainerListParser {
     final dockerDenied = stdout.contains('---DOCKER_DENIED---');
     final dockerBody = _section(stdout, 'PS_DOCKER');
     final podmanBody = _section(stdout, 'PS_PODMAN');
+    final podmanSockBody = _section(stdout, 'PS_PODMAN_SOCK');
+    final podmanRootBody = _section(stdout, 'PS_PODMAN_ROOT');
     final legacy = _section(stdout, 'PS');
     final dockerRows = dockerBody.isNotEmpty
         ? parseDockerNdjson(dockerBody)
         : _legacyDocker(legacy, engine);
-    final podmanRows = podmanBody.isNotEmpty
-        ? parsePodmanJson(podmanBody)
-        : _legacyPodman(legacy, dockerRows.isNotEmpty);
+    final podmanRows = _mergePodman([
+      if (podmanBody.isNotEmpty)
+        ...parsePodmanJson(podmanBody)
+      else
+        ..._legacyPodman(legacy, dockerRows.isNotEmpty),
+      ...parsePodmanJson(podmanSockBody),
+      ...parsePodmanJson(podmanRootBody),
+    ]);
     return ContainerInventory(
       rows: [...pods, ...dockerRows, ...podmanRows],
       engines: engines,
       dockerDenied: dockerDenied,
+      podmanDenied: stdout.contains('---PODMAN_DENIED---'),
+      podmanSocketDenied: stdout.contains('---PODMAN_SOCK_DENIED---'),
     );
+  }
+
+  List<ContainerRow> _mergePodman(List<ContainerRow> rows) {
+    final seen = <String>{};
+    final out = <ContainerRow>[];
+    for (final row in rows) {
+      if (row.id.isEmpty || !seen.add(row.id)) {
+        continue;
+      }
+      out.add(row);
+    }
+    return out;
   }
 
   List<ContainerRow> _legacyDocker(
