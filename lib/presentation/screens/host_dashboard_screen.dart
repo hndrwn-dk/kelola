@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/dashboard_snapshot.dart';
 import 'package:kelola/domain/facts/enums.dart';
@@ -613,10 +614,15 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                     label: 'Tunnels',
                     meta: _tunnelsMeta(ref),
                     onTap: () {
-                      final unlocked =
-                          ref.read(entitlementProvider).tunnelsUnlocked;
+                      final unlocked = ref
+                          .read(entitlementProvider)
+                          .isUnlocked(ProFeature.tunnels);
                       if (!unlocked) {
-                        showTunnelsLockedExplainer(context);
+                        showTunnelsLockedExplainer(
+                          context,
+                          onPurchase: () =>
+                              ref.read(entitlementProvider).purchase(),
+                        );
                         return;
                       }
                       _open((id) => TunnelsScreen(hostId: id));

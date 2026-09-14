@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/db/database.dart';
+import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/db/tunnel_repository.dart';
 import 'package:kelola/data/keystore/hardware_signer.dart';
@@ -16,7 +18,6 @@ import 'package:kelola/data/ssh/tunnel_manager.dart';
 import 'package:kelola/data/widget/home_widget_bridge.dart';
 import 'package:kelola/data/llm/assist_service.dart';
 import 'package:kelola/data/llm/dart_io_llm_http.dart';
-import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/incident/correlation.dart';
 import 'package:kelola/domain/llm/preview_gate.dart';
@@ -25,10 +26,11 @@ import 'package:kelola/domain/search/inventory_search.dart';
 import 'package:kelola/domain/tunnels/active_tunnel.dart';
 import 'package:kelola/domain/tunnels/tunnel_close_reason.dart';
 import 'package:kelola/domain/tunnels/tunnel_target.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
-final entitlementProvider = Provider<Entitlement>((ref) {
-  return const OpenEntitlement();
-});
+export 'package:kelola/domain/entitlement/entitlement.dart'
+    show entitlementProvider, entitlementRevisionProvider;
 
 final databaseProvider = Provider<KelolaDatabase>((ref) {
   final db = KelolaDatabase();
@@ -253,6 +255,41 @@ final tunnelTargetsProvider =
     StreamProvider.family<List<TunnelTarget>, String>((ref, hostId) {
   return ref.watch(tunnelRepositoryProvider).watchForHost(hostId);
 });
+
+/// JSON file of free-fleet probe host ids. Widget tests have no path_provider
+/// plugin; a per-scope memory store keeps those pumps from crashing. Production
+/// always has the plugin.
+final fleetProbeSelectionStoreProvider =
+    FutureProvider<FleetProbeSelectionStore>((ref) async {
+  try {
+    final dir = await getApplicationSupportDirectory();
+    return FleetProbeSelectionStore(
+      File(p.join(dir.path, 'fleet_probe_selection.json')),
+    );
+  } on MissingPluginException {
+    return FleetProbeSelectionStore.memory();
+  }
+});
+
+class FleetProbeSelectionController extends AsyncNotifier<Set<String>?> {
+  @override
+  Future<Set<String>?> build() async {
+    final hosts = await ref.watch(hostsProvider.future);
+    final store = await ref.watch(fleetProbeSelectionStoreProvider.future);
+    return store.read(hosts.map((host) => host.id).toSet());
+  }
+
+  Future<void> replace(Set<String> ids) async {
+    final store = await ref.read(fleetProbeSelectionStoreProvider.future);
+    await store.write(ids);
+    state = AsyncData(ids);
+  }
+}
+
+final fleetProbeSelectionProvider =
+    AsyncNotifierProvider<FleetProbeSelectionController, Set<String>?>(
+  FleetProbeSelectionController.new,
+);
 
 /// Live host membership and attention from Drift table watches.
 final hostsProvider = StreamProvider<List<Host>>((ref) {

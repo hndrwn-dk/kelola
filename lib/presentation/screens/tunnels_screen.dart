@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/tunnels/active_tunnel.dart';
 import 'package:kelola/domain/tunnels/tunnel_presets.dart';
 import 'package:kelola/domain/tunnels/tunnel_target.dart';
 import 'package:kelola/domain/tunnels/tunnel_validation.dart';
+import 'package:kelola/presentation/pro_locked_sheet.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 import 'package:kelola/providers.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -39,50 +41,17 @@ String tunnelUptimeLabel(DateTime openedAtUtc, DateTime now) {
   return '${h}h ${rm}m';
 }
 
-Future<void> showTunnelsLockedExplainer(BuildContext context) {
-  final c = context.kc;
-  return showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: c.surface,
-    isScrollControlled: true,
-    shape: RoundedRectangleBorder(
-      borderRadius: const BorderRadius.vertical(
-        top: Radius.circular(KelolaRadii.lg),
-      ),
-      side: BorderSide(color: c.line),
-    ),
-    builder: (ctx) {
-      return KelolaSheet(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Tunnels',
-                style: KelolaType.display(color: c.text, size: 18),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Tunnels open a local SSH port forward so you can reach '
-                'admin UIs on this host from your phone browser. '
-                'This build keeps tunnels locked.',
-                style: KelolaType.body(color: c.muted, size: 13),
-              ),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Close'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
+Future<void> showTunnelsLockedExplainer(
+  BuildContext context, {
+  Future<ProPurchaseResult> Function()? onPurchase,
+}) {
+  return showProLockedSheet(
+    context,
+    title: 'Tunnels',
+    body: 'Tunnels open a local SSH port forward so you can reach '
+        'admin UIs on this host from your phone browser. '
+        'This build keeps tunnels locked.',
+    onPurchase: onPurchase ?? () async => ProPurchaseResult.unavailable,
   );
 }
 

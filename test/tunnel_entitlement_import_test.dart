@@ -26,7 +26,7 @@ void main() {
   });
 
   test('OpenEntitlement unlocks tunnels by default', () {
-    expect(const OpenEntitlement().tunnelsUnlocked, isTrue);
+    expect(const OpenEntitlement().isUnlocked(ProFeature.tunnels), isTrue);
   });
 
   test('transitive imports never reach entitlement.dart', () {

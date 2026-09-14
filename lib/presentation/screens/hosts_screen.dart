@@ -6,6 +6,7 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/design/style_guide_screen.dart';
 import 'package:kelola/domain/audit/audit_view.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_inventory_view.dart';
@@ -14,7 +15,9 @@ import 'package:kelola/domain/hosts/stable_host_inventory.dart';
 import 'package:kelola/domain/incident/incident_sheet.dart';
 import 'package:kelola/domain/widget/publish_home_widget.dart';
 import 'package:kelola/domain/llm/settings.dart';
+import 'package:kelola/presentation/fleet/fleet_probe_policy.dart';
 import 'package:kelola/presentation/host_inventory_ping.dart';
+import 'package:kelola/presentation/pro_locked_sheet.dart';
 import 'package:kelola/presentation/screens/add_host_screen.dart';
 import 'package:kelola/presentation/screens/audit_screen.dart';
 import 'package:kelola/presentation/screens/edit_host_screen.dart';
@@ -77,6 +80,66 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     });
   }
 
+  FleetProbePlan _plan(List<Host> hosts) {
+    ref.watch(entitlementRevisionProvider);
+    final selected = ref.watch(fleetProbeSelectionProvider).valueOrNull;
+    return planFleetProbes(
+      hostIds: [for (final host in hosts) host.id],
+      selectedHostIds: selected,
+      fleetUnlimited:
+          ref.watch(entitlementProvider).isUnlocked(ProFeature.fleetUnlimited),
+    );
+  }
+
+  Future<void> _openAddHost(FleetProbePlan plan, {required bool reloadAudit}) async {
+    if (plan.addHostLocked) {
+      await showProLockedSheet(
+        context,
+        title: 'Hosts',
+        body: 'This build monitors up to $kFreeFleetHostLimit hosts. '
+            'Unlock to add another.',
+        onPurchase: () => ref.read(entitlementProvider).purchase(),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const AddHostScreen(),
+      ),
+    );
+    if (reloadAudit) {
+      _loadAudit();
+    } else {
+      _reloadSideState();
+    }
+  }
+
+  Future<void> _toggleProbe(
+    Host host,
+    FleetProbePlan plan,
+    Set<String> selected,
+  ) async {
+    if (selected.contains(host.id)) {
+      await ref.read(fleetProbeSelectionProvider.notifier).replace(
+        {...selected}..remove(host.id),
+      );
+      return;
+    }
+    if (plan.selectingAnotherIsLocked(host.id)) {
+      await showProLockedSheet(
+        context,
+        title: 'Fleet',
+        body: 'This build monitors up to $kFreeFleetHostLimit hosts. '
+            'Choose which three stay in the fleet probe.',
+        onPurchase: () => ref.read(entitlementProvider).purchase(),
+      );
+      return;
+    }
+    await ref.read(fleetProbeSelectionProvider.notifier).replace(
+      {...selected, host.id},
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
@@ -92,6 +155,9 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       );
     }
     final summary = inventory?.summary;
+    final plan = _plan(liveList ?? const []);
+    final selected =
+        ref.watch(fleetProbeSelectionProvider).valueOrNull ?? const <String>{};
 
     return Scaffold(
       backgroundColor: c.ink,
@@ -129,14 +195,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   IconButton(
                     tooltip: 'Add host',
                     icon: Icon(Icons.add_rounded, color: c.amber),
-                    onPressed: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const AddHostScreen(),
-                        ),
-                      );
-                      _reloadSideState();
-                    },
+                    onPressed: () => _openAddHost(plan, reloadAudit: false),
                   ),
                 ],
               ),
@@ -176,15 +235,10 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                                       ),
                                       const SizedBox(height: 16),
                                       FilledButton(
-                                        onPressed: () async {
-                                          await Navigator.of(context).push(
-                                            MaterialPageRoute<void>(
-                                              builder: (_) =>
-                                                  const AddHostScreen(),
-                                            ),
-                                          );
-                                          _loadAudit();
-                                        },
+                                        onPressed: () => _openAddHost(
+                                          plan,
+                                          reloadAudit: true,
+                                        ),
                                         style: FilledButton.styleFrom(
                                           backgroundColor: c.amber,
                                         ),
@@ -220,7 +274,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                         }
                       }
                     }
-                    return _inventory(c, list, view, resume);
+                    return _inventory(c, list, view, resume, plan, selected);
                   },
                   loading: () => Center(
                     child: CircularProgressIndicator(color: c.amber),
@@ -284,7 +338,10 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                         ],
                       ),
                     ),
-                    const HostsColophon(version: kelolaAppVersion),
+                    HostsColophon(
+                      version: kelolaAppVersion,
+                      sourceLabel: ref.watch(entitlementProvider).sourceLabel,
+                    ),
                   ],
                 ),
               ),
@@ -322,6 +379,8 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     List<Host> list,
     HostInventoryView view,
     Host? resume,
+    FleetProbePlan plan,
+    Set<String> selected,
   ) {
     return RefreshIndicator(
       color: c.amber,
@@ -364,16 +423,22 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   c,
                   HostInventoryBucket.needsAttention,
                   view.needsAttention,
+                  plan,
+                  selected,
                 ),
                 ..._groupBlock(
                   c,
                   HostInventoryBucket.healthy,
                   view.healthy,
+                  plan,
+                  selected,
                 ),
                 ..._groupBlock(
                   c,
                   HostInventoryBucket.notChecked,
                   view.notChecked,
+                  plan,
+                  selected,
                 ),
               ]),
             ),
@@ -387,6 +452,8 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     KelolaColors c,
     HostInventoryBucket bucket,
     List<Host> hosts,
+    FleetProbePlan plan,
+    Set<String> selected,
   ) {
     if (hosts.isEmpty) {
       return const [];
@@ -411,7 +478,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                 padding: EdgeInsets.only(
                   bottom: i == hosts.length - 1 ? 0 : 8,
                 ),
-                child: _hostRow(c, hosts[i]),
+                child: _hostRow(c, hosts[i], plan, selected),
               );
             },
           )
@@ -419,7 +486,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             children: [
               for (var i = 0; i < hosts.length; i++) ...[
                 if (i > 0) const SizedBox(height: 8),
-                _hostRow(c, hosts[i]),
+                _hostRow(c, hosts[i], plan, selected),
               ],
             ],
           );
@@ -432,7 +499,15 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     ];
   }
 
-  Widget _hostRow(KelolaColors c, Host host) {
+  Widget _hostRow(
+    KelolaColors c,
+    Host host,
+    FleetProbePlan plan,
+    Set<String> selected,
+  ) {
+    final unmonitored = !plan.isMonitored(host.id);
+    final health = unmonitored ? HealthStatus.unknown : _health(host);
+    final pill = unmonitored ? 'not monitored' : incidentChipLabel(host);
     return Dismissible(
       key: ValueKey(host.id),
       direction: DismissDirection.horizontal,
@@ -480,20 +555,36 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         DismissDirection.startToEnd: 0.25,
         DismissDirection.endToStart: 0.25,
       },
-      child: ServiceRow(
-        risk: RiskLevel.read,
-        status: _health(host),
-        leading: OsIcon.forOsId(host.osId),
-        name: host.alias,
-        meta: host.subtitle,
-        pillText: incidentChipLabel(host),
-        pillStatus: _health(host),
-        compact: true,
-        onTap: () => _openHost(host),
-        onPillTap: incidentChipLabel(host) == null
-            ? null
-            : () => openHostIncident(context, ref, host),
-        onLongPress: () => _hostActions(host),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ServiceRow(
+            risk: RiskLevel.read,
+            status: health,
+            leading: OsIcon.forOsId(host.osId),
+            name: host.alias,
+            meta: host.subtitle,
+            pillText: pill,
+            pillStatus: health,
+            compact: true,
+            onTap: () => _openHost(host),
+            onPillTap: unmonitored || pill == null
+                ? null
+                : () => openHostIncident(context, ref, host),
+            onLongPress: () => _hostActions(host),
+          ),
+          if (plan.showProbeToggles)
+            Align(
+              alignment: Alignment.centerRight,
+              child: ModePill(
+                key: Key('probe-toggle-${host.id}'),
+                label: selected.contains(host.id) ? 'monitored' : 'monitor',
+                active: selected.contains(host.id),
+                onTap: () => _toggleProbe(host, plan, selected),
+              ),
+            ),
+        ],
       ),
     );
   }
