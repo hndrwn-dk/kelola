@@ -467,6 +467,18 @@ class StyleGuideScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
+            'PROLOCKEDCARD',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          ProLockedCard(
+            title: 'Tunnels',
+            body: 'Tunnels open a local SSH port forward so you can reach '
+                'admin UIs on this host. This build keeps tunnels locked.',
+            onUnlock: () async {},
+          ),
+          const SizedBox(height: 18),
+          Text(
             'HOSTSCOLOPHON',
             style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
           ),
