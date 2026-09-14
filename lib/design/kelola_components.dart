@@ -2223,13 +2223,62 @@ class CollapsedHostGroup extends StatelessWidget {
   }
 }
 
+/// Locked Pro feature card. One unlock action. No price, no payment URL.
+/// Shown inside an existing [KelolaSheet], never as a one-off screen widget.
+class ProLockedCard extends StatelessWidget {
+  const ProLockedCard({
+    super.key,
+    required this.title,
+    required this.body,
+    required this.onUnlock,
+  });
+
+  final String title;
+  final String body;
+  final Future<void> Function() onUnlock;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: KelolaType.display(color: c.text, size: 18)),
+          const SizedBox(height: 10),
+          Text(body, style: KelolaType.body(color: c.muted, size: 13)),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: () => onUnlock(),
+              style: FilledButton.styleFrom(backgroundColor: c.amber),
+              child: Text(
+                'Unlock',
+                style: KelolaType.display(color: c.ink, size: 13),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Pinned Hosts colophon: version and keys on one adjacent row. No app name.
 class HostsColophon extends StatelessWidget {
-  const HostsColophon({super.key, required this.version});
+  const HostsColophon({
+    super.key,
+    required this.version,
+    this.sourceLabel,
+  });
 
   static const hairlineKey = Key('hosts-colophon-hairline');
 
   final String version;
+  final String? sourceLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -2264,6 +2313,13 @@ class HostsColophon extends StatelessWidget {
               ],
             ),
           ),
+          if (sourceLabel != null && sourceLabel!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(sourceLabel!, style: _colophonStyle(c)),
+            ),
+          ],
         ],
       ),
     );

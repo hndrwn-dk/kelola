@@ -11,7 +11,7 @@ import 'package:kelola/design/style_guide_screen.dart';
 
 void main() {
   testWidgets('style guide shows every design-system component', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(390, 5000));
+    await tester.binding.setSurfaceSize(const Size(390, 6400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await _loadKelolaFonts();
@@ -51,6 +51,7 @@ void main() {
     expect(find.byType(HostGroupTray), findsWidgets);
     expect(find.byType(CollapsedHostGroup), findsOneWidget);
     expect(find.byType(HostsColophon), findsOneWidget);
+    expect(find.byType(ProLockedCard), findsOneWidget);
     expect(find.text('READ-ONLY'), findsOneWidget);
 
     expect(find.text('sshd.service'), findsOneWidget);
@@ -64,9 +65,19 @@ void main() {
           boundaryKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final image = await boundary.toImage(pixelRatio: 2);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final captured = bytes!.buffer.asUint8List();
       final file = File('test/goldens/style_guide.png');
-      file.parent.createSync(recursive: true);
-      file.writeAsBytesSync(bytes!.buffer.asUint8List());
+      if (autoUpdateGoldenFiles) {
+        file.parent.createSync(recursive: true);
+        file.writeAsBytesSync(captured);
+        return;
+      }
+      expect(
+        file.existsSync(),
+        isTrue,
+        reason: 'missing golden; regenerate with flutter test --update-goldens',
+      );
+      expect(captured, file.readAsBytesSync());
     });
   });
 }
