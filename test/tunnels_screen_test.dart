@@ -529,6 +529,7 @@ void main() {
     expect(find.textContaining('trial'), findsNothing);
     expect(find.textContaining('port forward'), findsOneWidget);
     expect(find.byType(KelolaSheet), findsOneWidget);
+    expect(find.byType(ProLockedCard), findsOneWidget);
   });
 
   testWidgets('Add app bar opens tunnel target editor sheet',
@@ -643,18 +644,19 @@ void main() {
     expect(find.textContaining('up 10m 10s'), findsOneWidget);
   });
 
-  test('dashboard is the sole production tunnelsUnlocked call site', () {
+  test('dashboard is the sole production isUnlocked(ProFeature.tunnels) call site', () {
+    const needle = 'isUnlocked(ProFeature.tunnels)';
     final dash = File('lib/presentation/screens/host_dashboard_screen.dart')
         .readAsStringSync();
-    expect(dash, contains('.tunnelsUnlocked'));
-    expect(dash, contains('showTunnelsLockedExplainer'));
+    expect(dash, contains(needle));
+    expect(dash, isNot(contains('tunnelsUnlocked')));
     expect(dash, contains('TunnelsScreen'));
 
     final callSites = <String>[];
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
       final src = entity.readAsStringSync();
-      if (src.contains('.tunnelsUnlocked')) {
+      if (src.contains(needle)) {
         callSites.add(entity.path.replaceAll('\\', '/'));
       }
     }

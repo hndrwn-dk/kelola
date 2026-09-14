@@ -22,6 +22,8 @@ dependencies:
   share_plus: ^10.1.4
   url_launcher: ^6.3.1
   flutter_markdown: ^0.7.7+1
+  kelola_pro:
+    path: packages/kelola_pro
 
 dev_dependencies:
   flutter_test:

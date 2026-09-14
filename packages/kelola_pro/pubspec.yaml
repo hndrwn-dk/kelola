@@ -1,0 +1,11 @@
+name: kelola_pro
+description: Entitlement seam shared by public and private Kelola builds.
+publish_to: none
+version: 0.0.1
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter

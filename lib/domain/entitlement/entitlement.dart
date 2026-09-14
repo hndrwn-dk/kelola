@@ -1,18 +1,22 @@
-abstract class Entitlement {
-  bool get tunnelsUnlocked;
-}
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kelola_pro/kelola_pro.dart';
 
-class OpenEntitlement implements Entitlement {
-  const OpenEntitlement();
+export 'package:kelola_pro/kelola_pro.dart';
 
-  @override
-  bool get tunnelsUnlocked => true;
-}
+final entitlementProvider = Provider<Entitlement>((ref) {
+  final entitlement = createEntitlement();
+  entitlement.initialize();
+  ref.onDispose(entitlement.dispose);
+  return entitlement;
+});
 
-/// Locked builds / tests — tile stays visible; explainer sheet on tap.
-class LockedEntitlement implements Entitlement {
-  const LockedEntitlement();
-
-  @override
-  bool get tunnelsUnlocked => false;
-}
+/// Rebuilds listeners when [Entitlement.changes] emits. Yields 0 immediately
+/// so the first frame does not wait on the stream.
+final entitlementRevisionProvider = StreamProvider<int>((ref) async* {
+  final entitlement = ref.watch(entitlementProvider);
+  yield 0;
+  var revision = 0;
+  await for (final _ in entitlement.changes) {
+    yield ++revision;
+  }
+});

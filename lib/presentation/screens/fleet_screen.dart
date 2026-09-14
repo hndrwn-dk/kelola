@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/fleet/fleet_gate.dart';
@@ -11,6 +12,7 @@ import 'package:kelola/domain/hosts/host_probe_outcome.dart';
 import 'package:kelola/domain/hosts/pooled_run.dart';
 import 'package:kelola/domain/probes/fleet_health_probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
+import 'package:kelola/presentation/fleet/fleet_probe_policy.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/fleet_host_sheet.dart';
 import 'package:kelola/providers.dart';
@@ -37,11 +39,19 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
   List<String> _allTags = const [];
   String? _tagFilter;
   bool _refreshing = false;
+  var _probesStarted = false;
+  ProviderSubscription<AsyncValue<Set<String>?>>? _selectionSub;
 
   @override
   void initState() {
     super.initState();
     _bootstrap();
+  }
+
+  @override
+  void dispose() {
+    _selectionSub?.close();
+    super.dispose();
   }
 
   Future<void> _bootstrap() async {
@@ -57,7 +67,35 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
         ..addAll(cache);
       _allTags = tags;
     });
-    await _refresh();
+    // Do not await the selection future here. path_provider's channel can
+    // outlive the first frame, and awaiting it from initState deadlocks
+    // widget tests. Refresh once the selection value or error is in.
+    _selectionSub = ref.listenManual(fleetProbeSelectionProvider, (previous, next) {
+      if (_probesStarted) {
+        return;
+      }
+      if (!next.hasValue && !next.hasError) {
+        return;
+      }
+      _probesStarted = true;
+      _refresh();
+    });
+    final current = ref.read(fleetProbeSelectionProvider);
+    if (!_probesStarted && (current.hasValue || current.hasError)) {
+      _probesStarted = true;
+      await _refresh();
+    }
+  }
+
+  FleetProbePlan _planFor(List<Host> hosts) {
+    final selected = ref.read(fleetProbeSelectionProvider).valueOrNull;
+    return planFleetProbes(
+      hostIds: [for (final host in hosts) host.id],
+      selectedHostIds: selected,
+      fleetUnlimited: ref
+          .read(entitlementProvider)
+          .isUnlocked(ProFeature.fleetUnlimited),
+    );
   }
 
   void _applyHealth(FleetHostHealth health) {
@@ -76,24 +114,42 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
       });
       return;
     }
+    final plan = _planFor(hosts);
+    final toProbe = [
+      for (final host in hosts)
+        if (plan.probedHostIds.contains(host.id)) host,
+    ];
     setState(() {
-      _refreshing = true;
+      _refreshing = toProbe.isNotEmpty;
       _loading
         ..clear()
-        ..addAll(hosts.map((h) => h.id));
+        ..addAll(toProbe.map((h) => h.id));
       _allTags = {
         for (final h in hosts) ...h.tags,
       }.toList()
         ..sort();
     });
+    if (toProbe.isEmpty) {
+      return;
+    }
 
-    await ref.read(enrollmentProvider.notifier).ensureKey();
+    try {
+      await ref.read(enrollmentProvider.notifier).ensureKey();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _refreshing = false;
+          _loading.clear();
+        });
+      }
+      return;
+    }
     if (!mounted) {
       return;
     }
 
     await runPooled(
-      hosts,
+      toProbe,
       concurrency: 5,
       timeout: const Duration(seconds: 10),
       fn: (host) async {
@@ -201,25 +257,46 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
+    ref.watch(entitlementRevisionProvider);
     final hostsAsync = ref.watch(hostsProvider);
     final hosts = hostsAsync.valueOrNull ?? const <Host>[];
+    final selected = ref.watch(fleetProbeSelectionProvider).valueOrNull;
+    final plan = planFleetProbes(
+      hostIds: [for (final host in hosts) host.id],
+      selectedHostIds: selected,
+      fleetUnlimited:
+          ref.watch(entitlementProvider).isUnlocked(ProFeature.fleetUnlimited),
+    );
     final tagsByHost = {for (final h in hosts) h.id: h.tags};
 
     final rows = <FleetHostHealth>[
       for (final h in hosts)
-        _byId[h.id] ??
-            FleetHostHealth(
-              hostId: h.id,
-              alias: h.alias,
-              reachable: true,
-              load1: 0,
-              diskRootPercent: h.diskRootPercent ?? 0,
-              failedUnitCount: h.failedUnitCount ?? 0,
-              pendingUpdates: 0,
-              fetchedAt: h.attentionAt ??
-                  DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-              fromCache: h.attentionAt != null,
-            ),
+        if (!plan.isMonitored(h.id))
+          FleetHostHealth(
+            hostId: h.id,
+            alias: h.alias,
+            reachable: false,
+            load1: 0,
+            diskRootPercent: 0,
+            failedUnitCount: 0,
+            pendingUpdates: 0,
+            fetchedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+            outcome: HostProbeOutcome.unchecked,
+          )
+        else
+          _byId[h.id] ??
+              FleetHostHealth(
+                hostId: h.id,
+                alias: h.alias,
+                reachable: true,
+                load1: 0,
+                diskRootPercent: h.diskRootPercent ?? 0,
+                failedUnitCount: h.failedUnitCount ?? 0,
+                pendingUpdates: 0,
+                fetchedAt: h.attentionAt ??
+                    DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+                fromCache: h.attentionAt != null,
+              ),
     ];
     final filtered = filterFleetByTag(rows, tagsByHost, _tagFilter);
     final sorted = sortFleetHealth(filtered);
@@ -253,6 +330,14 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
               style: KelolaType.mono(color: c.dim, size: 9.5, letterSpacing: 0.5),
             ),
           ),
+          if (plan.showChoosePrompt)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              child: Text(
+                'Choose up to $kFreeFleetHostLimit hosts to monitor.',
+                style: KelolaType.body(color: c.muted, size: 13),
+              ),
+            ),
           if (_allTags.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
@@ -306,6 +391,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                         itemCount: sorted.length,
                         itemBuilder: (context, i) {
                           final row = sorted[i];
+                          final monitored = plan.isMonitored(row.hostId);
                           final host = hosts.firstWhere(
                             (h) => h.id == row.hostId,
                             orElse: () => Host(
@@ -319,18 +405,24 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                           );
                           return FleetHostTile(
                             alias: row.alias,
-                            status: fleetTileHealthStatus(row),
-                            loading: _loading.contains(row.hostId),
-                            reachable: row.reachable,
-                            downMessage:
-                                row.reachable ? null : row.tileSummary(),
-                            metrics: [
-                              for (final m in row.tileMetrics())
-                                FleetTileMetricView(
-                                  label: m.label,
-                                  value: m.value,
-                                ),
-                            ],
+                            status: monitored
+                                ? fleetTileHealthStatus(row)
+                                : HealthStatus.unknown,
+                            loading:
+                                monitored && _loading.contains(row.hostId),
+                            reachable: monitored && row.reachable,
+                            downMessage: monitored
+                                ? (row.reachable ? null : row.tileSummary())
+                                : 'not monitored',
+                            metrics: monitored
+                                ? [
+                                    for (final m in row.tileMetrics())
+                                      FleetTileMetricView(
+                                        label: m.label,
+                                        value: m.value,
+                                      ),
+                                  ]
+                                : const [],
                             onTap: () => openFleetHostSheet(
                               context,
                               ref,
