@@ -1,6 +1,20 @@
 import 'package:kelola/domain/facts/dashboard_snapshot.dart';
 import 'package:kelola/domain/probes/metrics_probe.dart';
 
+class DiskRootReading {
+  const DiskRootReading({
+    required this.known,
+    this.percent,
+    this.usedKib = 0,
+    this.totalKib = 0,
+  });
+
+  final bool known;
+  final int? percent;
+  final int usedKib;
+  final int totalKib;
+}
+
 class DashboardParser {
   const DashboardParser();
 
@@ -15,10 +29,10 @@ class DashboardParser {
       sections[name] = stdout.substring(start, end).trim();
     }
 
-    final uptime = _uptime(sections['UPTIME'] ?? '');
+    final uptime = parseUptime(sections['UPTIME'] ?? '') ?? Duration.zero;
     final load1 = _load1(sections['LOAD'] ?? '');
     final mem = _memPercent(sections['MEM'] ?? '');
-    final disk = _diskRootPercent(sections['DISK'] ?? '');
+    final disk = parseDiskRoot(sections['DISK'] ?? '');
     final names = (sections['FAILED_NAMES'] ?? '')
         .split(RegExp(r'\s+'))
         .where((s) => s.isNotEmpty)
@@ -36,16 +50,51 @@ class DashboardParser {
         sections['STAT2'] ?? '',
       ),
       memUsedPercent: mem,
-      diskRootPercent: disk,
+      diskRootPercent: disk.percent ?? 0,
       failedUnitCount: failedCount,
       failedUnitNames: names,
     );
   }
 
-  static Duration _uptime(String raw) {
-    final first = raw.trim().split(RegExp(r'\s+')).first;
-    final seconds = double.tryParse(first) ?? 0;
+  /// Null when the section is empty or unparseable — never invent zero uptime.
+  static Duration? parseUptime(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    final first = trimmed.split(RegExp(r'\s+')).first;
+    final seconds = double.tryParse(first);
+    if (seconds == null) {
+      return null;
+    }
     return Duration(seconds: seconds.floor());
+  }
+
+  /// Unknown when `/` is missing from `df` — never invent 0%.
+  static DiskRootReading parseDiskRoot(String df) {
+    for (final line in df.split('\n').skip(1)) {
+      final cols = line.trim().split(RegExp(r'\s+'));
+      if (cols.length < 7) {
+        continue;
+      }
+      final mounted = cols.last;
+      if (mounted != '/') {
+        continue;
+      }
+      final pct = int.tryParse(cols[5].replaceAll('%', ''));
+      final total = int.tryParse(cols[2]) ?? 0;
+      final used = int.tryParse(cols[3]) ?? 0;
+      if (pct == null || total <= 0) {
+        return const DiskRootReading(known: false);
+      }
+      return DiskRootReading(
+        known: true,
+        percent: pct,
+        usedKib: used,
+        totalKib: total,
+      );
+    }
+    return const DiskRootReading(known: false);
   }
 
   static double _load1(String raw) {
@@ -73,21 +122,5 @@ class DashboardParser {
   static int _kib(String line) {
     final m = RegExp(r'(\d+)').firstMatch(line);
     return int.tryParse(m?.group(1) ?? '0') ?? 0;
-  }
-
-  static int _diskRootPercent(String df) {
-    for (final line in df.split('\n').skip(1)) {
-      final cols = line.trim().split(RegExp(r'\s+'));
-      if (cols.length < 7) {
-        continue;
-      }
-      final mounted = cols.last;
-      if (mounted != '/') {
-        continue;
-      }
-      final pct = cols[5].replaceAll('%', '');
-      return int.tryParse(pct) ?? 0;
-    }
-    return 0;
   }
 }

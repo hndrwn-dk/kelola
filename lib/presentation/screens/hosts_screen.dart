@@ -228,9 +228,10 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                         onRefresh: () => _refresh(const []),
                         child: ListView(
                           physics: const AlwaysScrollableScrollPhysics(),
+                          padding: kelolaScrollPadding(context, top: 12),
                           children: [
                             SizedBox(
-                              height: MediaQuery.sizeOf(context).height * 0.45,
+                              height: MediaQuery.sizeOf(context).height * 0.35,
                               child: Center(
                                 child: Padding(
                                   padding: const EdgeInsets.all(24),
@@ -275,6 +276,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                                 ),
                               ),
                             ),
+                            ..._utilityTrail(plan),
                           ],
                         ),
                       );
@@ -316,60 +318,9 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
               ),
               SafeArea(
                 top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-                      child: Column(
-                        children: [
-                          ServiceRow(
-                            risk: RiskLevel.read,
-                            name: 'Fleet',
-                            meta: 'health grid · read only',
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const FleetScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 6),
-                          ServiceRow(
-                            risk: RiskLevel.read,
-                            name: 'Assist',
-                            meta: ref.watch(llmSettingsProvider).when(
-                                  data: llmAssistFooterMeta,
-                                  loading: () => 'LLM · …',
-                                  error: (_, _) => 'LLM · none',
-                                ),
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const LlmSettingsScreen(),
-                                ),
-                              );
-                              ref.invalidate(llmSettingsProvider);
-                            },
-                          ),
-                          const SizedBox(height: 6),
-                          ServiceRow(
-                            risk: RiskLevel.read,
-                            name: 'Home widget',
-                            meta: _widgetOn
-                                ? 'on · last refresh only'
-                                : 'off · last refresh only',
-                            onTap: _toggleWidget,
-                          ),
-                        ],
-                      ),
-                    ),
-                    HostsColophon(
-                      version: kelolaAppVersion,
-                      sourceLabel: ref.watch(entitlementProvider).sourceLabel,
-                    ),
-                  ],
+                child: HostsColophon(
+                  version: kelolaAppVersion,
+                  sourceLabel: ref.watch(entitlementProvider).sourceLabel,
                 ),
               ),
             ],
@@ -377,6 +328,42 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         ],
       ),
     );
+  }
+
+  List<Widget> _utilityTrail(FleetProbePlan plan) {
+    final n = plan.probedHostIds.length;
+    return [
+      const SizedBox(height: 4),
+      Divider(height: 1, thickness: 1, color: context.kc.line),
+      const SizedBox(height: 10),
+      HostsUtilityRail(
+        fleetMeta: n == 1 ? '1 host' : '$n hosts',
+        assistMeta: ref.watch(llmSettingsProvider).when(
+              data: llmAssistFooterMeta,
+              loading: () => '…',
+              error: (_, _) => 'set up',
+            ),
+        widgetMeta: _widgetOn ? 'on' : 'off',
+        widgetOn: _widgetOn,
+        onFleet: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const FleetScreen(),
+            ),
+          );
+        },
+        onAssist: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const LlmSettingsScreen(),
+            ),
+          );
+          ref.invalidate(llmSettingsProvider);
+        },
+        onWidget: _toggleWidget,
+      ),
+      const SizedBox(height: 8),
+    ];
   }
 
   bool _groupExpanded(HostInventoryBucket bucket, int count) {
@@ -482,6 +469,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   plan,
                   selected,
                 ),
+                ..._utilityTrail(plan),
               ]),
             ),
           ),

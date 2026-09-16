@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
-import 'package:kelola/domain/fleet/fleet_actions.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/metrics_probe.dart';
@@ -220,8 +219,6 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
     final c = context.kc;
     final assessment = assessFleetHost(_health);
     final issues = assessment.issues;
-    final actions = fleetQuickActions(_health);
-    final more = fleetMoreIssuesLabel(_health);
     final metrics = _metrics;
     final live = fleetLiveStrings(_health);
     final loadText = live.load;
@@ -265,17 +262,18 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
           else
             for (final issue in issues) ...[
               ServiceRow(
-                risk: RiskLevel.read,
+                risk: issue.kind == FleetIssueKind.failedUnit
+                    ? RiskLevel.mutate
+                    : RiskLevel.read,
                 status: _issueStatus(issue.kind),
                 name: issue.label,
                 meta: issue.meta,
+                onTap: !issue.isActionable || _busy
+                    ? null
+                    : () => _runAction(issue),
               ),
               const SizedBox(height: 6),
             ],
-          if (more != null) ...[
-            Text(more, style: KelolaType.body(color: c.amber, size: 12)),
-            const SizedBox(height: 8),
-          ],
           Text(
             'LIVE · $age',
             style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
@@ -324,17 +322,6 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
             ],
           ],
           const SizedBox(height: 14),
-          for (final action in actions) ...[
-            ServiceRow(
-              risk: action.kind == FleetIssueKind.failedUnit
-                  ? RiskLevel.mutate
-                  : RiskLevel.read,
-              name: action.label,
-              meta: action.meta,
-              onTap: _busy ? null : () => _runAction(action),
-            ),
-            const SizedBox(height: 6),
-          ],
           ServiceRow(
             risk: RiskLevel.read,
             name: 'Open host',

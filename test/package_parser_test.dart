@@ -34,7 +34,9 @@ void main() {
     const probe = PackageListProbe();
     final apt = probe.command(factsOf(PackageManager.apt));
     expect(apt, contains('apt-get -s upgrade'));
-    expect(apt, contains('Dir::Etc::SourceList=/etc/apt/security.sources.list'));
+    expect(apt, contains("grep '^Inst '"));
+    expect(apt, contains('Debian-Security'));
+    expect(apt, isNot(contains('security.sources.list')));
     expect(apt, isNot(contains('command -v apt')));
     expect(apt, isNot(contains('command -v dnf')));
     expect(apt, contains('---PKG---'));
@@ -88,6 +90,30 @@ void main() {
       snap.updates.firstWhere((u) => u.name == 'openssl').currentVersion,
       '3.0.11-1~deb12u2',
     );
+  });
+
+  test('apt security list is Inst lines with security pocket, not full upgrade',
+      () {
+    final sec = PackageCommands.listSecurity(PackageManager.apt);
+    expect(sec, contains("grep '^Inst '"));
+    expect(sec, contains('security'));
+    expect(sec, isNot(contains('security.sources.list')));
+
+    // Simulate the old bug: SECURITY block wrongly equal to full UPDATES.
+    // Parser would mark every name security. Filtered SECURITY stays a subset.
+    final filtered = parser.parse(
+      manager: PackageManager.apt,
+      stdout: '''
+---UPDATES---
+${fixture('apt_upgrade.txt')}
+---SECURITY---
+${fixture('apt_security.txt')}
+---REBOOT---
+0
+''',
+    );
+    expect(filtered.updates.length, greaterThan(filtered.securityCount));
+    expect(filtered.securityCount, 3);
   });
 
   test('merges security-only apt list onto updates', () {

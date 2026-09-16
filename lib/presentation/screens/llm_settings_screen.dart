@@ -161,7 +161,7 @@ class _LlmSettingsScreenState extends ConsumerState<LlmSettingsScreen> {
         foregroundColor: c.text,
         elevation: 0,
         title: Text(
-          'Assist',
+          'AI Assist',
           style: KelolaType.display(color: c.text, size: 16),
         ),
       ),

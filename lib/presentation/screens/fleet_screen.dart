@@ -151,13 +151,17 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
     await runPooled(
       toProbe,
       concurrency: 5,
-      timeout: const Duration(seconds: 10),
+      timeout: const Duration(seconds: 30),
       fn: (host) async {
         const scope = ProbeScope.fleet;
-        final probe = FleetHealthProbe(hostId: host.id, alias: host.alias);
-        assertFleetReadOnly(probe, scope: scope);
         final facts = await ref.read(hostRepositoryProvider).facts(host.id) ??
             HostFacts.undiscovered;
+        final probe = FleetHealthProbe(
+          hostId: host.id,
+          alias: host.alias,
+          pkg: facts.pkg,
+        );
+        assertFleetReadOnly(probe, scope: scope);
         final health = await runHostProbe(
           ref: ref,
           context: context,
@@ -208,21 +212,28 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
         }
         final cached = _byId[host.id];
         final outcome = classifyProbeFailure(error);
+        final sessionLive =
+            ref.read(sessionPoolProvider).hasLiveSession(host.id);
+        // Timeout with a live SSH session (or soft failure) must not flip the
+        // host to unreachable — that claim is stronger than what we know.
+        final markDown = shouldMarkHostUnreachable(outcome) && !sessionLive;
         final unreachable = FleetHostHealth(
           hostId: host.id,
           alias: host.alias,
-          reachable: false,
+          reachable: markDown
+              ? false
+              : (sessionLive || (cached?.reachable ?? false)),
           load1: cached?.load1 ?? 0,
           nprocCores: cached?.nprocCores,
           memPercent: cached?.memPercent ?? 0,
-          diskRootPercent: cached?.diskRootPercent ?? 0,
+          diskRootPercent: cached?.diskRootPercent,
           highDiskMounts: cached?.highDiskMounts ?? const [],
           failedUnitCount: cached?.failedUnitCount ?? 0,
           pendingUpdates: cached?.pendingUpdates ?? 0,
           securityUpdates: cached?.securityUpdates ?? 0,
           containersDown: cached?.containersDown ?? 0,
           containersUnhealthy: cached?.containersUnhealthy ?? 0,
-          uptime: cached?.uptime ?? Duration.zero,
+          uptime: cached?.uptime,
           rebootRequired: cached?.rebootRequired ?? false,
           fetchedAt: cached?.fetchedAt ??
               DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -232,7 +243,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
         if (cached != null) {
           await ref.read(hostRepositoryProvider).saveFleetCache(unreachable);
         }
-        if (isConnectionFailureOutcome(outcome)) {
+        if (markDown) {
           await ref.read(hostRepositoryProvider).updateAttention(
                 id: host.id,
                 attention: HostAttention.unreachable,
@@ -277,9 +288,10 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
             alias: h.alias,
             reachable: false,
             load1: 0,
-            diskRootPercent: 0,
+            diskRootPercent: null,
             failedUnitCount: 0,
             pendingUpdates: 0,
+            uptime: null,
             fetchedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
             outcome: HostProbeOutcome.unchecked,
           )
@@ -290,9 +302,10 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                 alias: h.alias,
                 reachable: true,
                 load1: 0,
-                diskRootPercent: h.diskRootPercent ?? 0,
+                diskRootPercent: h.diskRootPercent,
                 failedUnitCount: h.failedUnitCount ?? 0,
                 pendingUpdates: 0,
+                uptime: null,
                 fetchedAt: h.attentionAt ??
                     DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
                 fromCache: h.attentionAt != null,

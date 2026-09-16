@@ -3,15 +3,21 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/packages/package_commands.dart';
+import 'package:kelola/domain/packages/package_parser.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 
 /// Single batched read for fleet tiles. No sleep / dual /proc/stat.
 class FleetHealthProbe extends Probe<FleetHostHealth> {
-  const FleetHealthProbe({this.hostId = '', this.alias = ''});
+  const FleetHealthProbe({
+    this.hostId = '',
+    this.alias = '',
+    this.pkg = PackageManager.unknown,
+  });
 
   final String hostId;
   final String alias;
+  final PackageManager pkg;
 
   @override
   String get auditTitle => 'Fleet health';
@@ -36,16 +42,14 @@ systemctl list-units --type=service --state=failed --no-legend --plain --no-page
 ''';
     final pending = facts.pkg == PackageManager.unknown
         ? r'''
-echo "---PENDING---"
-echo 0
+echo "---UPDATES---"
 echo "---SECURITY---"
-echo 0
 '''
         : '''
-echo "---PENDING---"
-{ ${PackageCommands.listUpdates(facts.pkg)} 2>/dev/null || true; } | grep -cve '^\$' || echo 0
+echo "---UPDATES---"
+${PackageCommands.listUpdatesForFleet(facts.pkg)} 2>/dev/null || true
 echo "---SECURITY---"
-{ ${PackageCommands.listSecurity(facts.pkg)} 2>/dev/null || true; } | grep -cve '^\$\\|^N/A' || echo 0
+${PackageCommands.listSecurity(facts.pkg)} 2>/dev/null || true
 ''';
     final nproc = facts.nprocCores != null
         ? 'echo "---NPROC---"\necho ${facts.nprocCores}\n'
@@ -89,12 +93,21 @@ if [ -f /var/run/reboot-required ]; then echo 1; else echo 0; fi
   @override
   FleetHostHealth parse(String stdout, String stderr, int exitCode) {
     final sections = _sections(stdout);
+    final uptime = DashboardParser.parseUptime(sections['UPTIME'] ?? '');
+    final disk = DashboardParser.parseDiskRoot(sections['DISK'] ?? '');
     final dash = const DashboardParser().parse(stdout);
     final nproc = int.tryParse((sections['NPROC'] ?? '').trim()) ?? 0;
-    final pending = int.tryParse((sections['PENDING'] ?? '').trim().split('\n').first) ?? 0;
-    final security =
-        int.tryParse((sections['SECURITY'] ?? '').trim().split('\n').first) ?? 0;
-    final reboot = (sections['REBOOT'] ?? '').trim().startsWith('1');
+    final packages = const PackageParser().parse(
+      manager: pkg == PackageManager.unknown
+          ? (_pkgFromSections(stdout) ?? PackageManager.unknown)
+          : pkg,
+      stdout: _packageSectionsStdout(sections),
+    );
+    // Prefer manager from host facts via UPDATES parse; unknown yields 0/0.
+    final pending = packages.updates.length;
+    final security = packages.securityCount;
+    final reboot = (sections['REBOOT'] ?? '').trim().startsWith('1') ||
+        packages.rebootRequired;
     final containers = countFleetContainerTrouble(
       (sections['CONTAINERS'] ?? '').split('\n'),
     );
@@ -106,17 +119,41 @@ if [ -f /var/run/reboot-required ]; then echo 1; else echo 0; fi
       load1: dash.load1,
       nprocCores: nproc > 0 ? nproc : null,
       memPercent: dash.memUsedPercent,
-      diskRootPercent: dash.diskRootPercent,
+      diskRootPercent: disk.known ? disk.percent : null,
       highDiskMounts: highDisk,
       failedUnitCount: dash.failedUnitCount,
       pendingUpdates: pending,
       securityUpdates: security,
       containersDown: containers.down,
       containersUnhealthy: containers.unhealthy,
-      uptime: dash.uptime,
+      uptime: uptime,
       rebootRequired: reboot,
       fetchedAt: DateTime.now().toUtc(),
     );
+  }
+
+  /// Rebuild PackageParser-shaped stdout from fleet sections.
+  static String _packageSectionsStdout(Map<String, String> sections) {
+    return '---UPDATES---\n${sections['UPDATES'] ?? ''}\n'
+        '---SECURITY---\n${sections['SECURITY'] ?? ''}\n'
+        '---REBOOT---\n${sections['REBOOT'] ?? '0'}\n';
+  }
+
+  /// Best-effort pkg manager from security/update output shape.
+  static PackageManager? _pkgFromSections(String stdout) {
+    // Caller wires facts.pkg into command; parse path uses content heuristics
+    // only when facts were unknown. Prefer dnf/yum lines, else apt Inst.
+    if (stdout.contains('Inst ')) {
+      return PackageManager.apt;
+    }
+    if (RegExp(r'Sec\.?|RLSA-|security/', caseSensitive: false)
+        .hasMatch(stdout)) {
+      return PackageManager.dnf;
+    }
+    if (stdout.contains('baseos') || stdout.contains('appstream')) {
+      return PackageManager.dnf;
+    }
+    return null;
   }
 
   static Map<String, String> _sections(String stdout) {
@@ -159,5 +196,5 @@ if [ -f /var/run/reboot-required ]; then echo 1; else echo 0; fi
   RiskLevel get risk => RiskLevel.read;
 
   @override
-  Duration get timeout => const Duration(seconds: 10);
+  Duration get timeout => const Duration(seconds: 25);
 }

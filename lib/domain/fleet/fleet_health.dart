@@ -80,17 +80,17 @@ class FleetHostHealth {
     required this.alias,
     required this.reachable,
     required this.load1,
-    required this.diskRootPercent,
     required this.failedUnitCount,
     required this.pendingUpdates,
     required this.fetchedAt,
+    this.diskRootPercent,
     this.nprocCores,
     this.memPercent = 0,
     this.highDiskMounts = const [],
     this.securityUpdates = 0,
     this.containersDown = 0,
     this.containersUnhealthy = 0,
-    this.uptime = Duration.zero,
+    this.uptime,
     this.rebootRequired = false,
     this.fromCache = false,
     this.outcome = HostProbeOutcome.pending,
@@ -102,14 +102,16 @@ class FleetHostHealth {
   final double load1;
   final int? nprocCores;
   final int memPercent;
-  final int diskRootPercent;
+  /// Null when df parse failed — never treat unknown as 0%.
+  final int? diskRootPercent;
   final List<String> highDiskMounts;
   final int failedUnitCount;
   final int pendingUpdates;
   final int securityUpdates;
   final int containersDown;
   final int containersUnhealthy;
-  final Duration uptime;
+  /// Null when /proc/uptime was missing — never treat unknown as 0m.
+  final Duration? uptime;
   final bool rebootRequired;
   final DateTime fetchedAt;
   final bool fromCache;
@@ -156,6 +158,9 @@ class FleetHostHealth {
 
   String uptimeLabel() {
     final d = uptime;
+    if (d == null) {
+      return '—';
+    }
     if (d.inDays >= 1) {
       return '${d.inDays}d';
     }
@@ -163,6 +168,14 @@ class FleetHostHealth {
       return '${d.inHours}h';
     }
     return '${d.inMinutes}m';
+  }
+
+  String diskLabel() {
+    final p = diskRootPercent;
+    if (p == null) {
+      return '—';
+    }
+    return '$p%';
   }
 
   /// Compact metric cells for the fleet tile. Zero trouble fields omitted.
@@ -174,7 +187,7 @@ class FleetHostHealth {
     final cells = <FleetTileMetric>[
       FleetTileMetric(label: 'load', value: live.load),
       FleetTileMetric(label: 'mem', value: live.mem),
-      FleetTileMetric(label: 'disk', value: '$diskRootPercent%'),
+      FleetTileMetric(label: 'disk', value: diskLabel()),
       FleetTileMetric(label: 'up', value: uptimeLabel()),
     ];
     if (failedUnitCount > 0) {
@@ -308,7 +321,7 @@ HostAttention attentionFromFleetHealth(FleetHostHealth health) {
   if (health.failedUnitCount > 0) {
     return HostAttention.failedUnits;
   }
-  if (health.diskRootPercent >= FleetHostHealth.diskHighThreshold ||
+  if ((health.diskRootPercent ?? 0) >= FleetHostHealth.diskHighThreshold ||
       health.highDiskMounts.isNotEmpty) {
     return HostAttention.diskHigh;
   }
@@ -347,10 +360,10 @@ FleetAssessment assessFleetHost(FleetHostHealth health) {
     );
   }
   if (health.reachable &&
-      (health.diskRootPercent >= FleetHostHealth.diskHighThreshold ||
+      ((health.diskRootPercent ?? 0) >= FleetHostHealth.diskHighThreshold ||
           health.highDiskMounts.isNotEmpty)) {
     final mounts = [
-      if (health.diskRootPercent >= FleetHostHealth.diskHighThreshold)
+      if ((health.diskRootPercent ?? 0) >= FleetHostHealth.diskHighThreshold)
         '/:${health.diskRootPercent}%',
       ...health.highDiskMounts,
     ].join(' · ');
