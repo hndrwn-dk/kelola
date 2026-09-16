@@ -69,7 +69,7 @@ void main() {
     expect(view.notChecked.map((h) => h.alias), ['ub', 'old']);
   });
 
-  test('summary strip counts hosts, healthy, and not checked', () {
+  test('summary strip is compact: count and not checked, no healthy echo', () {
     final view = HostInventoryView.build(
       [
         _host(alias: 'ub'),
@@ -82,7 +82,9 @@ void main() {
       ],
       now: now,
     );
-    expect(view.summary, '3 hosts · 1 healthy · 2 not checked');
+    expect(view.summary, '3 · 2 not checked');
+    expect(view.summary, isNot(contains('healthy')));
+    expect(view.summary, isNot(contains('hosts')));
   });
 
   test('summary includes needs attention when any host is in that bucket', () {
@@ -102,7 +104,7 @@ void main() {
       ],
       now: now,
     );
-    expect(view.summary, '2 hosts · 1 needs attention · 1 healthy');
+    expect(view.summary, '2 · 1 needs attention');
   });
 
   test('inventory detail metrics moved to Fleet; Hosts keep pill only', () {

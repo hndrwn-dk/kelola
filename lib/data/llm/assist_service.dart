@@ -149,7 +149,7 @@ class AssistService {
     required AssistRequest request,
   }) {
     if (!settings.provider.enabled || !settings.isConfigured) {
-      throw StateError('Assist provider is not configured');
+      throw StateError('AI Assist provider is not configured');
     }
     if (needsPreview(settings)) {
       throw StateError('Preview not approved');
@@ -167,7 +167,7 @@ class AssistService {
       case LlmProvider.openaiCompatible:
         return OpenAiCompatibleAssistClient(http: _http);
       case LlmProvider.none:
-        throw StateError('Assist provider is none');
+        throw StateError('AI Assist provider is none');
     }
   }
 }
