@@ -49,7 +49,7 @@ void main() {
     );
     expect(next.healthy, isEmpty);
     expect(next.needsAttention.map((h) => h.alias), ['ok']);
-    expect(next.summary, '1 host · 1 needs attention');
+    expect(next.summary, '1 · 1 needs attention');
   });
 
   test('attention change without allowReorder keeps surviving order', () {

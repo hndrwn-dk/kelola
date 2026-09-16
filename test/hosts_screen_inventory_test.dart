@@ -78,7 +78,7 @@ void main() {
 
     expect(find.byType(HostsScreen), findsOneWidget);
     expect(
-      find.text('3 hosts · 1 needs attention · 1 healthy · 1 not checked'),
+      find.text('3 · 1 needs attention · 1 not checked'),
       findsOneWidget,
     );
     expect(find.text('NEEDS ATTENTION'), findsOneWidget);

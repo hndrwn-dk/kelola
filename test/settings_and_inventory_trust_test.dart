@@ -71,7 +71,7 @@ void main() {
       'east-rock-uat',
       'east-worker-uat',
     ]);
-    expect(view.summary, '2 hosts · 2 needs attention');
+    expect(view.summary, '2 · 2 needs attention');
     expect(view.summary, isNot(contains('healthy')));
   });
 

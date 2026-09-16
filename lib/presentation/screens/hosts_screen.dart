@@ -8,6 +8,7 @@ import 'package:kelola/design/style_guide_screen.dart';
 import 'package:kelola/domain/audit/audit_view.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/facts/enums.dart';
+import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_inventory_view.dart';
 import 'package:kelola/domain/hosts/pooled_run.dart';
@@ -50,6 +51,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     failed: 0,
   );
   var _widgetOn = false;
+  Map<String, FleetHostHealth> _fleetCache = {};
   final Set<HostInventoryBucket> _forceExpanded = {};
   final Set<HostInventoryBucket> _forceCollapsed = {};
   final _stableInventory = StableHostInventory();
@@ -68,6 +70,16 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   void initState() {
     super.initState();
     _loadAudit();
+    _loadFleetCache();
+  }
+
+  Future<void> _loadFleetCache() async {
+    final cache =
+        await ref.read(hostRepositoryProvider).loadFleetCacheByHost();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _fleetCache = cache);
   }
 
   Future<void> _loadAudit() async {
@@ -276,7 +288,6 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                                 ),
                               ),
                             ),
-                            ..._utilityTrail(plan),
                           ],
                         ),
                       );
@@ -350,7 +361,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             MaterialPageRoute<void>(
               builder: (_) => const FleetScreen(),
             ),
-          );
+          ).then((_) => _loadFleetCache());
         },
         onAssist: () async {
           await Navigator.of(context).push(
@@ -538,6 +549,13 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     final unmonitored = !plan.isMonitored(host.id);
     final health = unmonitored ? HealthStatus.unknown : _health(host);
     final pill = unmonitored ? 'not monitored' : incidentChipLabel(host);
+    final metrics = hostInventoryMetricsLine(
+      host: host,
+      monitored: !unmonitored,
+      cache: _fleetCache[host.id],
+    );
+    // Status pill wins over metrics when both would compete for width.
+    final endValue = pill == null ? metrics : null;
     return Dismissible(
       key: ValueKey(host.id),
       direction: DismissDirection.horizontal,
@@ -597,6 +615,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             meta: unmonitored ? host.endpoint : host.subtitle,
             pillText: pill,
             pillStatus: health,
+            endValue: endValue,
             compact: true,
             onTap: () => _openHost(host),
             onPillTap: unmonitored || pill == null
@@ -634,6 +653,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
 
   void _reloadSideState() {
     _loadAudit();
+    _loadFleetCache();
   }
 
   Future<void> _refresh(List<Host> hosts) async {
@@ -673,6 +693,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       _allowInventoryReorder = true;
     });
     _loadAudit();
+    _loadFleetCache();
   }
 
   Future<void> _toggleWidget() async {
