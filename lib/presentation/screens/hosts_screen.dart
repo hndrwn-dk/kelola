@@ -288,7 +288,6 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                                 ),
                               ),
                             ),
-                            ..._utilityTrail(plan),
                           ],
                         ),
                       );
