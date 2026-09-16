@@ -2441,6 +2441,294 @@ class KelolaHostAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
+/// Compact three-cell footer rail for Hosts: Fleet / AI Assist / Widget.
+/// Keeps inventory space; colophon hairline stays on [HostsColophon] below.
+class HostsUtilityRail extends StatelessWidget {
+  const HostsUtilityRail({
+    super.key,
+    required this.fleetMeta,
+    required this.assistMeta,
+    required this.widgetMeta,
+    required this.onFleet,
+    required this.onAssist,
+    required this.onWidget,
+    this.widgetOn = false,
+  });
+
+  final String fleetMeta;
+  final String assistMeta;
+  final String widgetMeta;
+  final bool widgetOn;
+  final VoidCallback onFleet;
+  final VoidCallback onAssist;
+  final VoidCallback onWidget;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: c.surface,
+          border: Border.all(color: c.line),
+          borderRadius: BorderRadius.circular(KelolaRadii.md),
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              Expanded(
+                child: _HostsUtilityCell(
+                  icon: const HostsFleetIcon(),
+                  label: 'Fleet',
+                  meta: fleetMeta,
+                  onTap: onFleet,
+                ),
+              ),
+              VerticalDivider(width: 1, thickness: 1, color: c.line),
+              Expanded(
+                child: _HostsUtilityCell(
+                  icon: const HostsAssistIcon(),
+                  label: 'AI Assist',
+                  meta: assistMeta,
+                  onTap: onAssist,
+                ),
+              ),
+              VerticalDivider(width: 1, thickness: 1, color: c.line),
+              Expanded(
+                child: _HostsUtilityCell(
+                  icon: HostsWidgetIcon(on: widgetOn),
+                  label: 'Widget',
+                  meta: widgetMeta,
+                  onTap: onWidget,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HostsUtilityCell extends StatelessWidget {
+  const _HostsUtilityCell({
+    required this.icon,
+    required this.label,
+    required this.meta,
+    required this.onTap,
+  });
+
+  final Widget icon;
+  final String label;
+  final String meta;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              icon,
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: KelolaType.display(color: c.text, size: 12),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                meta,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: KelolaType.mono(color: c.dim, size: 9),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Fleet utility icon — 2×2 host tiles (symbolic, not live data).
+class HostsFleetIcon extends StatelessWidget {
+  const HostsFleetIcon({super.key});
+
+  static const double size = 18;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _HostsFleetIconPainter(
+          amber: c.amber,
+          muted: c.dim,
+          green: c.green,
+        ),
+      ),
+    );
+  }
+}
+
+class _HostsFleetIconPainter extends CustomPainter {
+  _HostsFleetIconPainter({
+    required this.amber,
+    required this.muted,
+    required this.green,
+  });
+
+  final Color amber;
+  final Color muted;
+  final Color green;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width / 24;
+    void tile(double x, double y, Color color) {
+      final r = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x * s, y * s, 7 * s, 7 * s),
+        Radius.circular(1.6 * s),
+      );
+      canvas.drawRRect(
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.65 * s
+          ..color = color,
+      );
+    }
+
+    tile(3.5, 3.5, amber);
+    tile(13.5, 3.5, muted);
+    tile(3.5, 13.5, muted);
+    tile(13.5, 13.5, green);
+  }
+
+  @override
+  bool shouldRepaint(covariant _HostsFleetIconPainter oldDelegate) {
+    return oldDelegate.amber != amber ||
+        oldDelegate.muted != muted ||
+        oldDelegate.green != green;
+  }
+}
+
+/// AI Assist sparkle — amber brand stroke.
+class HostsAssistIcon extends StatelessWidget {
+  const HostsAssistIcon({super.key});
+
+  static const double size = 18;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _HostsAssistIconPainter(color: c.amber)),
+    );
+  }
+}
+
+class _HostsAssistIconPainter extends CustomPainter {
+  _HostsAssistIconPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width / 24;
+    final path = Path()
+      ..moveTo(12 * s, 3 * s)
+      ..lineTo(14.1 * s, 8.4 * s)
+      ..lineTo(19.5 * s, 10.5 * s)
+      ..lineTo(14.1 * s, 12.6 * s)
+      ..lineTo(12 * s, 18 * s)
+      ..lineTo(9.9 * s, 12.6 * s)
+      ..lineTo(4.5 * s, 10.5 * s)
+      ..lineTo(9.9 * s, 8.4 * s)
+      ..close();
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.65 * s
+        ..strokeJoin = StrokeJoin.round
+        ..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _HostsAssistIconPainter oldDelegate) {
+    return oldDelegate.color != color;
+  }
+}
+
+/// Home-widget glyph — muted when off, amber when on.
+class HostsWidgetIcon extends StatelessWidget {
+  const HostsWidgetIcon({super.key, required this.on});
+
+  static const double size = 18;
+
+  final bool on;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _HostsWidgetIconPainter(color: on ? c.amber : c.dim),
+      ),
+    );
+  }
+}
+
+class _HostsWidgetIconPainter extends CustomPainter {
+  _HostsWidgetIconPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width / 24;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.65 * s
+      ..color = color;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(3.5 * s, 4.5 * s, 17 * s, 15 * s),
+        Radius.circular(2.4 * s),
+      ),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(3.5 * s, 9.5 * s),
+      Offset(20.5 * s, 9.5 * s),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _HostsWidgetIconPainter oldDelegate) {
+    return oldDelegate.color != color;
+  }
+}
+
 /// Pinned Hosts colophon: version and keys on one adjacent row. No app name.
 class HostsColophon extends StatelessWidget {
   const HostsColophon({

@@ -14,16 +14,23 @@ enum HostProbeOutcome {
 
 bool isConnectionFailureOutcome(HostProbeOutcome o) {
   return switch (o) {
+    HostProbeOutcome.refused || HostProbeOutcome.unreachable => true,
     HostProbeOutcome.timedOut ||
-    HostProbeOutcome.refused ||
-    HostProbeOutcome.unreachable =>
-      true,
     HostProbeOutcome.pending ||
     HostProbeOutcome.awaitingVerification ||
     HostProbeOutcome.awaitingAuth ||
     HostProbeOutcome.unchecked ||
     HostProbeOutcome.healthy =>
       false,
+  };
+}
+
+/// Whether Hosts inventory should flip the row to [HostAttention.unreachable].
+/// A timed-out fleet probe is not proof the host is down — SSH may still be up.
+bool shouldMarkHostUnreachable(HostProbeOutcome o) {
+  return switch (o) {
+    HostProbeOutcome.refused || HostProbeOutcome.unreachable => true,
+    _ => false,
   };
 }
 
@@ -34,7 +41,7 @@ String hostProbeStateLabel(HostProbeOutcome outcome) {
     HostProbeOutcome.awaitingVerification => 'awaiting host key',
     HostProbeOutcome.awaitingAuth => 'awaiting unlock',
     HostProbeOutcome.unchecked => 'not checked',
-    HostProbeOutcome.timedOut => 'unreachable',
+    HostProbeOutcome.timedOut => 'timed out',
     HostProbeOutcome.refused => 'unreachable',
     HostProbeOutcome.unreachable => 'unreachable',
     HostProbeOutcome.healthy => 'ok',

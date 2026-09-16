@@ -19,10 +19,10 @@ void main() {
     nprocCores: 4,
   );
 
-  test('FleetHealthProbe is read-only with 10s timeout', () {
+  test('FleetHealthProbe is read-only with 25s timeout', () {
     const p = FleetHealthProbe();
     expect(p.risk, RiskLevel.read);
-    expect(p.timeout, const Duration(seconds: 10));
+    expect(p.timeout, const Duration(seconds: 25));
   });
 
   test('tile command has no dual /proc/stat sleep', () {
@@ -33,12 +33,13 @@ void main() {
     expect(cmd, contains('---LOAD---'));
     expect(cmd, contains('---MEM---'));
     expect(cmd, contains('---DISK---'));
-    expect(cmd, contains('---PENDING---'));
+    expect(cmd, contains('---UPDATES---'));
     expect(cmd, contains('---SECURITY---'));
     expect(cmd, contains('---CONTAINERS---'));
     expect(cmd, contains('---REBOOT---'));
     expect(cmd, contains('---NPROC---'));
     expect(cmd, isNot(contains('sudo -n')));
+    expect(cmd, isNot(contains('grep -cve')));
   });
 
   test('undiscovered facts still probe failed systemd units', () {
@@ -88,10 +89,15 @@ Filesystem     Type 1024-blocks Used Available Capacity Mounted on
 1
 ---FAILED_NAMES---
 nginx.service
----PENDING---
-5
+---UPDATES---
+Inst libssl3 [1.0] (1.1 Debian-Security:12/stable-security [amd64])
+Inst openssl [1.0] (1.1 Debian-Security:12/stable-security [amd64])
+Inst curl [1.0] (1.1 Debian:12/stable [amd64])
+Inst tzdata [1.0] (1.1 Debian:12/stable [amd64])
+Inst bash [1.0] (1.1 Debian:12/stable [amd64])
 ---SECURITY---
-2
+Inst libssl3 [1.0] (1.1 Debian-Security:12/stable-security [amd64])
+Inst openssl [1.0] (1.1 Debian-Security:12/stable-security [amd64])
 ---CONTAINERS---
 exited	Exited (1) 3 hours ago	bad
 exited	Exited (0) 1 day ago	okjob
@@ -100,8 +106,11 @@ restarting	Restarting (1) 10 seconds ago	api
 ---REBOOT---
 1
 ''';
-    final health = const FleetHealthProbe(hostId: 'h1', alias: 'web')
-        .parse(stdout, '', 0);
+    final health = const FleetHealthProbe(
+      hostId: 'h1',
+      alias: 'web',
+      pkg: PackageManager.apt,
+    ).parse(stdout, '', 0);
     expect(health.reachable, isTrue);
     expect(health.load1, 2.0);
     expect(health.nprocCores, 4);
@@ -112,9 +121,10 @@ restarting	Restarting (1) 10 seconds ago	api
     expect(health.failedUnitCount, 1);
     expect(health.pendingUpdates, 5);
     expect(health.securityUpdates, 2);
+    expect(health.securityUpdates, lessThan(health.pendingUpdates));
     expect(health.containersDown, 2);
     expect(health.containersUnhealthy, 1);
     expect(health.rebootRequired, isTrue);
-    expect(health.uptime.inSeconds, 3661);
+    expect(health.uptime, const Duration(seconds: 3661));
   });
 }

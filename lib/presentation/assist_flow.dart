@@ -31,8 +31,8 @@ Future<LlmSettings> requireAssistSettings(WidgetRef ref) async {
   if (!settings.provider.enabled || !settings.isConfigured) {
     throw StateError(
       settings.provider.enabled
-          ? 'Assist provider is not configured. Open Assist and finish base URL / model${settings.provider == LlmProvider.openaiCompatible ? ' / API key' : ''}.'
-          : 'Configure Assist first (provider is None).',
+          ? 'AI Assist provider is not configured. Open AI Assist and finish base URL / model${settings.provider == LlmProvider.openaiCompatible ? ' / API key' : ''}.'
+          : 'Configure AI Assist first (provider is None).',
     );
   }
   return settings;

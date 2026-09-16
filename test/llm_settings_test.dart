@@ -80,7 +80,7 @@ void main() {
     });
 
     test('footer meta reflects active provider', () {
-      expect(llmAssistFooterMeta(const LlmSettings()), 'LLM · none');
+      expect(llmAssistFooterMeta(const LlmSettings()), 'set up');
       expect(
         llmAssistFooterMeta(
           const LlmSettings(
@@ -89,7 +89,7 @@ void main() {
             model: 'llama3.2',
           ),
         ),
-        'LLM · ollama',
+        'ollama · llama3.2',
       );
       expect(
         llmAssistFooterMeta(
@@ -100,7 +100,7 @@ void main() {
             apiKey: 'sk',
           ),
         ),
-        'LLM · openai',
+        'openai · gpt-4o-mini',
       );
       expect(
         llmAssistFooterMeta(
@@ -109,7 +109,7 @@ void main() {
             baseUrl: 'http://127.0.0.1:11434',
           ),
         ),
-        'LLM · not configured',
+        'set up',
       );
     });
   });

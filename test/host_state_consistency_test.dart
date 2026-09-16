@@ -59,7 +59,7 @@ void main() {
   });
 
   test('tileSummary never says down', () {
-    final h = FleetHostHealth(
+    final timedOut = FleetHostHealth(
       hostId: 'h',
       alias: 'x',
       reachable: false,
@@ -71,10 +71,29 @@ void main() {
       fromCache: true,
       outcome: HostProbeOutcome.timedOut,
     );
-    expect(h.tileSummary(now: DateTime.utc(2026, 9, 7, 0, 5)).toLowerCase(),
-        isNot(contains('down')));
-    expect(h.tileSummary(now: DateTime.utc(2026, 9, 7, 0, 5)),
-        contains('unreachable'));
-    expect(h.tileSummary(now: DateTime.utc(2026, 9, 7, 0, 5)), contains('cache'));
+    final timedOutSummary =
+        timedOut.tileSummary(now: DateTime.utc(2026, 9, 7, 0, 5));
+    expect(timedOutSummary.toLowerCase(), isNot(contains('down')));
+    // Soft timeout is not a hard unreachable claim.
+    expect(timedOutSummary, contains('timed out'));
+    expect(timedOutSummary.toLowerCase(), isNot(contains('unreachable')));
+
+    final refused = FleetHostHealth(
+      hostId: 'h',
+      alias: 'x',
+      reachable: false,
+      load1: 0,
+      diskRootPercent: 0,
+      failedUnitCount: 0,
+      pendingUpdates: 0,
+      fetchedAt: DateTime.utc(2026, 9, 7),
+      fromCache: true,
+      outcome: HostProbeOutcome.refused,
+    );
+    final refusedSummary =
+        refused.tileSummary(now: DateTime.utc(2026, 9, 7, 0, 5));
+    expect(refusedSummary.toLowerCase(), isNot(contains('down')));
+    expect(refusedSummary, contains('unreachable'));
+    expect(refusedSummary, contains('cache'));
   });
 }

@@ -31,10 +31,24 @@ class PackageCommands {
     };
   }
 
+  /// Fleet tile batch — never `--refresh`. Metadata refresh made Rocky hosts
+  /// exceed the fleet timeout and look unreachable while SSH stayed up.
+  static String listUpdatesForFleet(PackageManager pkg) {
+    return switch (pkg) {
+      PackageManager.dnf => 'dnf check-update',
+      _ => listUpdates(pkg),
+    };
+  }
+
   static String listSecurity(PackageManager pkg) {
     return switch (pkg) {
+      // Ubuntu/Debian do not ship /etc/apt/security.sources.list. Pointing
+      // Dir::Etc::SourceList there made apt ignore the override and emit the
+      // full upgrade set again, so fleet counted security == pending.
+      // Security is the Inst lines whose origin/pocket mentions security.
       PackageManager.apt =>
-        'apt-get -s upgrade -o Dir::Etc::SourceList=/etc/apt/security.sources.list',
+        "apt-get -s upgrade 2>/dev/null | grep '^Inst ' | "
+            "grep -iE 'security|Debian-Security' || true",
       PackageManager.dnf => 'dnf updateinfo list security',
       PackageManager.yum => 'yum updateinfo list security',
       PackageManager.zypper => 'zypper lp --category security',

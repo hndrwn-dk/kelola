@@ -134,18 +134,16 @@ class LlmSettingsBundle {
 }
 
 String llmAssistFooterMeta(LlmSettings settings) {
-  if (!settings.provider.enabled) {
-    return 'LLM · none';
+  if (!settings.provider.enabled || !settings.isConfigured) {
+    return 'set up';
   }
-  if (!settings.isConfigured) {
-    return 'LLM · not configured';
-  }
+  final model = (settings.model ?? '').trim();
   switch (settings.provider) {
     case LlmProvider.ollama:
-      return 'LLM · ollama';
+      return model.isEmpty ? 'ollama' : 'ollama · $model';
     case LlmProvider.openaiCompatible:
-      return 'LLM · openai';
+      return model.isEmpty ? 'openai' : 'openai · $model';
     case LlmProvider.none:
-      return 'LLM · none';
+      return 'set up';
   }
 }

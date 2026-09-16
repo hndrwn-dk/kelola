@@ -883,7 +883,7 @@ class HostRepository {
             hostId: health.hostId,
             reachable: health.reachable,
             load1: health.load1,
-            diskRootPercent: health.diskRootPercent,
+            diskRootPercent: health.diskRootPercent ?? -1,
             failedUnitCount: health.failedUnitCount,
             pendingUpdates: health.pendingUpdates,
             fetchedAt: health.fetchedAt.toUtc(),
@@ -893,7 +893,7 @@ class HostRepository {
             securityUpdates: Value(health.securityUpdates),
             containersDown: Value(health.containersDown),
             containersUnhealthy: Value(health.containersUnhealthy),
-            uptimeSeconds: Value(health.uptime.inSeconds),
+            uptimeSeconds: Value(health.uptime?.inSeconds ?? -1),
             rebootRequired: Value(health.rebootRequired),
           ),
         );
@@ -912,14 +912,17 @@ class HostRepository {
           load1: r.load1,
           nprocCores: r.nprocCores,
           memPercent: r.memPercent,
-          diskRootPercent: r.diskRootPercent,
+          diskRootPercent:
+              r.diskRootPercent < 0 ? null : r.diskRootPercent,
           highDiskMounts: _decodeStringList(r.highDiskJson),
           failedUnitCount: r.failedUnitCount,
           pendingUpdates: r.pendingUpdates,
           securityUpdates: r.securityUpdates,
           containersDown: r.containersDown,
           containersUnhealthy: r.containersUnhealthy,
-          uptime: Duration(seconds: r.uptimeSeconds),
+          uptime: r.uptimeSeconds < 0
+              ? null
+              : Duration(seconds: r.uptimeSeconds),
           rebootRequired: r.rebootRequired,
           fetchedAt: r.fetchedAt,
           fromCache: true,
