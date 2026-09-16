@@ -53,35 +53,53 @@ String firstName(dynamic raw) {
   return raw?.toString().replaceFirst(RegExp(r'^/'), '') ?? '';
 }
 
-/// Host mappings as `32787→32400`, or `80` when host equals container.
+/// Host mappings, including the bind address when the engine reported one.
 String formatPublishedPorts(dynamic raw) {
+  return parsePublishedPorts(raw).map((p) => p.label).join(', ');
+}
+
+List<PublishedPort> parsePublishedPorts(dynamic raw) {
   if (raw == null) {
-    return '';
+    return const [];
   }
+  final seen = <String>{};
+  final out = <PublishedPort>[];
+  void add(PublishedPort port) {
+    if (port.label.isEmpty || !seen.add(port.label)) {
+      return;
+    }
+    out.add(port);
+  }
+
   if (raw is List) {
-    final bits = <String>[];
-    final seen = <String>{};
     for (final item in raw) {
       if (item is Map) {
-        final host = _asInt(item['host_port'] ?? item['HostPort']);
-        final cont = _asInt(
-          item['container_port'] ?? item['ContainerPort'] ?? item['PrivatePort'],
-        );
-        final label = _portPair(host, cont);
-        if (label.isNotEmpty && seen.add(label)) {
-          bits.add(label);
-        }
+        add(_fromPortMap(item));
       } else {
-        for (final label in _fromDockerPortString(item.toString())) {
-          if (seen.add(label)) {
-            bits.add(label);
-          }
+        for (final port in _fromDockerPortString(item.toString())) {
+          add(port);
         }
       }
     }
-    return bits.join(', ');
+    return out;
   }
-  return _fromDockerPortString(raw.toString()).join(', ');
+  for (final port in _fromDockerPortString(raw.toString())) {
+    add(port);
+  }
+  return out;
+}
+
+PublishedPort _fromPortMap(Map<dynamic, dynamic> item) {
+  final host = _asInt(
+    item['host_port'] ?? item['HostPort'] ?? item['PublicPort'],
+  );
+  final cont = _asInt(
+    item['container_port'] ?? item['ContainerPort'] ?? item['PrivatePort'],
+  );
+  final bind = (item['host_ip'] ?? item['HostIp'] ?? item['IP'] ?? '')
+      .toString()
+      .trim();
+  return PublishedPort(bind: bind, hostPort: host, containerPort: cont);
 }
 
 int? _asInt(dynamic v) {
@@ -91,38 +109,27 @@ int? _asInt(dynamic v) {
   return int.tryParse('${v ?? ''}');
 }
 
-String _portPair(int? host, int? cont) {
-  if (host == null && cont == null) {
-    return '';
-  }
-  if (host == null) {
-    return '$cont';
-  }
-  if (cont == null || host == cont) {
-    return '$host';
-  }
-  return '$host\u2192$cont';
-}
-
-List<String> _fromDockerPortString(String raw) {
-  final seen = <String>{};
-  final out = <String>[];
-  final mapped = RegExp(r'(?:[\d.]+|\[?[0-9a-fA-F:]+\]?)?:(\d+)->(\d+)');
+List<PublishedPort> _fromDockerPortString(String raw) {
+  final mapped = RegExp(
+    r'(?:\[([0-9a-fA-F:]+)\]|(\d+\.\d+\.\d+\.\d+)|([0-9a-fA-F:]*)):(\d+)->(\d+)',
+  );
+  final out = <PublishedPort>[];
   for (final m in mapped.allMatches(raw)) {
-    final label = _portPair(int.parse(m.group(1)!), int.parse(m.group(2)!));
-    if (label.isNotEmpty && seen.add(label)) {
-      out.add(label);
-    }
+    final bind = (m.group(1) ?? m.group(2) ?? m.group(3) ?? '').trim();
+    out.add(
+      PublishedPort(
+        bind: bind,
+        hostPort: int.parse(m.group(4)!),
+        containerPort: int.parse(m.group(5)!),
+      ),
+    );
   }
   if (out.isNotEmpty) {
     return out;
   }
   final lone = RegExp(r'(\d+)/');
   for (final m in lone.allMatches(raw)) {
-    final label = m.group(1)!;
-    if (seen.add(label)) {
-      out.add(label);
-    }
+    out.add(PublishedPort(containerPort: int.parse(m.group(1)!)));
   }
   return out;
 }
@@ -133,6 +140,7 @@ ContainerRow rowFromPsMap(Map<String, dynamic> map, String engine) {
   final status = (map['Status'] ?? '').toString();
   final labels = labelsFromJson(map['Labels'] ?? map['labels']);
   final portsRaw = map['Ports'] ?? map['ports'] ?? '';
+  final bindings = parsePublishedPorts(portsRaw);
   return ContainerRow(
     id: id,
     names: names,
@@ -140,7 +148,8 @@ ContainerRow rowFromPsMap(Map<String, dynamic> map, String engine) {
     state: (map['State'] ?? '').toString(),
     status: status,
     ports: portsRaw is List ? portsRaw.join(', ') : portsRaw.toString(),
-    publishedPorts: formatPublishedPorts(portsRaw),
+    publishedPorts: bindings.map((p) => p.label).join(', '),
+    portBindings: bindings,
     engine: engine,
     composeProject: composeProjectFromLabels(labels),
     exitCode: exitCodeFrom(status, map['ExitCode'] ?? map['ExitCodeRaw']),

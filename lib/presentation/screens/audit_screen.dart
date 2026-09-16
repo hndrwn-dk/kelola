@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/audit/audit_event.dart';
 import 'package:kelola/domain/audit/audit_view.dart';
@@ -20,6 +21,7 @@ class AuditScreen extends ConsumerStatefulWidget {
 class _AuditScreenState extends ConsumerState<AuditScreen> {
   List<AuditEvent> _rows = const [];
   bool _showAll = false;
+  bool _loading = true;
   String? _hostId;
 
   @override
@@ -30,11 +32,17 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
   }
 
   Future<void> _load() async {
+    if (mounted) {
+      setState(() => _loading = true);
+    }
     final rows = await ref.read(hostRepositoryProvider).listAudit(
           hostId: _hostId,
         );
     if (mounted) {
-      setState(() => _rows = rows);
+      setState(() {
+        _rows = rows;
+        _loading = false;
+      });
     }
   }
 
@@ -143,13 +151,20 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
               ),
               const SizedBox(height: 14),
             ],
-            if (_rows.isEmpty)
-              _Empty(
+            if (_loading && _rows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 48),
+                child: Center(
+                  child: CircularProgressIndicator(color: c.amber),
+                ),
+              )
+            else if (_rows.isEmpty)
+              const KelolaEmpty(
                 title: 'Quiet',
                 body: 'No commands recorded yet. Actions over SSH appear here.',
               )
             else if (visible.isEmpty)
-              const _Empty(
+              const KelolaEmpty(
                 title: 'No changes',
                 body:
                     'Read probes are hidden. Show all activity to see polls and inspections.',
@@ -247,36 +262,6 @@ class _AuditRow extends StatelessWidget {
       pillStatus: health,
       endValue: _clock(event.timestampUtc),
       onTap: onTap,
-    );
-  }
-}
-
-class _Empty extends StatelessWidget {
-  const _Empty({required this.title, required this.body});
-
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.kc;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 28, 14, 8),
-      child: Column(
-        children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: KelolaType.display(color: c.text, size: 18),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            body,
-            textAlign: TextAlign.center,
-            style: KelolaType.body(color: c.muted, size: 14),
-          ),
-        ],
-      ),
     );
   }
 }

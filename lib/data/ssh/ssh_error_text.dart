@@ -25,7 +25,7 @@ String describeSshError(Object error) {
     return 'Login failed. Check the username and that this phone\'s public key is in ~/.ssh/authorized_keys.';
   }
   if (error is SSHDisconnectError) {
-    return 'Server closed the handshake: ${error.message}';
+    return 'Server closed the connection: ${error.message}';
   }
   if (error is SSHHostkeyError) {
     return 'The host key was rejected. Confirm the fingerprint before continuing.';

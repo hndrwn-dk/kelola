@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/presentation/screens/enrollment_screen.dart';
-import 'package:kelola/presentation/theme/kelola_theme.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
 
@@ -19,6 +20,10 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
   final _user = TextEditingController();
   final _config = TextEditingController();
   bool _importing = false;
+  String? _aliasError;
+  String? _addressError;
+  String? _userError;
+  String? _formError;
 
   @override
   void dispose() {
@@ -35,19 +40,29 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
     final address = _address.text.trim();
     final user = _user.text.trim();
     final port = int.tryParse(_port.text.trim()) ?? 22;
-    if (alias.isEmpty || address.isEmpty || user.isEmpty) {
+    final aliasError = alias.isEmpty ? 'Name is required.' : null;
+    final addressError = address.isEmpty ? 'Address is required.' : null;
+    String? userError;
+    if (user.isEmpty) {
+      userError = 'User is required.';
+    } else if (user == 'root') {
+      userError = 'Kelola does not log in as root. Use a sudoer.';
+    }
+    if (aliasError != null || addressError != null || userError != null) {
+      setState(() {
+        _aliasError = aliasError;
+        _addressError = addressError;
+        _userError = userError;
+        _formError = null;
+      });
       return;
     }
-    if (user == 'root') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Kelola does not log in as root. Use a sudoer.',
-          ),
-        ),
-      );
-      return;
-    }
+    setState(() {
+      _aliasError = null;
+      _addressError = null;
+      _userError = null;
+      _formError = null;
+    });
     final host = await ref.read(hostRepositoryProvider).insert(
           alias: alias,
           address: address,
@@ -77,10 +92,20 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Imported $n hosts. IdentityFile ignored.')),
-      );
+      if (n == 0) {
+        setState(() {
+          _formError = 'No hosts found in that config.';
+        });
+        return;
+      }
       Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _formError = 'Could not import that config.';
+      });
     } finally {
       if (mounted) {
         setState(() => _importing = false);
@@ -90,17 +115,22 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<KelolaColors>()!;
+    final c = context.kc;
     return KelolaPage(
       title: 'Add host',
       kicker: 'SSH ONLY · NO AGENT',
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_formError != null) ...[
+            KelolaError(message: _formError!),
+            const SizedBox(height: 14),
+          ],
           KelolaField(
             label: 'Name',
             controller: _alias,
             hint: 'nas-01',
+            error: _aliasError,
           ),
           const SizedBox(height: 14),
           KelolaField(
@@ -108,6 +138,7 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
             controller: _address,
             hint: '192.168.1.24',
             keyboardType: TextInputType.url,
+            error: _addressError,
           ),
           const SizedBox(height: 14),
           Row(
@@ -126,6 +157,7 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
                   label: 'User',
                   controller: _user,
                   hint: 'not root',
+                  error: _userError,
                 ),
               ),
             ],
@@ -140,7 +172,7 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
           const SizedBox(height: 6),
           Text(
             'Paste Host blocks. IdentityFile is ignored — this phone keeps one hardware key.',
-            style: TextStyle(color: colors.dim, fontSize: 12, height: 1.45),
+            style: KelolaType.body(color: c.dim, size: 12),
           ),
           const SizedBox(height: 10),
           KelolaField(

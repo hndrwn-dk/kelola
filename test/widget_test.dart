@@ -26,7 +26,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(HostsScreen), findsOneWidget);
-    expect(find.textContaining('Add your first server'), findsOneWidget);
+    expect(find.textContaining('Add your first host'), findsOneWidget);
     await _flushDriftStreams(tester);
   });
 
@@ -65,7 +65,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('nas-01'), findsNothing);
-    expect(find.textContaining('Add your first server'), findsOneWidget);
+    expect(find.textContaining('Add your first host'), findsOneWidget);
     await _flushDriftStreams(tester);
   });
 }

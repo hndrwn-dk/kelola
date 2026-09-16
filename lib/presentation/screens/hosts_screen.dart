@@ -31,6 +31,11 @@ import 'package:kelola/presentation/widgets/host_list_actions.dart';
 import 'package:kelola/presentation/widgets/incident_sheet.dart';
 import 'package:kelola/providers.dart';
 
+/// User-facing copy for a failed host list. Never the exception text.
+String hostInventoryErrorCopy(Object error) {
+  return 'Could not load hosts.';
+}
+
 class HostsScreen extends ConsumerStatefulWidget {
   const HostsScreen({super.key});
 
@@ -241,7 +246,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
-                                        "Add your first server. You'll need SSH access and a minute.",
+                                        "Add your first host. You'll need SSH access and a minute.",
                                         textAlign: TextAlign.center,
                                         style: KelolaType.body(
                                           color: c.muted,
@@ -302,9 +307,9 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                     child: CircularProgressIndicator(color: c.amber),
                   ),
                   error: (e, _) => Center(
-                    child: Text(
-                      '$e',
-                      style: KelolaType.body(color: c.red, size: 13),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: KelolaError(message: hostInventoryErrorCopy(e)),
                     ),
                   ),
                 ),

@@ -23,6 +23,10 @@ import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty
 import 'package:kelola/providers.dart';
 import 'package:path_provider/path_provider.dart';
 
+/// Shown only after Upload when kelola-transfers has no files. Not an error.
+const filesEmptyUploadHint =
+    'Download a file first. Uploads read from kelola-transfers on this phone.';
+
 class _Transfer {
   _Transfer({required this.label});
 
@@ -49,10 +53,19 @@ class _Transfer {
 }
 
 class FilesScreen extends ConsumerStatefulWidget {
-  const FilesScreen({super.key, required this.hostId, this.initialPath = '.'});
+  const FilesScreen({
+    super.key,
+    required this.hostId,
+    this.initialPath = '.',
+    this.transferDocumentsDir,
+  });
 
   final String hostId;
   final String initialPath;
+
+  /// When set, uploads/downloads use this directory instead of the app
+  /// documents folder. Tests inject an empty temp dir here.
+  final Directory? transferDocumentsDir;
 
   @override
   ConsumerState<FilesScreen> createState() => _FilesScreenState();
@@ -64,6 +77,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   String _path = '.';
   List<SftpEntry> _entries = const [];
   String? _error;
+  String? _uploadHint;
   bool _loading = true;
   bool _showHidden = false;
   _Transfer? _transfer;
@@ -79,6 +93,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _uploadHint = null;
     });
     try {
       final host = await ref.read(hostRepositoryProvider).get(widget.hostId);
@@ -142,8 +157,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   }
 
   Future<Directory> _transferDir() async {
-    final docs = await getApplicationDocumentsDirectory();
-    final dir = Directory('${docs.path}/kelola-transfers');
+    final root = widget.transferDocumentsDir ??
+        await getApplicationDocumentsDirectory();
+    final dir = Directory('${root.path}/kelola-transfers');
     await dir.create(recursive: true);
     return dir;
   }
@@ -248,6 +264,14 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
               child: KelolaError(message: _error!, sudoUser: _host?.username),
+            ),
+          if (_uploadHint != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+              child: Text(
+                _uploadHint!,
+                style: KelolaType.body(color: c.muted, size: 13),
+              ),
             ),
           Expanded(
             child: RefreshIndicator(
@@ -609,11 +633,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     }
     if (files.isEmpty) {
       setState(() {
-        _error =
-            'Nothing to upload. Download a file first; Kelola reads from kelola-transfers.';
+        _error = null;
+        _uploadHint = filesEmptyUploadHint;
       });
       return;
     }
+    setState(() => _uploadHint = null);
     final chosen = await showModalBottomSheet<File>(
       context: context,
       backgroundColor: Colors.transparent,

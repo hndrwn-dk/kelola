@@ -6,6 +6,7 @@ import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/presentation/screens/audit_screen.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
 
 void main() {
@@ -137,6 +138,25 @@ void main() {
     expect(find.text('Polled dashboard'), findsOneWidget);
     expect(find.text('Restarted nginx.service'), findsOneWidget);
     expect(find.textContaining('failed'), findsWidgets);
+  });
+
+  testWidgets('audit shows a spinner, then KelolaEmpty, never a local title',
+      (tester) async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(db)],
+        child: const KelolaApp(home: AuditScreen()),
+      ),
+    );
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(KelolaEmpty), findsNothing);
+
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(KelolaEmpty), findsOneWidget);
+    expect(find.text('Quiet'), findsOneWidget);
   });
 
   testWidgets('empty default view when only successful reads exist',

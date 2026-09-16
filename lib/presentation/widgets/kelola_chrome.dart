@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kelola/design/kelola_components.dart' show KelolaBackButton;
 import 'package:kelola/presentation/theme/kelola_fonts.dart';
+import 'package:kelola/design/kelola_theme.dart' show KelolaType;
 import 'package:kelola/presentation/theme/kelola_theme.dart';
 
 class KelolaBar extends StatelessWidget implements PreferredSizeWidget {
@@ -532,6 +533,7 @@ class KelolaField extends StatelessWidget {
     this.onChanged,
     this.onSubmitted,
     this.autofocus = false,
+    this.error,
   });
 
   final String label;
@@ -543,6 +545,7 @@ class KelolaField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final bool autofocus;
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
@@ -574,6 +577,13 @@ class KelolaField extends StatelessWidget {
             ),
           ),
         ),
+        if (error != null && error!.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            error!,
+            style: KelolaType.body(color: colors.red, size: 13),
+          ),
+        ],
       ],
     );
   }

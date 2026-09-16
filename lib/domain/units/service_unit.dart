@@ -68,6 +68,14 @@ class UnitDetail {
       properties['ActiveEnterTimestampUSec'] ?? '';
 }
 
+/// False when show/logs/deps came back empty. The detail screen treats
+/// that as empty and keeps actions hidden.
+bool unitInspectArrived(UnitDetail detail) {
+  return detail.properties.isNotEmpty ||
+      detail.logs.trim().isNotEmpty ||
+      detail.dependencies.trim().isNotEmpty;
+}
+
 class UnitActionResult {
   const UnitActionResult({
     required this.verb,

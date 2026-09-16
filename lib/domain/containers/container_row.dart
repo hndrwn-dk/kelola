@@ -7,6 +7,7 @@ class ContainerRow {
     required this.status,
     this.ports = '',
     this.publishedPorts = '',
+    this.portBindings = const [],
     this.engine = 'docker',
     this.namespace = '',
     this.composeProject = '',
@@ -21,6 +22,7 @@ class ContainerRow {
   final String status;
   final String ports;
   final String publishedPorts;
+  final List<PublishedPort> portBindings;
   final String engine;
   final String namespace;
   final String composeProject;
@@ -63,4 +65,52 @@ class ContainerInventory {
   /// System socket exists, but this SSH user cannot read it. Same shape
   /// as the docker group: membership, then a new session.
   final bool podmanSocketDenied;
+}
+
+/// One published mapping. [bind] is the address the host port is bound to,
+/// kept as reported — never rewritten to `0.0.0.0`.
+class PublishedPort {
+  const PublishedPort({
+    this.bind = '',
+    this.hostPort,
+    this.containerPort,
+  });
+
+  final String bind;
+  final int? hostPort;
+  final int? containerPort;
+
+  bool get loopback {
+    final b = bind.toLowerCase();
+    return b == '::1' || b == 'localhost' || b.startsWith('127.');
+  }
+
+  bool get allInterfaces {
+    return bind == '0.0.0.0' || bind == '::' || bind == '*';
+  }
+
+  String get label {
+    final pair = publishedPortPair(hostPort, containerPort);
+    if (bind.isEmpty) {
+      return pair;
+    }
+    final host = bind.contains(':') ? '[$bind]' : bind;
+    if (pair.isEmpty) {
+      return host;
+    }
+    return '$host:$pair';
+  }
+}
+
+String publishedPortPair(int? host, int? cont) {
+  if (host == null && cont == null) {
+    return '';
+  }
+  if (host == null) {
+    return '$cont';
+  }
+  if (cont == null || host == cont) {
+    return '$host';
+  }
+  return '$host\u2192$cont';
 }

@@ -137,7 +137,7 @@ void main() {
 
   test('meta is image and ports; restarting uses server status, no invented count',
       () {
-    expect(containerListMeta(plex), 'linuxserver/plex \u00b7 32787\u219232400');
+    expect(containerListMeta(plex), 'linuxserver/plex');
     expect(containerListMeta(transmission), contains('restarting'));
     expect(containerListMeta(transmission), isNot(contains('4 times in 5m')));
     expect(containerListMeta(watchtower), 'Exited (0) 3 days ago');

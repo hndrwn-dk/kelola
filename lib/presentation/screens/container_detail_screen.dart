@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/containers/container_detail.dart';
 import 'package:kelola/domain/containers/container_lockout.dart';
@@ -67,7 +68,12 @@ class _ContainerDetailScreenState extends ConsumerState<ContainerDetailScreen> {
         probe: ContainerInspectProbe(widget.row),
         facts: widget.facts,
       );
-      setState(() => _detail = detail);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _detail = containerInspectArrived(detail) ? detail : null;
+      });
     } catch (e) {
       setState(() => _error = describeSshError(e));
     } finally {
@@ -143,6 +149,19 @@ class _ContainerDetailScreenState extends ConsumerState<ContainerDetailScreen> {
               child: ListView(
                 padding: kelolaScrollPadding(context),
                 children: [
+                  if (_error != null && detail == null)
+                    KelolaError(
+                      message: _error!,
+                      sudoUser: widget.host.username,
+                    )
+                  else if (detail == null && _busy)
+                    const SizedBox(height: 48)
+                  else if (detail == null)
+                    const KelolaEmpty(
+                      title: 'No inspect data',
+                      body: 'Pull to refresh. Actions stay hidden until this container can be read.',
+                    )
+                  else ...[
                   if (_error != null) ...[
                     KelolaError(
                       message: _error!,
@@ -150,24 +169,6 @@ class _ContainerDetailScreenState extends ConsumerState<ContainerDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  const SectionSlab('Actions'),
-                  const SizedBox(height: 6),
-                  for (final verb in _actionOrder)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: ServiceRow(
-                        risk: containerActionRisk(
-                          verb,
-                          row,
-                          sshPort: widget.host.port,
-                        ),
-                        name:
-                            '${verb.name[0].toUpperCase()}${verb.name.substring(1)}',
-                        meta: _actionMeta(verb),
-                        onTap: _busy ? null : () => _act(verb),
-                      ),
-                    ),
-                  if (detail != null) ...[
                     if (detail.env.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       const SectionSlab('Env'),
@@ -233,6 +234,24 @@ class _ContainerDetailScreenState extends ConsumerState<ContainerDetailScreen> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    const SectionSlab('Actions'),
+                    const SizedBox(height: 6),
+                    for (final verb in _actionOrder)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: ServiceRow(
+                          risk: containerActionRisk(
+                            verb,
+                            row,
+                            sshPort: widget.host.port,
+                          ),
+                          name:
+                              '${verb.name[0].toUpperCase()}${verb.name.substring(1)}',
+                          meta: _actionMeta(verb),
+                          onTap: _busy ? null : () => _act(verb),
+                        ),
+                      ),
                   ],
                 ],
               ),

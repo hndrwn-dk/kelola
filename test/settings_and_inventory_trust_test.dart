@@ -107,10 +107,10 @@ void main() {
     await pump(_FakeEntitlement(unlocked: false, label: 'ext'));
     expect(find.text('Free'), findsOneWidget);
     expect(find.text('Paid'), findsNothing);
-    expect(find.text('Language'), findsOneWidget);
-    expect(find.text('Theme'), findsOneWidget);
+    expect(find.text('Language'), findsNothing);
+    expect(find.text('Theme'), findsNothing);
     expect(find.byType(HostsChromeAccent), findsOneWidget);
-    expect(find.byType(HostGroupTray), findsNWidgets(2));
+    expect(find.byType(HostGroupTray), findsOneWidget);
     expect(find.text('Source'), findsNothing);
     expect(find.text('License'), findsNothing);
     expect(find.text('About'), findsNothing);

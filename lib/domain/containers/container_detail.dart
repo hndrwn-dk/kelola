@@ -19,3 +19,16 @@ class ContainerDetail {
   final String memUsage;
   final String logs;
 }
+
+/// False when inspect returned no payload. The detail screen treats that
+/// as empty and keeps actions hidden.
+bool containerInspectArrived(ContainerDetail detail) {
+  return detail.name.isNotEmpty ||
+      detail.env.isNotEmpty ||
+      detail.mounts.isNotEmpty ||
+      detail.networks.isNotEmpty ||
+      detail.restartPolicy.isNotEmpty ||
+      detail.cpuPerc.isNotEmpty ||
+      detail.memUsage.isNotEmpty ||
+      detail.logs.trim().isNotEmpty;
+}

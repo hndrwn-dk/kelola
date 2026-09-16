@@ -103,6 +103,24 @@ void main() {
     expect(stored.map((s) => s.id), isNot(contains('starter-listen')));
   });
 
+  testWidgets('Restore puts starters back and says so when nothing is missing', (
+    tester,
+  ) async {
+    await hosts.listSnippets();
+    await hosts.deleteSnippet('starter-listen');
+    await pump(tester);
+    expect(find.text('listen-on-port'), findsNothing);
+
+    await tester.tap(find.text('Restore starter snippets'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Restored'), findsOneWidget);
+    expect(find.text('listen-on-port'), findsOneWidget);
+
+    await tester.tap(find.text('Restore starter snippets'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('already in the library'), findsOneWidget);
+  });
+
   test('deleted starters stay gone after a fresh list, including a cleared library', () async {
     await hosts.listSnippets();
     await hosts.deleteSnippet('starter-df');

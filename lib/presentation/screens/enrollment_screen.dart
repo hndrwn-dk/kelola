@@ -125,7 +125,7 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
       context,
       title: 'Replace this phone\'s key?',
       body:
-          'Kelola keeps one hardware key per phone and reuses it for every host. Regenerating makes the current line invalid; you must update authorized_keys on every server.',
+          'Kelola keeps one hardware key per phone and reuses it for every host. Regenerating makes the current line invalid; you must update authorized_keys on every host.',
       confirmLabel: 'Replace key',
     );
     if (confirmed != true) {
@@ -226,8 +226,9 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'RHEL-family hosts may need restorecon -R ~/.ssh if '
-              '~/.ssh was created outside Kelola\'s bootstrap.',
+              'If the key is installed but login still fails, this host may '
+              'need its SSH directory labels restored from a console. '
+              'Then test the connection again.',
               style: KelolaType.body(color: c.dim, size: 12),
             ),
           ],
@@ -239,7 +240,7 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          FilledButton(
+          OutlinedButton(
             onPressed: _busy ? null : _test,
             child: Text(_busy ? 'Testing…' : 'Test connection'),
           ),
