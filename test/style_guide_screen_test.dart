@@ -51,14 +51,17 @@ void main() {
     expect(find.byType(HostGroupTray), findsWidgets);
     expect(find.byType(CollapsedHostGroup), findsOneWidget);
     expect(find.byType(HostsColophon), findsOneWidget);
+    expect(find.byType(HostsUtilityRail), findsOneWidget);
     expect(find.byType(ProLockedCard), findsOneWidget);
     expect(find.text('READ-ONLY'), findsOneWidget);
 
     expect(find.text('sshd.service'), findsOneWidget);
     expect(find.text('nginx.service'), findsOneWidget);
     expect(find.text('Stop sshd.service?'), findsOneWidget);
-    expect(find.text('LOAD 1M'), findsOneWidget);
+    expect(find.text('CPU'), findsWidgets);
     expect(find.text('MEMORY'), findsOneWidget);
+    expect(find.text('4 cores'), findsOneWidget);
+    expect(find.text('2.1 / 33.3 GiB'), findsOneWidget);
 
     await tester.runAsync(() async {
       final boundary =

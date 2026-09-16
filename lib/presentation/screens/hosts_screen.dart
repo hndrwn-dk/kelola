@@ -288,6 +288,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                                 ),
                               ),
                             ),
+                            ..._utilityTrail(plan),
                           ],
                         ),
                       );
@@ -415,7 +416,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            padding: kelolaScrollPadding(context, top: 12, left: 16, right: 16),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 if (auditInsightKind(_audit) != AuditInsightKind.empty) ...[

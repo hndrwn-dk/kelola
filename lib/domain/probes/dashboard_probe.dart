@@ -37,6 +37,8 @@ echo "---MEM---"
 cat /proc/meminfo
 echo "---DISK---"
 df -PT
+echo "---NPROC---"
+nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0
 $failed
 ''';
   }

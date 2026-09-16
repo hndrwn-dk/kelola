@@ -179,46 +179,46 @@ class StyleGuideScreen extends StatelessWidget {
             children: [
               Expanded(
                 child: StatCard(
-                  label: 'Load 1m',
-                  value: '0.84',
-                  meterFraction: 0.21,
+                  label: 'CPU',
+                  value: '8',
+                  unit: '%',
+                  detail: '4 cores',
+                  meterFraction: 0.08,
                   status: HealthStatus.healthy,
                 ),
               ),
-              SizedBox(width: 8),
+              SizedBox(width: 6),
               Expanded(
                 child: StatCard(
                   label: 'Memory',
-                  value: '61',
+                  value: '7',
                   unit: '%',
-                  meterFraction: 0.61,
+                  detail: '2.1 / 33.3 GiB',
+                  meterFraction: 0.07,
                   status: HealthStatus.healthy,
+                ),
+              ),
+              SizedBox(width: 6),
+              Expanded(
+                child: StatCard(
+                  label: 'Disk /',
+                  value: '24',
+                  unit: '%',
+                  detail: '4.0 / 16.9 GiB',
+                  meterFraction: 0.24,
+                  status: HealthStatus.warning,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          const Row(
-            children: [
-              Expanded(
-                child: StatCard(
-                  label: 'Disk /',
-                  value: '78',
-                  unit: '%',
-                  meterFraction: 0.78,
-                  status: HealthStatus.warning,
-                ),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: StatCard(
-                  label: 'Failed',
-                  value: '2',
-                  meterFraction: 1,
-                  status: HealthStatus.failed,
-                ),
-              ),
-            ],
+          const DashboardLoadCard(load1: 0.02, load5: 0.15, load15: 0.40),
+          const SizedBox(height: 8),
+          const StatCard(
+            label: 'Failed',
+            value: '2',
+            meterFraction: 1,
+            status: HealthStatus.failed,
           ),
           const SizedBox(height: 18),
           Text(
@@ -476,6 +476,20 @@ class StyleGuideScreen extends StatelessWidget {
             body: 'Tunnels open a local SSH port forward so you can reach '
                 'admin UIs on this host. This build keeps tunnels locked.',
             onUnlock: () async {},
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'HOSTSUTILITYRAIL',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          HostsUtilityRail(
+            fleetMeta: '2 hosts',
+            assistMeta: 'set up',
+            widgetMeta: 'off',
+            onFleet: () {},
+            onAssist: () {},
+            onWidget: () {},
           ),
           const SizedBox(height: 18),
           Text(

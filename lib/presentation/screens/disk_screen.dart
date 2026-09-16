@@ -2,16 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart'
-    show KelolaError, KelolaHostAppBar, ServiceRow, kelolaScrollPadding;
+    hide RiskBand;
+import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/disk/disk_snapshot.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/metrics/rate_sample.dart';
 import 'package:kelola/domain/probes/disk_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/domain/probes/rate_probes.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/theme/kelola_fonts.dart';
-import 'package:kelola/presentation/theme/kelola_theme.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/presentation/widgets/risk_band.dart';
 import 'package:kelola/providers.dart';
@@ -32,8 +34,11 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
   List<DuEntry>? _du;
   String? _duPath;
   String? _error;
+  String? _rateError;
   bool _loading = true;
+  bool _measuring = false;
   bool _showEphemeral = false;
+  List<DiskIoRate> _rates = const [];
 
   @override
   void initState() {
@@ -56,6 +61,58 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
       );
     }
     _facts = facts;
+  }
+
+  Future<void> _sampleRates(Host host) async {
+    setState(() {
+      _measuring = true;
+      _rateError = null;
+      _rates = const [];
+    });
+    try {
+      final first = await runHostProbe(
+        ref: ref,
+        context: context,
+        host: host,
+        probe: const DiskstatsProbe(),
+        facts: _facts,
+      );
+      if (!mounted) {
+        return;
+      }
+      final sw = Stopwatch()..start();
+      await Future<void>.delayed(kRateSampleInterval);
+      if (!mounted) {
+        return;
+      }
+      final second = await runHostProbe(
+        ref: ref,
+        context: context,
+        host: host,
+        probe: const DiskstatsProbe(),
+        facts: _facts,
+      );
+      sw.stop();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _rates = DiskIoRates.between(first, second, sw.elapsed);
+        _rateError = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _rates = const [];
+          _rateError =
+              'Could not finish disk rate sample. ${describeSshError(e)}';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _measuring = false);
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -84,6 +141,7 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
         _host = host;
         _mounts = mounts;
       });
+      await _sampleRates(host);
     } catch (e) {
       setState(() => _error = describeSshError(e));
     } finally {
@@ -132,7 +190,7 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
         title: 'Disk',
         contextLine: mounts == 0 ? null : '$mounts filesystems',
       ),
-      busy: _loading,
+      busy: _loading || _measuring,
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -148,6 +206,7 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
                 message: _error!,
                 sudoUser: _host?.username,
               ),
+            _rateSection(colors),
             if (!_loading && _mounts.isEmpty && _error == null)
               const KelolaEmpty(body: 'No mounts reported by df.'),
             ..._diskTiles(colors),
@@ -166,6 +225,56 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _rateSection(KelolaColors colors) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'DISK ACTIVITY',
+            style: KelolaType.mono(
+              color: colors.dim,
+              size: 8.5,
+              letterSpacing: 0.9,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_measuring)
+            Text(
+              'Measuring ${kRateSampleInterval.inSeconds}s sample…',
+              style: KelolaType.body(color: colors.muted, size: 13),
+            )
+          else if (_rateError != null)
+            KelolaError(message: _rateError!, sudoUser: _host?.username)
+          else if (_rates.isEmpty)
+            Text(
+              'No whole-disk counters in /proc/diskstats.',
+              style: KelolaType.body(color: colors.muted, size: 13),
+            )
+          else
+            for (final r in _rates) ...[
+              ServiceRow(
+                risk: RiskLevel.read,
+                name: r.name,
+                meta:
+                    'r ${formatRateBytes(r.readBytesPerSec)} · w ${formatRateBytes(r.writeBytesPerSec)}',
+                endValue: '${r.busyPercent.round()}%',
+                endMeta: 'busy',
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 14, bottom: 8),
+                child: Text(
+                  'IOPS r ${formatRateIops(r.readIops)} · w ${formatRateIops(r.writeIops)}',
+                  style: KelolaType.mono(color: colors.dim, size: 11),
+                ),
+              ),
+            ],
+        ],
       ),
     );
   }

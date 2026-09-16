@@ -11,6 +11,8 @@ void main() {
     final snap = const DashboardParser().parse(raw);
     expect(snap.uptime.inDays, 47);
     expect(snap.load1, 0.84);
+    expect(snap.load5, 0.60);
+    expect(snap.load15, 0.41);
     expect(snap.cpuPercent, closeTo(66.6, 1));
     expect(snap.memUsedPercent, 61);
     expect(snap.diskRootPercent, 83);

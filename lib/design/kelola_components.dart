@@ -122,11 +122,75 @@ void paintHazardStripe(Canvas canvas, Size size, Color bright, Color dark) {
 /// A 2-up stat tile — LOAD, MEMORY, DISK, FAILED. No gauges, no
 /// dials. A label in mono, a big display-weight number, and an
 /// optional thin meter bar underneath.
+/// Tone for a stacked [StatCard] meter segment.
+enum StatMeterTone { used, cached, free, accent }
+
+class StatMeterSegment {
+  const StatMeterSegment({required this.fraction, required this.tone});
+
+  final double fraction;
+  final StatMeterTone tone;
+}
+
+/// Thin stacked bar: used / cached / free share one reserved meter slot.
+class StackedStatMeter extends StatelessWidget {
+  const StackedStatMeter({super.key, required this.segments});
+
+  final List<StatMeterSegment> segments;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    Color colorFor(StatMeterTone tone) {
+      return switch (tone) {
+        StatMeterTone.used => c.amber,
+        StatMeterTone.cached => c.muted,
+        StatMeterTone.free => c.surface3,
+        StatMeterTone.accent => c.amber,
+      };
+    }
+
+    final parts = <Widget>[];
+    for (final seg in segments) {
+      final f = seg.fraction.clamp(0.0, 1.0);
+      if (f <= 0) {
+        continue;
+      }
+      parts.add(
+        Expanded(
+          flex: (f * 1000).round().clamp(1, 1000),
+          child: ColoredBox(color: colorFor(seg.tone)),
+        ),
+      );
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: ColoredBox(
+        color: c.surface3,
+        child: SizedBox(
+          height: 4,
+          child: Row(
+            children: [
+              ...parts,
+              const Spacer(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A 2-up stat tile — LOAD, MEMORY, DISK, FAILED. No gauges, no
+/// dials. A label in mono, a big display-weight number, and an
+/// optional thin meter bar underneath.
 class StatCard extends StatelessWidget {
   final String label;
   final String value;
   final String? unit;
-  final double? meterFraction; // 0..1, omit to hide the bar
+  final String? detail;
+  final double? meterFraction; // 0..1; meter slot always reserved
+  final List<StatMeterSegment>? meterSegments;
   final HealthStatus? status;
   final RiskLevel meterRisk;
 
@@ -135,7 +199,9 @@ class StatCard extends StatelessWidget {
     required this.label,
     required this.value,
     this.unit,
+    this.detail,
     this.meterFraction,
+    this.meterSegments,
     this.status,
     this.meterRisk = RiskLevel.read,
   });
@@ -143,6 +209,8 @@ class StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
+    final valueSize = value.length > 12 ? 15.0 : 22.0;
+    final detailText = detail?.trim() ?? '';
     return Container(
       padding: const EdgeInsets.fromLTRB(11, 10, 11, 10),
       decoration: BoxDecoration(
@@ -157,36 +225,65 @@ class StatCard extends StatelessWidget {
           Text(label.toUpperCase(),
               style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9)),
           const SizedBox(height: 2),
-          RichText(
-            text: TextSpan(
-              text: value,
-              style: KelolaType.display(color: c.text, size: 22, weight: FontWeight.w600),
-              children: unit == null
-                  ? null
-                  : [
-                      TextSpan(
-                        text: ' $unit',
-                        style: KelolaType.body(color: c.muted, size: 11),
-                      ),
-                    ],
+          SizedBox(
+            height: 28,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: RichText(
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                text: TextSpan(
+                  text: value,
+                  style: KelolaType.display(
+                    color: c.text,
+                    size: valueSize,
+                    weight: FontWeight.w600,
+                  ),
+                  children: unit == null
+                      ? null
+                      : [
+                          TextSpan(
+                            text: ' $unit',
+                            style: KelolaType.body(color: c.muted, size: 11),
+                          ),
+                        ],
+                ),
+              ),
             ),
           ),
-          if (meterFraction != null) ...[
-            const SizedBox(height: 7),
+          SizedBox(
+            height: 14,
+            child: detailText.isEmpty
+                ? null
+                : Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      detailText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: KelolaType.mono(color: c.muted, size: 10),
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 7),
+          if (meterSegments != null && meterSegments!.isNotEmpty)
+            StackedStatMeter(segments: meterSegments!)
+          else
             ClipRRect(
               borderRadius: BorderRadius.circular(3),
               child: SizedBox(
                 height: 4,
-                child: LinearProgressIndicator(
-                  value: meterFraction!.clamp(0, 1),
-                  backgroundColor: c.surface3,
-                  color: status != null
-                      ? c.forHealth(status!)
-                      : c.forRisk(meterRisk),
-                ),
+                child: meterFraction == null
+                    ? const SizedBox.expand()
+                    : LinearProgressIndicator(
+                        value: meterFraction!.clamp(0, 1),
+                        backgroundColor: c.surface3,
+                        color: status != null
+                            ? c.forHealth(status!)
+                            : c.forRisk(meterRisk),
+                      ),
               ),
             ),
-          ],
         ],
       ),
     );
@@ -1512,7 +1609,7 @@ class DashboardStatusLine extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final muted = KelolaType.body(color: c.muted, size: 12);
-    final error = KelolaType.body(color: c.red, size: 12);
+    final warning = KelolaType.body(color: c.amber, size: 12);
     final Widget text;
     if (sudoNeedsPassword) {
       final prefix = dashboardStatusLine(
@@ -1524,7 +1621,7 @@ class DashboardStatusLine extends StatelessWidget {
         TextSpan(
           children: [
             if (prefix.isNotEmpty) TextSpan(text: '$prefix · ', style: muted),
-            TextSpan(text: sudoMutateWillFail, style: error),
+            TextSpan(text: sudoMutateWillFail, style: warning),
           ],
         ),
       );
@@ -2319,6 +2416,64 @@ class ProLockedCard extends StatelessWidget {
   }
 }
 
+/// Shared chrome for back / overflow: same plate and hit target so they
+/// read as a pair across host-scoped screens. Plate size is the visual
+/// circle; keep it modest so title text is never covered.
+class KelolaChromeIconButton extends StatelessWidget {
+  const KelolaChromeIconButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    this.onPressed,
+  });
+
+  /// Painted circle diameter — back and overflow must match this.
+  static const double plateSize = 32;
+
+  /// AppBar leading slot: plate + inset so title starts past the plate.
+  static const double leadingWidth = 44;
+
+  static const double iconSize = 18;
+  static const double titleGap = 8;
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  /// Soft circular plate used by back and overflow so both stay identical.
+  static Widget plate(
+    BuildContext context,
+    IconData icon, {
+    VoidCallback? onPressed,
+  }) {
+    final c = context.kc;
+    final face = SizedBox(
+      width: plateSize,
+      height: plateSize,
+      child: Icon(icon, size: iconSize, color: c.text),
+    );
+    return Material(
+      color: c.surface3.withValues(alpha: 0.55),
+      shape: const CircleBorder(),
+      child: onPressed == null
+          ? face
+          : InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onPressed,
+              child: face,
+            ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: plate(context, icon, onPressed: onPressed),
+    );
+  }
+}
+
 /// Android back arrow. Screens must not pick their own icon.
 class KelolaBackButton extends StatelessWidget {
   const KelolaBackButton({super.key});
@@ -2327,9 +2482,9 @@ class KelolaBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    return KelolaChromeIconButton(
+      icon: icon,
       tooltip: 'Back',
-      icon: const Icon(icon, size: 22),
       onPressed: () => Navigator.of(context).maybePop(),
     );
   }
@@ -2422,6 +2577,7 @@ class KelolaHostAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
+    final canPop = Navigator.canPop(context);
     return AppBar(
       toolbarHeight: _toolbarHeight,
       backgroundColor: c.ink,
@@ -2429,14 +2585,99 @@ class KelolaHostAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       scrolledUnderElevation: 0,
       automaticallyImplyLeading: false,
-      leading: Navigator.canPop(context) ? const KelolaBackButton() : null,
-      titleSpacing: 0,
+      leadingWidth: canPop ? KelolaChromeIconButton.leadingWidth : 0,
+      leading: canPop
+          ? const Align(
+              alignment: Alignment.center,
+              child: KelolaBackButton(),
+            )
+          : null,
+      titleSpacing: KelolaChromeIconButton.titleGap,
       title: KelolaHostIdentity(
         hostAlias: hostAlias,
         title: title,
         contextLine: contextLine,
       ),
       actions: actions,
+    );
+  }
+}
+
+/// Load averages for the full-width dashboard card — labeled intervals only.
+List<(String, String)> formatDashboardLoadIntervals(
+  double load1,
+  double load5,
+  double load15,
+) {
+  String f(double v) => v.toStringAsFixed(2);
+  return [
+    ('1m', f(load1)),
+    ('5m', f(load5)),
+    ('15m', f(load15)),
+  ];
+}
+
+/// Full-width load averages under the CPU/Memory/Disk row. Same surface
+/// family as [StatCard]; labels are complete (`1m` / `5m` / `15m`).
+class DashboardLoadCard extends StatelessWidget {
+  const DashboardLoadCard({
+    super.key,
+    required this.load1,
+    required this.load5,
+    required this.load15,
+  });
+
+  final double load1;
+  final double load5;
+  final double load15;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    final intervals = formatDashboardLoadIntervals(load1, load5, load15);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(11, 10, 11, 10),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.line),
+        borderRadius: BorderRadius.circular(KelolaRadii.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'LOAD',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              for (var i = 0; i < intervals.length; i++) ...[
+                if (i > 0) const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        intervals[i].$1,
+                        style: KelolaType.mono(color: c.dim, size: 9),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        intervals[i].$2,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: KelolaType.mono(color: c.text, size: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

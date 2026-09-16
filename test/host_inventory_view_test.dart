@@ -83,6 +83,7 @@ void main() {
       now: now,
     );
     expect(view.summary, '3 · 2 not checked');
+
     expect(view.summary, isNot(contains('healthy')));
     expect(view.summary, isNot(contains('hosts')));
   });
@@ -107,7 +108,7 @@ void main() {
     expect(view.summary, '2 · 1 needs attention');
   });
 
-  test('inventory detail metrics moved to Fleet; Hosts keep pill only', () {
+  test('inventory metrics line comes from fleet cache, not host row fields', () {
     final fresh = _host(
       alias: 'nas-01',
       attention: HostAttention.failedUnits,
@@ -115,18 +116,11 @@ void main() {
       diskRootPercent: 91,
       attentionAt: now.subtract(const Duration(minutes: 4)),
     );
-    final stale = _host(
-      alias: 'web',
-      attention: HostAttention.failedUnits,
-      failedUnitCount: 2,
-      diskRootPercent: 91,
-      attentionAt: now.subtract(const Duration(minutes: 16)),
-    );
-    expect(fresh.isAttentionStale(now: now), isFalse);
     expect(hostInventoryDetail(fresh, now: now), isNull);
-    expect(stale.isAttentionStale(now: now), isTrue);
-    expect(hostInventoryDetail(stale, now: now), isNull);
-    expect(hostInventoryDetail(_host(alias: 'ub'), now: now), isNull);
+    expect(
+      hostInventoryMetricsLine(host: fresh, monitored: true, cache: null),
+      isNull,
+    );
   });
 
   test('collapses healthy and not-checked groups only when they exceed 8', () {

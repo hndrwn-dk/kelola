@@ -1,5 +1,5 @@
 import 'package:kelola/domain/facts/dashboard_snapshot.dart';
-import 'package:kelola/domain/probes/metrics_probe.dart';
+import 'package:kelola/domain/metrics/rate_sample.dart';
 
 class DiskRootReading {
   const DiskRootReading({
@@ -30,9 +30,13 @@ class DashboardParser {
     }
 
     final uptime = parseUptime(sections['UPTIME'] ?? '') ?? Duration.zero;
-    final load1 = _load1(sections['LOAD'] ?? '');
-    final mem = _memPercent(sections['MEM'] ?? '');
+    final loads = _loads(sections['LOAD'] ?? '');
+    final mem = MemBreakdown.fromMeminfo(sections['MEM'] ?? '');
     final disk = parseDiskRoot(sections['DISK'] ?? '');
+    final cpu = CpuStatBreakdown.fromStatBlocks(
+      sections['STAT1'] ?? '',
+      sections['STAT2'] ?? '',
+    );
     final names = (sections['FAILED_NAMES'] ?? '')
         .split(RegExp(r'\s+'))
         .where((s) => s.isNotEmpty)
@@ -42,15 +46,21 @@ class DashboardParser {
       failedCount = names.length;
     }
 
+    final nproc = int.tryParse((sections['NPROC'] ?? '').trim()) ?? 0;
+
     return DashboardSnapshot(
       uptime: uptime,
-      load1: load1,
-      cpuPercent: MetricsParser.cpuFromStat(
-        sections['STAT1'] ?? '',
-        sections['STAT2'] ?? '',
-      ),
-      memUsedPercent: mem,
+      load1: loads.$1,
+      load5: loads.$2,
+      load15: loads.$3,
+      cpuPercent: cpu.busyPercent,
+      cpu: cpu,
+      memUsedPercent: mem.usedPercent,
+      mem: mem,
       diskRootPercent: disk.percent ?? 0,
+      diskRootUsedKib: disk.usedKib,
+      diskRootTotalKib: disk.totalKib,
+      nprocCores: nproc > 0 ? nproc : null,
       failedUnitCount: failedCount,
       failedUnitNames: names,
     );
@@ -97,30 +107,10 @@ class DashboardParser {
     return const DiskRootReading(known: false);
   }
 
-  static double _load1(String raw) {
-    final first = raw.trim().split(RegExp(r'\s+')).first;
-    return double.tryParse(first) ?? 0;
-  }
-
-  static int _memPercent(String meminfo) {
-    int? total;
-    int? available;
-    for (final line in meminfo.split('\n')) {
-      if (line.startsWith('MemTotal:')) {
-        total = _kib(line);
-      } else if (line.startsWith('MemAvailable:')) {
-        available = _kib(line);
-      }
-    }
-    if (total == null || total == 0 || available == null) {
-      return 0;
-    }
-    final used = total - available;
-    return ((used / total) * 100).round().clamp(0, 100);
-  }
-
-  static int _kib(String line) {
-    final m = RegExp(r'(\d+)').firstMatch(line);
-    return int.tryParse(m?.group(1) ?? '0') ?? 0;
+  static (double, double, double) _loads(String raw) {
+    final parts = raw.trim().split(RegExp(r'\s+'));
+    double at(int i) =>
+        i < parts.length ? (double.tryParse(parts[i]) ?? 0) : 0;
+    return (at(0), at(1), at(2));
   }
 }

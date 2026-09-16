@@ -1,19 +1,25 @@
+import 'package:kelola/domain/facts/dashboard_snapshot.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/metrics/rate_sample.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 
 class MetricsSnapshot {
   const MetricsSnapshot({
     required this.cpuPercent,
+    this.cpu = CpuStatBreakdown.empty,
     required this.load1,
     required this.memUsedPercent,
+    this.mem = MemBreakdown.empty,
     required this.topCpu,
     required this.topMem,
   });
 
   final double cpuPercent;
+  final CpuStatBreakdown cpu;
   final double load1;
   final int memUsedPercent;
+  final MemBreakdown mem;
   final List<MetricsProc> topCpu;
   final List<MetricsProc> topMem;
 }
@@ -43,66 +49,21 @@ class MetricsParser {
     final stat1 = _section(stdout, 'STAT1');
     final stat2 = _section(stdout, 'STAT2');
     final load = _section(stdout, 'LOAD').trim().split(RegExp(r'\s+'));
-    final mem = _section(stdout, 'MEM');
+    final mem = MemBreakdown.fromMeminfo(_section(stdout, 'MEM'));
+    final cpu = CpuStatBreakdown.fromStatBlocks(stat1, stat2);
     return MetricsSnapshot(
-      cpuPercent: cpuFromStat(stat1, stat2),
+      cpuPercent: cpu.busyPercent,
+      cpu: cpu,
       load1: double.tryParse(load.isEmpty ? '' : load.first) ?? 0,
-      memUsedPercent: _memPercent(mem),
+      memUsedPercent: mem.usedPercent,
+      mem: mem,
       topCpu: _procs(_section(stdout, 'TOPCPU')),
       topMem: _procs(_section(stdout, 'TOPMEM')),
     );
   }
 
   static double cpuFromStat(String a, String b) {
-    final x = _cpuTimes(a);
-    final y = _cpuTimes(b);
-    if (x == null || y == null) {
-      return 0;
-    }
-    final idle = y.idle - x.idle;
-    final total = y.total - x.total;
-    if (total <= 0) {
-      return 0;
-    }
-    final busy = (1 - idle / total) * 100;
-    if (busy < 0) {
-      return 0;
-    }
-    if (busy > 100) {
-      return 100;
-    }
-    return busy;
-  }
-
-  static ({double idle, double total})? _cpuTimes(String block) {
-    final line = block
-        .split('\n')
-        .firstWhere((l) => l.startsWith('cpu '), orElse: () => '');
-    if (line.isEmpty) {
-      return null;
-    }
-    final parts = line.split(RegExp(r'\s+')).skip(1).toList();
-    if (parts.length < 5) {
-      return null;
-    }
-    final nums = parts.map((e) => double.tryParse(e) ?? 0).toList();
-    final idle = nums[3] + (nums.length > 4 ? nums[4] : 0);
-    final total = nums.fold<double>(0, (a, b) => a + b);
-    return (idle: idle, total: total);
-  }
-
-  static int _memPercent(String meminfo) {
-    int? kb(String key) {
-      final m = RegExp('^$key:\\s+(\\d+)', multiLine: true).firstMatch(meminfo);
-      return m == null ? null : int.tryParse(m.group(1)!);
-    }
-
-    final total = kb('MemTotal');
-    final avail = kb('MemAvailable') ?? kb('MemFree');
-    if (total == null || total == 0 || avail == null) {
-      return 0;
-    }
-    return (((total - avail) / total) * 100).round().clamp(0, 100);
+    return CpuStatBreakdown.fromStatBlocks(a, b).busyPercent;
   }
 
   static List<MetricsProc> _procs(String raw) {
