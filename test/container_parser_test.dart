@@ -13,7 +13,8 @@ void main() {
     expect(row.names, 'plex');
     expect(row.image, 'linuxserver/plex');
     expect(row.composeProject, 'media');
-    expect(row.publishedPorts, '32787\u219232400');
+    expect(row.publishedPorts, '0.0.0.0:32787\u219232400, [::]:32787\u219232400');
+    expect(row.portBindings.map((p) => p.allInterfaces), [true, true]);
     expect(row.status.toLowerCase(), contains('healthy'));
     expect(row.engine, 'docker');
   });
@@ -26,7 +27,8 @@ void main() {
     expect(row.names, 'db');
     expect(row.image, 'postgres:16');
     expect(row.composeProject, 'infra');
-    expect(row.publishedPorts, '5432');
+    expect(row.publishedPorts, '0.0.0.0:5432');
+    expect(row.portBindings.single.allInterfaces, isTrue);
     expect(row.engine, 'podman');
     expect(row.running, isTrue);
   });
@@ -132,6 +134,34 @@ podman
       cmd.split('\n').where((line) => line.trimLeft().startsWith('||')),
       isEmpty,
     );
+  });
+
+  test('loopback and all-interfaces bindings stay distinct', () {
+    const body = '''
+[{"Id":"a","Names":["db"],"Image":"postgres","State":"running","Status":"Up","Ports":[
+  {"host_ip":"127.0.0.1","container_port":5432,"host_port":55432},
+  {"host_ip":"10.1.2.3","container_port":6379,"host_port":56379}
+]},
+{"Id":"b","Names":["web"],"Image":"nginx","State":"running","Status":"Up","Ports":[
+  {"host_ip":"0.0.0.0","container_port":80,"host_port":8443},
+  {"host_ip":"127.0.0.1","container_port":3000,"host_port":13000}
+]}]
+''';
+    final rows = parsePodmanJson(body);
+    final db = rows.first.portBindings;
+    expect(db.map((p) => p.label).toList(), [
+      '127.0.0.1:55432\u21925432',
+      '10.1.2.3:56379\u21926379',
+    ]);
+    expect(db.first.loopback, isTrue);
+    expect(db.first.allInterfaces, isFalse);
+    expect(db.last.loopback, isFalse);
+    expect(db.last.allInterfaces, isFalse);
+    expect(db.last.bind, '10.1.2.3');
+    final web = rows.last.portBindings;
+    expect(web.first.allInterfaces, isTrue);
+    expect(web.last.loopback, isTrue);
+    expect(web.map((p) => p.label).join(', '), rows.last.publishedPorts);
   });
 
   test('list probe queries user and root podman stores, and sets the runtime dir',

@@ -358,7 +358,7 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
               risk: RiskLevel.destructive,
               name: 'Host reverts this rule in ${_remain}s',
               meta: _pendingChange == null
-                  ? 'timer runs on the server, not this phone'
+                  ? 'timer runs on the host, not this phone'
                   : '${_pendingChange!.port} · keep to cancel the host timer',
               onTap: _keep,
               pillText: 'keep',

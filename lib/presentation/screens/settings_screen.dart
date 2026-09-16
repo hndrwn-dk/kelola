@@ -12,6 +12,12 @@ bool entitlementIsPaid(Entitlement entitlement) {
   return entitlement.isUnlocked(ProFeature.fleetUnlimited);
 }
 
+/// Flip when localization is implemented. Does not add a language picker.
+const kShowLanguageSetting = false;
+
+/// Flip when a light theme exists. Does not add one.
+const kShowThemeSetting = false;
+
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -109,25 +115,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const HostGroupTray(
-                      label: 'Appearance',
-                      child: Column(
-                        children: [
-                          ServiceRow(
-                            risk: RiskLevel.read,
-                            name: 'Language',
-                            meta: 'Not in this version',
-                          ),
-                          SizedBox(height: 8),
-                          ServiceRow(
-                            risk: RiskLevel.read,
-                            name: 'Theme',
-                            meta: 'Not in this version',
-                          ),
-                        ],
+                    if (kShowLanguageSetting || kShowThemeSetting) ...[
+                      const SizedBox(height: 8),
+                      HostGroupTray(
+                        label: 'Appearance',
+                        child: Column(
+                          children: [
+                            if (kShowLanguageSetting)
+                              const ServiceRow(
+                                risk: RiskLevel.read,
+                                name: 'Language',
+                                meta: 'Not in this version',
+                              ),
+                            if (kShowLanguageSetting && kShowThemeSetting)
+                              const SizedBox(height: 8),
+                            if (kShowThemeSetting)
+                              const ServiceRow(
+                                risk: RiskLevel.read,
+                                name: 'Theme',
+                                meta: 'Not in this version',
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

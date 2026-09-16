@@ -69,7 +69,7 @@ void main() {
     final src = File('lib/presentation/screens/host_dashboard_screen.dart')
         .readAsStringSync();
     expect(src, contains('HostDashboardMenuButton'));
-    expect(src, contains('KickerLine'));
+    expect(src, contains('DashboardSessionFacts'));
     expect(src, isNot(contains('contextLine: machine')));
     expect(src, isNot(contains("value: 'ro'")));
   });
@@ -79,7 +79,7 @@ void main() {
     final src = File('lib/presentation/screens/host_dashboard_screen.dart')
         .readAsStringSync();
     expect(src, contains('PollBackoff'));
-    expect(src, contains('DISCONNECTED'));
+    expect(src, contains('Disconnected'));
     expect(src, contains("label: 'Network'"));
     expect(src, isNot(contains('} catch (_) {}')));
   });

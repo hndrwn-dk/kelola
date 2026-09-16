@@ -197,11 +197,6 @@ String containerListMeta(ContainerRow row) {
   if (row.image.isNotEmpty) {
     bits.add(row.image);
   }
-  final ports =
-      row.publishedPorts.isNotEmpty ? row.publishedPorts : row.ports;
-  if (ports.isNotEmpty) {
-    bits.add(ports);
-  }
   return bits.join(' · ');
 }
 

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart'
-    show KelolaError, KelolaHostAppBar, kelolaScrollPadding;
+    show KelolaError, KelolaHostAppBar, ServiceRow, kelolaScrollPadding;
 import 'package:kelola/domain/disk/disk_snapshot.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -176,22 +176,11 @@ class _DiskScreenState extends ConsumerState<DiskScreen> {
       for (final m in groups.primary) _mountCard(colors, m, prominent: true),
       if (groups.ephemeral.isNotEmpty) ...[
         const SizedBox(height: 8),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(
-            'Virtual filesystems',
-            style: KelolaFonts.title(size: 14),
-          ),
-          subtitle: Text(
-            '${groups.ephemeral.length} tmpfs / run / dev',
-            style: KelolaFonts.machine(color: colors.dim, size: 11),
-          ),
-          trailing: Icon(
-            _showEphemeral
-                ? Icons.expand_less_rounded
-                : Icons.expand_more_rounded,
-            color: colors.muted,
-          ),
+        ServiceRow(
+          risk: RiskLevel.read,
+          name: 'Virtual filesystems',
+          meta: '${groups.ephemeral.length} tmpfs / run / dev',
+          endValue: _showEphemeral ? 'Hide' : 'Show',
           onTap: () => setState(() => _showEphemeral = !_showEphemeral),
         ),
         if (_showEphemeral)

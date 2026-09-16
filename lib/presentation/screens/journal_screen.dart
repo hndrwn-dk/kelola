@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -533,48 +534,20 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
     if (_noReadableLogSource) {
       return ListView(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              children: [
-                Text(
-                  'No readable logs',
-                  textAlign: TextAlign.center,
-                  style: KelolaType.display(color: c.text, size: 18),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _emptyHint ??
-                      'No journald and no readable /var/log/syslog or /var/log/messages.',
-                  textAlign: TextAlign.center,
-                  style: KelolaType.body(color: c.muted, size: 14),
-                ),
-              ],
-            ),
+          KelolaEmpty(
+            title: 'No readable logs',
+            body: _emptyHint ??
+                'No journald and no readable /var/log/syslog or /var/log/messages.',
           ),
         ],
       );
     }
     if (!_hasJournald && !_usedSyslog) {
       return ListView(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              children: [
-                Text(
-                  'No journald',
-                  textAlign: TextAlign.center,
-                  style: KelolaType.display(color: c.text, size: 18),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'This host has no systemd journal.',
-                  textAlign: TextAlign.center,
-                  style: KelolaType.body(color: c.muted, size: 14),
-                ),
-              ],
-            ),
+        children: const [
+          KelolaEmpty(
+            title: 'No journald',
+            body: 'This host has no systemd journal.',
           ),
         ],
       );

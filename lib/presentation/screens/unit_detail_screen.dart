@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -70,7 +71,12 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
         probe: UnitDetailProbe(widget.unitName),
         facts: widget.facts,
       );
-      setState(() => _detail = detail);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _detail = unitInspectArrived(detail) ? detail : null;
+      });
     } catch (e) {
       setState(() => _error = describeSshError(e));
     } finally {
@@ -199,6 +205,19 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
               child: ListView(
                 padding: kelolaScrollPadding(context),
                 children: [
+                  if (_error != null && detail == null)
+                    KelolaError(
+                      message: _error!,
+                      sudoUser: widget.host.username,
+                    )
+                  else if (detail == null && _busy)
+                    const SizedBox(height: 48)
+                  else if (detail == null)
+                    const KelolaEmpty(
+                      title: 'No unit data',
+                      body: 'Pull to refresh. Actions stay hidden until this unit can be read.',
+                    )
+                  else ...[
                   if (_error != null) ...[
                     KelolaError(
                       message: _error!,
@@ -206,7 +225,6 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (detail != null) ...[
                     if (detail.activeState == 'failed') ...[
                       RiskBand(
                         risk: RiskLevel.read,
@@ -234,19 +252,6 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
                       ),
                       const SizedBox(height: 10),
                     ],
-                    _slab(c, 'Actions'),
-                    const SizedBox(height: 6),
-                    for (final verb in _actionOrder)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: ServiceRow(
-                          risk: unitActionRisk(verb, widget.unitName),
-                          name: '${verb.name[0].toUpperCase()}${verb.name.substring(1)}',
-                          meta: unitActionMeta(verb, widget.unitName),
-                          onTap: _busy ? null : () => _act(verb),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
                     _slab(c, 'Recent log'),
                     const SizedBox(height: 6),
                     RiskBand(
@@ -296,6 +301,19 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    _slab(c, 'Actions'),
+                    const SizedBox(height: 6),
+                    for (final verb in _actionOrder)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: ServiceRow(
+                          risk: unitActionRisk(verb, widget.unitName),
+                          name: '${verb.name[0].toUpperCase()}${verb.name.substring(1)}',
+                          meta: unitActionMeta(verb, widget.unitName),
+                          onTap: _busy ? null : () => _act(verb),
+                        ),
+                      ),
                   ],
                 ],
               ),

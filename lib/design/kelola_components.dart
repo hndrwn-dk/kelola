@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:kelola/domain/audit/audit_view.dart';
+import 'package:kelola/domain/containers/container_row.dart';
 import 'package:kelola/domain/hosts/dashboard_status.dart';
 import 'package:kelola/domain/hosts/os_icon_kind.dart';
 import 'package:kelola/domain/sudo_hint.dart';
@@ -400,6 +401,7 @@ class ServiceRow extends StatelessWidget {
   final String? endMeta;
   final Widget? leading;
   final String? detail;
+  final Widget? footer;
   final bool compact;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -418,6 +420,7 @@ class ServiceRow extends StatelessWidget {
     this.endMeta,
     this.leading,
     this.detail,
+    this.footer,
     this.compact = false,
     this.onTap,
     this.onLongPress,
@@ -491,6 +494,7 @@ class ServiceRow extends StatelessWidget {
                           color: c.muted,
                           size: compact ? 10 : 11,
                         ).copyWith(height: compact ? 1.25 : null)),
+                  if (footer != null) footer!,
                 ],
               ),
             ),
@@ -1233,6 +1237,47 @@ class KelolaInput extends StatelessWidget {
   }
 }
 
+/// Bind addresses as reported. All-interfaces mappings use amber so they
+/// are not read as the same fact as a loopback bind.
+class PublishedPortText extends StatelessWidget {
+  const PublishedPortText({super.key, required this.ports});
+
+  final List<PublishedPort> ports;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    if (ports.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Text.rich(
+      TextSpan(
+        children: [
+          for (var i = 0; i < ports.length; i++) ...[
+            if (i > 0)
+              TextSpan(
+                text: ' · ',
+                style: KelolaType.mono(color: c.dim, size: 11),
+              ),
+            TextSpan(
+              text: ports[i].label,
+              style: KelolaType.mono(
+                color: ports[i].allInterfaces ? c.amber : c.dim,
+                size: 11,
+                weight: ports[i].allInterfaces
+                    ? FontWeight.w600
+                    : FontWeight.w400,
+              ),
+            ),
+          ],
+        ],
+      ),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+}
+
 /// AppBar kicker: machine facts in mono, optional READ-ONLY mode pill.
 class KickerLine extends StatelessWidget {
   final String machine;
@@ -1250,9 +1295,8 @@ class KickerLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.kc;
     final machineStyle = KelolaType.mono(
-      color: c.dim,
-      size: 8.5,
-      letterSpacing: 0.9,
+      color: c.muted,
+      size: 11,
     );
     return GestureDetector(
       onTap: onToggleReadOnly,
@@ -2313,7 +2357,7 @@ class KelolaHostIdentity extends StatelessWidget {
     final alias = hostAlias.trim();
     final primary = alias.isEmpty ? title : alias;
     final bits = <String>[
-      if (alias.isNotEmpty) title,
+      if (alias.isNotEmpty && title.trim().isNotEmpty) title.trim(),
       if (contextLine != null && contextLine!.trim().isNotEmpty)
         contextLine!.trim(),
     ];
@@ -2341,7 +2385,8 @@ class KelolaHostIdentity extends StatelessWidget {
 }
 
 /// Compact host-scoped app bar. Hostname is the readable title, not a
-/// dim subtitle. Height stays one toolbar so the body starts below it.
+/// dim subtitle. Height follows whether a subtitle line is present so the
+/// body cannot slide under a two-line identity.
 class KelolaHostAppBar extends StatelessWidget implements PreferredSizeWidget {
   const KelolaHostAppBar({
     super.key,
@@ -2351,21 +2396,34 @@ class KelolaHostAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions,
   });
 
-  static const barHeight = 56.0;
+  static const double singleLineHeight = 56;
+  static const double withSubtitleHeight = 64;
 
   final String hostAlias;
   final String title;
   final String? contextLine;
   final List<Widget>? actions;
 
+  bool get _hasSubtitle {
+    final alias = hostAlias.trim();
+    if (alias.isNotEmpty && title.trim().isNotEmpty) {
+      return true;
+    }
+    final context = contextLine?.trim() ?? '';
+    return context.isNotEmpty;
+  }
+
+  double get _toolbarHeight =>
+      _hasSubtitle ? withSubtitleHeight : singleLineHeight;
+
   @override
-  Size get preferredSize => const Size.fromHeight(barHeight);
+  Size get preferredSize => Size.fromHeight(_toolbarHeight);
 
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
     return AppBar(
-      toolbarHeight: barHeight,
+      toolbarHeight: _toolbarHeight,
       backgroundColor: c.ink,
       foregroundColor: c.text,
       elevation: 0,

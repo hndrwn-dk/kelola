@@ -60,11 +60,27 @@ class CommandRunnerProbe extends Probe<CommandRunnerResult> {
 const commandRunnerEmptyCopy =
     'One command at a time over SSH exec. No PTY. vim, top, and less will not work.';
 
+CommandRunnerResult commandRunFromExec({
+  required String stdout,
+  required String stderr,
+  required int? exitCode,
+}) {
+  return CommandRunnerResult(
+    stdout: stdout,
+    stderr: stderr,
+    exitCode: exitCode,
+  );
+}
+
 String formatCommandRun(String line, CommandRunnerResult result) {
   final buf = StringBuffer('\$ $line\n');
   _appendOut(buf, result.stdout);
   _appendOut(buf, result.stderr);
-  buf.write('exit ${result.exitCode}');
+  if (result.exitCode == null) {
+    buf.write('no exit status');
+  } else {
+    buf.write('exit ${result.exitCode}');
+  }
   return buf.toString();
 }
 

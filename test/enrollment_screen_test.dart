@@ -66,6 +66,16 @@ void main() {
       expect(find.text('Test connection'), findsOneWidget);
       expect(find.text('Install with password'), findsOneWidget);
       expect(
+        find.widgetWithText(FilledButton, 'Install with password'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(OutlinedButton, 'Test connection'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('restorecon'), findsNothing);
+      expect(find.textContaining('test the connection again'), findsOneWidget);
+      expect(
         find.textContaining('messaging'),
         findsNothing,
       );

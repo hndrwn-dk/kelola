@@ -72,11 +72,15 @@ class _FileEditorScreenState extends ConsumerState<FileEditorScreen> {
         contextLine: widget.remotePath,
         actions: [
           if (!readOnly)
-            TextButton(
+            FilledButton(
               onPressed: _saving ? null : _save,
+              style: FilledButton.styleFrom(
+                backgroundColor: c.amber,
+                visualDensity: VisualDensity.compact,
+              ),
               child: Text(
                 'Save',
-                style: KelolaType.display(color: c.amber, size: 13),
+                style: KelolaType.display(color: c.ink, size: 13),
               ),
             ),
         ],

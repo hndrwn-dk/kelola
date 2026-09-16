@@ -33,6 +33,7 @@ class SnippetsScreen extends ConsumerStatefulWidget {
 class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   List<Snippet> _items = const [];
   String? _error;
+  String? _notice;
   bool _busy = true;
 
   @override
@@ -81,6 +82,13 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
               children: [
                 if (_error != null) ...[
                   KelolaError(message: _error!, sudoUser: widget.host.username),
+                  const SizedBox(height: 12),
+                ],
+                if (_notice != null) ...[
+                  Text(
+                    _notice!,
+                    style: KelolaType.body(color: c.muted, size: 13),
+                  ),
                   const SizedBox(height: 12),
                 ],
                 ServiceRow(
@@ -292,8 +300,19 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   }
 
   Future<void> _restore() async {
-    await ref.read(hostRepositoryProvider).restoreStarterSnippets();
+    final added =
+        await ref.read(hostRepositoryProvider).restoreStarterSnippets();
     await _load();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _notice = added == 0
+          ? 'Starter snippets are already in the library.'
+          : (added == 1
+              ? 'Restored 1 starter snippet.'
+              : 'Restored $added starter snippets.');
+    });
   }
 
   Future<void> _import() async {

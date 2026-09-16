@@ -43,7 +43,7 @@ class HostKeyMismatchScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'This can mean the server was rebuilt — or that something is intercepting.',
+                      'This can mean the host was rebuilt — or that something is intercepting.',
                       style: TextStyle(color: colors.muted, height: 1.5),
                     ),
                   ],

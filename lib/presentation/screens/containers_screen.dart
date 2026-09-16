@@ -310,6 +310,9 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
         status: health,
         name: row.title,
         meta: containerListMeta(row),
+        footer: row.portBindings.isEmpty
+            ? null
+            : PublishedPortText(ports: row.portBindings),
         pillText: containerListPill(row),
         pillStatus: health,
         onTap: () => _open(row),

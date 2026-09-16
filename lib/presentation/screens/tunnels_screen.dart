@@ -564,9 +564,16 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
         hostAlias: _hostAlias ?? '',
         title: 'Tunnels',
         actions: [
-          TextButton(
+          FilledButton(
             onPressed: () => _openEditor(),
-            child: const Text('Add'),
+            style: FilledButton.styleFrom(
+              backgroundColor: c.amber,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: Text(
+              'Add',
+              style: KelolaType.display(color: c.ink, size: 13),
+            ),
           ),
         ],
       ),

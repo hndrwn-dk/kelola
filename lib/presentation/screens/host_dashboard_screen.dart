@@ -45,7 +45,6 @@ import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
 import 'package:kelola/presentation/widgets/diagnostic_pack_sheet.dart';
 import 'package:kelola/presentation/widgets/incident_sheet.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
-import 'package:kelola/presentation/theme/kelola_theme.dart' show keyBackendLabel;
 import 'package:kelola/providers.dart';
 
 List<double> normalizeSparkPercents(List<double> percents) {
@@ -70,6 +69,100 @@ HealthStatus loadHealth(double load1, int? nprocCores) {
     return HealthStatus.warning;
   }
   return HealthStatus.healthy;
+}
+
+/// OS pretty name for the host app-bar subtitle. Null when unknown.
+String? dashboardOsTitle(String? os) {
+  final label = (os ?? '').trim();
+  if (label.isEmpty || label == 'unknown') {
+    return null;
+  }
+  return label;
+}
+
+/// [lastRttMs] is the last dashboard poll duration, not network RTT.
+String dashboardPollLabel(int elapsedMs) {
+  if (elapsedMs < 1000) {
+    return 'poll ${elapsedMs}ms';
+  }
+  final seconds = elapsedMs / 1000;
+  final text = elapsedMs >= 10000
+      ? seconds.round().toString()
+      : seconds.toStringAsFixed(1);
+  return 'poll ${text}s';
+}
+
+/// One short session row under the app bar. Key backend is omitted here —
+/// it still appears on the enrollment screen.
+List<String> dashboardSessionFacts({
+  required bool disconnected,
+  String? uptime,
+  int? pollMs,
+  bool sessionLive = false,
+}) {
+  if (disconnected) {
+    return const ['Disconnected'];
+  }
+  return [
+    if (uptime != null && uptime.isNotEmpty) 'up $uptime',
+    if (pollMs != null) dashboardPollLabel(pollMs),
+    if (pollMs == null && sessionLive) 'session',
+  ];
+}
+
+/// Discrete session facts — separate labels, one row, design-system type.
+class DashboardSessionFacts extends StatelessWidget {
+  const DashboardSessionFacts({
+    super.key,
+    required this.facts,
+    this.readOnly = false,
+    this.onToggleReadOnly,
+  });
+
+  final List<String> facts;
+  final bool readOnly;
+  final VoidCallback? onToggleReadOnly;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    if (facts.isEmpty && !readOnly) {
+      return const SizedBox.shrink();
+    }
+    final style = KelolaType.body(color: c.muted, size: 12);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                for (var i = 0; i < facts.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      facts[i],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: style,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (readOnly) ...[
+            const SizedBox(width: 8),
+            ModePill(
+              label: 'Read-only',
+              active: true,
+              onTap: onToggleReadOnly,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class HostDashboardScreen extends ConsumerStatefulWidget {
@@ -301,24 +394,24 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     final cpuNow = _cpu.isEmpty ? (dash?.cpuPercent ?? 0) : _cpu.last;
     final spark = normalizeSparkPercents(_cpu);
 
-    final machine = [
-      if (_cpuBackoff.disconnected) 'DISCONNECTED',
-      if (facts != null) facts.label,
-      if (dash != null) 'up ${_formatUp(dash.uptime)}',
-      if (host != null &&
-          ref.watch(sessionPoolProvider).hasLiveSession(host.id))
-        host.lastRttMs == null ? 'session' : '${host.lastRttMs}ms',
-      if (ref.watch(enrollmentProvider).backendLabel != null)
-        keyBackendLabel(ref.watch(enrollmentProvider).backendLabel),
-    ].join(' · ').toUpperCase();
+    final live = host != null &&
+        ref.watch(sessionPoolProvider).hasLiveSession(host.id);
+    final osTitle = dashboardOsTitle(facts?.label);
+    final sessionFacts = dashboardSessionFacts(
+      disconnected: _cpuBackoff.disconnected,
+      uptime: dash == null ? null : _formatUp(dash.uptime),
+      pollMs: live ? host?.lastRttMs : null,
+      sessionLive: live && host?.lastRttMs == null,
+    );
     final readOnly = host?.readOnly == true;
-    final showKicker = machine.isNotEmpty || readOnly || _cpuBackoff.disconnected;
+    final showSession =
+        sessionFacts.isNotEmpty || readOnly || _cpuBackoff.disconnected;
 
     return KelolaPage(
       title: host?.alias ?? 'Host',
       bar: KelolaHostAppBar(
         hostAlias: host?.alias ?? '',
-        title: 'Host',
+        title: osTitle ?? '',
         actions: [
           HostDashboardMenuButton(
             onNote: _editNote,
@@ -344,9 +437,9 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         child: ListView(
           padding: kelolaScrollPadding(context, top: 8),
           children: [
-            if (showKicker)
-              KickerLine(
-                machine: machine,
+            if (showSession)
+              DashboardSessionFacts(
+                facts: sessionFacts,
                 readOnly: readOnly,
                 onToggleReadOnly:
                     host == null ? null : () => _toggleReadOnly(host),
@@ -566,7 +659,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 const SizedBox(width: 7),
                 Expanded(
                   child: ToolTile(
-                    label: 'Workloads',
+                    label: 'Containers',
                     meta: 'containers',
                     onTap: () => _open((id) => ContainersScreen(hostId: id)),
                   ),
@@ -754,28 +847,47 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       return;
     }
     final ctrl = TextEditingController(text: host.note ?? '');
-    final saved = await showDialog<String>(
+    final saved = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: context.kc.ink,
       builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Host note'),
-          content: TextField(
-            controller: ctrl,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              hintText: 'Local only. Searchable. Not sent to the host.',
-            ),
+        return KelolaSheet(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Host note',
+                style: KelolaType.display(color: ctx.kc.text, size: 16),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Local only. Searchable. Not sent to the host.',
+                style: KelolaType.body(color: ctx.kc.muted, size: 13),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                maxLines: 4,
+                style: KelolaType.body(color: ctx.kc.text, size: 15),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+                style: FilledButton.styleFrom(backgroundColor: ctx.kc.amber),
+                child: Text(
+                  'Save',
+                  style: KelolaType.display(color: ctx.kc.ink, size: 13),
+                ),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(ctrl.text),
-              child: const Text('Save'),
-            ),
-          ],
         );
       },
     );

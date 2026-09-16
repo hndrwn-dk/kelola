@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:kelola/presentation/theme/kelola_fonts.dart';
-import 'package:kelola/presentation/theme/kelola_theme.dart';
+import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
@@ -21,7 +20,7 @@ class TofuScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = Theme.of(context).extension<KelolaColors>()!;
+    final c = context.kc;
     return KelolaPage(
       title: 'Unknown host key',
       bar: KelolaHostAppBar(
@@ -35,7 +34,7 @@ class TofuScreen extends ConsumerWidget {
           children: [
             Text(
               'This is the first time Kelola has seen this host. Accept the fingerprint to pin it.',
-              style: TextStyle(color: colors.muted, height: 1.5),
+              style: KelolaType.body(color: c.muted, size: 15),
             ),
             const SizedBox(height: 18),
             KelolaPanel(
@@ -46,7 +45,7 @@ class TofuScreen extends ConsumerWidget {
                   const SizedBox(height: 8),
                   SelectableText(
                     fingerprint,
-                    style: KelolaFonts.machine(size: 13),
+                    style: KelolaType.mono(color: c.text, size: 13),
                   ),
                 ],
               ),
