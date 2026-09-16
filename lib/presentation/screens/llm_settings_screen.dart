@@ -107,12 +107,12 @@ class _LlmSettingsScreenState extends ConsumerState<LlmSettingsScreen> {
   String? _pillFor(LlmProvider p) {
     if (_bundle.activeProvider == p) {
       if (p.enabled && !_bundle.configFor(p).isCompleteFor(p)) {
-        return 'not configured';
+        return 'set up';
       }
       return 'selected';
     }
     if (_draft == p && p.enabled && !_draftConfig.isCompleteFor(p)) {
-      return 'not configured';
+      return 'set up';
     }
     return null;
   }

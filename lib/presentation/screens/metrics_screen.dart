@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/facts/dashboard_snapshot.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/metrics/rate_sample.dart';
 import 'package:kelola/domain/processes/process_list_view.dart';
 import 'package:kelola/domain/hosts/poll_backoff.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
@@ -230,7 +232,7 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: KelolaError(message: _error!),
                     ),
-                  if (snap != null) ...[
+                    if (snap != null) ...[
                     _metricCard(
                       c: c,
                       label: 'CPU',
@@ -240,6 +242,8 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
                       color: c.amber,
                     ),
                     const SizedBox(height: 8),
+                    _cpuBreakdown(c, snap.cpu),
+                    const SizedBox(height: 8),
                     _metricCard(
                       c: c,
                       label: 'Memory',
@@ -248,6 +252,10 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
                       values: _spark(_mem),
                       color: c.forHealth(_pctHealth(snap.memUsedPercent)),
                     ),
+                    if (snap.mem.totalKb > 0) ...[
+                      const SizedBox(height: 8),
+                      _memBreakdown(c, snap.mem),
+                    ],
                     const SizedBox(height: 14),
                     Wrap(
                       spacing: 5,
@@ -300,6 +308,78 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cpuBreakdown(KelolaColors c, CpuStatBreakdown cpu) {
+    final rows = <(String, String)>[
+      ('user', '${cpu.userPercent.round()}%'),
+      ('system', '${cpu.systemPercent.round()}%'),
+      ('iowait', '${cpu.iowaitPercent.round()}%'),
+    ];
+    return _detailBlock(c, 'CPU DETAIL', rows);
+  }
+
+  Widget _memBreakdown(KelolaColors c, MemBreakdown mem) {
+    final rows = <(String, String)>[
+      ('used', MemBreakdown.formatKiB(mem.usedKb)),
+      ('cached', MemBreakdown.formatKiB(mem.cachedKb)),
+      ('buffered', MemBreakdown.formatKiB(mem.buffersKb)),
+      ('free', MemBreakdown.formatKiB(mem.freeKb)),
+      if (mem.hasSwap)
+        (
+          'swap',
+          '${MemBreakdown.formatKiB(mem.swapUsedKb)} / ${MemBreakdown.formatKiB(mem.swapTotalKb)}',
+        ),
+    ];
+    return _detailBlock(c, 'MEMORY DETAIL', rows);
+  }
+
+  Widget _detailBlock(
+    KelolaColors c,
+    String title,
+    List<(String, String)> rows,
+  ) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.line),
+        borderRadius: BorderRadius.circular(KelolaRadii.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: KelolaType.mono(
+              color: c.dim,
+              size: 8.5,
+              letterSpacing: 0.9,
+            ),
+          ),
+          const SizedBox(height: 6),
+          for (final row in rows) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      row.$1,
+                      style: KelolaType.body(color: c.muted, size: 12),
+                    ),
+                  ),
+                  Text(
+                    row.$2,
+                    style: KelolaType.mono(color: c.text, size: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

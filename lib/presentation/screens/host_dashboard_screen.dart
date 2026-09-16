@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
@@ -11,10 +9,8 @@ import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/facts/serial_mask.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/dashboard_status.dart';
-import 'package:kelola/domain/hosts/poll_backoff.dart';
 import 'package:kelola/domain/probes/dashboard_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
-import 'package:kelola/domain/probes/metrics_probe.dart';
 import 'package:kelola/domain/widget/publish_home_widget.dart';
 import 'package:kelola/presentation/destructive_auth.dart';
 import 'package:kelola/presentation/host_session.dart';
@@ -80,89 +76,33 @@ String? dashboardOsTitle(String? os) {
   return label;
 }
 
-/// [lastRttMs] is the last dashboard poll duration, not network RTT.
-String dashboardPollLabel(int elapsedMs) {
-  if (elapsedMs < 1000) {
-    return 'poll ${elapsedMs}ms';
+/// App-bar subtitle: OS identity and uptime. When both are present, drop a
+/// trailing parenthetical codename first so uptime stays visible.
+String? dashboardAppBarSubtitle({String? os, String? uptime}) {
+  final full = dashboardOsTitle(os);
+  final up = (uptime == null || uptime.isEmpty) ? null : 'Uptime $uptime';
+  if (full == null) {
+    return up;
   }
-  final seconds = elapsedMs / 1000;
-  final text = elapsedMs >= 10000
-      ? seconds.round().toString()
-      : seconds.toStringAsFixed(1);
-  return 'poll ${text}s';
+  if (up == null) {
+    return full;
+  }
+  final short = full.replaceFirst(RegExp(r'\s*\([^)]*\)\s*$'), '').trim();
+  final osPart = short.isEmpty ? full : short;
+  return '$osPart · $up';
 }
 
-/// One short session row under the app bar. Key backend is omitted here —
-/// it still appears on the enrollment screen.
-List<String> dashboardSessionFacts({
-  required bool disconnected,
-  String? uptime,
-  int? pollMs,
-  bool sessionLive = false,
-}) {
-  if (disconnected) {
-    return const ['Disconnected'];
+String? formatDashboardCpuDenom(int? nprocCores) {
+  if (nprocCores == null || nprocCores <= 0) {
+    return null;
   }
-  return [
-    if (uptime != null && uptime.isNotEmpty) 'up $uptime',
-    if (pollMs != null) dashboardPollLabel(pollMs),
-    if (pollMs == null && sessionLive) 'session',
-  ];
+  return nprocCores == 1 ? '1 core' : '$nprocCores cores';
 }
 
-/// Discrete session facts — separate labels, one row, design-system type.
-class DashboardSessionFacts extends StatelessWidget {
-  const DashboardSessionFacts({
-    super.key,
-    required this.facts,
-    this.readOnly = false,
-    this.onToggleReadOnly,
-  });
-
-  final List<String> facts;
-  final bool readOnly;
-  final VoidCallback? onToggleReadOnly;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.kc;
-    if (facts.isEmpty && !readOnly) {
-      return const SizedBox.shrink();
-    }
-    final style = KelolaType.body(color: c.muted, size: 12);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Row(
-              children: [
-                for (var i = 0; i < facts.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 12),
-                  Flexible(
-                    child: Text(
-                      facts[i],
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: style,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (readOnly) ...[
-            const SizedBox(width: 8),
-            ModePill(
-              label: 'Read-only',
-              active: true,
-              onTap: onToggleReadOnly,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+/// Same shape as Disk screen mount lines: `x.x / y.y GiB`.
+String formatDashboardGiBPair({required int kibUsed, required int kibTotal}) {
+  String g(int kib) => (kib / 1024 / 1024).toStringAsFixed(1);
+  return '${g(kibUsed)} / ${g(kibTotal)} GiB';
 }
 
 class HostDashboardScreen extends ConsumerStatefulWidget {
@@ -184,24 +124,15 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   Host? _host;
   HostFacts? _facts;
   DashboardSnapshot? _dash;
+  int? _pendingUpdates;
   String? _error;
   bool _loading = true;
-  final _cpu = <double>[];
-  Timer? _cpuTimer;
-  final _cpuBackoff = PollBackoff();
-  bool _cpuBusy = false;
   var _openedIncident = false;
 
   @override
   void initState() {
     super.initState();
     _refresh();
-  }
-
-  @override
-  void dispose() {
-    _cpuTimer?.cancel();
-    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -247,6 +178,8 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         probe: const DashboardProbe(),
         facts: knownFacts,
       );
+      final fleetCache = await repo.loadFleetCacheByHost();
+      final pending = fleetCache[host.id]?.pendingUpdates;
       sw.stop();
       final now = DateTime.now().toUtc();
       final attention = switch (dash.attention) {
@@ -271,12 +204,10 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       setState(() {
         _facts = facts;
         _dash = dash;
+        _pendingUpdates = fleetCache.containsKey(host.id) ? pending : null;
         _host = updated ?? host;
-        _cpu
-          ..clear()
-          ..add(dash.cpuPercent);
+        _error = dashboardErrorAfterSuccessfulPoll(_error);
       });
-      _armCpu();
     } on HostKeyMismatchException catch (e) {
       if (!mounted) {
         return;
@@ -325,93 +256,23 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     });
   }
 
-  void _armCpu() {
-    _cpuBackoff.success();
-    _scheduleCpu(_cpuBackoff.base);
-  }
-
-  void _scheduleCpu(Duration delay) {
-    _cpuTimer?.cancel();
-    if (_cpuBackoff.stopped) {
-      return;
-    }
-    _cpuTimer = Timer(delay, _tickCpu);
-  }
-
-  Future<void> _tickCpu() async {
-    final host = _host;
-    final facts = _facts;
-    if (host == null || !mounted || _cpuBusy) {
-      return;
-    }
-    _cpuBusy = true;
-    try {
-      final cpu = await runHostProbe(
-        ref: ref,
-        context: context,
-        host: host,
-        probe: const CpuTickProbe(),
-        facts: facts,
-      );
-      if (!mounted) {
-        return;
-      }
-      _cpuBackoff.success();
-      setState(() {
-        _error = dashboardErrorAfterSuccessfulPoll(_error);
-        _cpu.add(cpu);
-        if (_cpu.length > 40) {
-          _cpu.removeAt(0);
-        }
-      });
-      _scheduleCpu(_cpuBackoff.base);
-    } catch (e) {
-      if (mounted) {
-        setState(() => _error = describeSshError(e));
-      }
-      await ref.read(hostRepositoryProvider).updateAttention(
-            id: widget.hostId,
-            attention: HostAttention.unreachable,
-          );
-      final delay = _cpuBackoff.failure();
-      if (mounted) {
-        setState(() {});
-      }
-      if (delay != null) {
-        _scheduleCpu(delay);
-      }
-    } finally {
-      _cpuBusy = false;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
     final host = _host;
     final dash = _dash;
     final facts = _facts;
-    final cpuNow = _cpu.isEmpty ? (dash?.cpuPercent ?? 0) : _cpu.last;
-    final spark = normalizeSparkPercents(_cpu);
 
-    final live = host != null &&
-        ref.watch(sessionPoolProvider).hasLiveSession(host.id);
-    final osTitle = dashboardOsTitle(facts?.label);
-    final sessionFacts = dashboardSessionFacts(
-      disconnected: _cpuBackoff.disconnected,
+    final subtitle = dashboardAppBarSubtitle(
+      os: facts?.label,
       uptime: dash == null ? null : _formatUp(dash.uptime),
-      pollMs: live ? host?.lastRttMs : null,
-      sessionLive: live && host?.lastRttMs == null,
     );
-    final readOnly = host?.readOnly == true;
-    final showSession =
-        sessionFacts.isNotEmpty || readOnly || _cpuBackoff.disconnected;
 
     return KelolaPage(
       title: host?.alias ?? 'Host',
       bar: KelolaHostAppBar(
         hostAlias: host?.alias ?? '',
-        title: osTitle ?? '',
+        title: subtitle ?? '',
         actions: [
           HostDashboardMenuButton(
             onNote: _editNote,
@@ -437,13 +298,6 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         child: ListView(
           padding: kelolaScrollPadding(context, top: 8),
           children: [
-            if (showSession)
-              DashboardSessionFacts(
-                facts: sessionFacts,
-                readOnly: readOnly,
-                onToggleReadOnly:
-                    host == null ? null : () => _toggleReadOnly(host),
-              ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -513,6 +367,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
             ],
             if (dash != null) ...[
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: InkWell(
@@ -523,15 +378,18 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                         ),
                       ),
                       child: StatCard(
-                        label: 'Load 1m',
-                        value: dash.load1.toStringAsFixed(2),
-                        meterFraction:
-                            loadMeterFraction(dash.load1, facts?.nprocCores),
-                        status: loadHealth(dash.load1, facts?.nprocCores),
+                        label: 'CPU',
+                        value: dash.cpuPercent.round().toString(),
+                        unit: '%',
+                        detail: formatDashboardCpuDenom(
+                          dash.nprocCores ?? facts?.nprocCores,
+                        ),
+                        meterFraction: (dash.cpuPercent / 100).clamp(0, 1),
+                        status: _pctHealth(dash.cpuPercent.round()),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: InkWell(
                       onTap: () => _open(
@@ -544,16 +402,18 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                         label: 'Memory',
                         value: '${dash.memUsedPercent}',
                         unit: '%',
-                        meterFraction: dash.memUsedPercent / 100,
+                        detail: dash.mem.totalKb > 0
+                            ? formatDashboardGiBPair(
+                                kibUsed: dash.mem.usedKb,
+                                kibTotal: dash.mem.totalKb,
+                              )
+                            : null,
+                        meterFraction: dash.mem.meterFraction,
                         status: _pctHealth(dash.memUsedPercent),
                       ),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
+                  const SizedBox(width: 6),
                   Expanded(
                     child: InkWell(
                       onTap: () => _open((id) => DiskScreen(hostId: id)),
@@ -561,51 +421,38 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                         label: 'Disk /',
                         value: '${dash.diskRootPercent}',
                         unit: '%',
+                        detail: dash.diskRootTotalKib > 0
+                            ? formatDashboardGiBPair(
+                                kibUsed: dash.diskRootUsedKib,
+                                kibTotal: dash.diskRootTotalKib,
+                              )
+                            : null,
                         meterFraction: dash.diskRootPercent / 100,
                         status: _pctHealth(dash.diskRootPercent),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: StatCard(
-                      label: 'Updates',
-                      value: '—',
-                      status: HealthStatus.unknown,
-                    ),
-                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              InkWell(
-                onTap: () => _open(
-                  (id) => MetricsScreen(
-                    hostId: id,
-                    focus: MetricsFocus.cpu,
-                  ),
-                ),
-                child: RiskBand(
-                  risk: RiskLevel.read,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CPU',
-                        style: KelolaType.mono(
-                          color: c.dim,
-                          size: 8.5,
-                          letterSpacing: 0.9,
-                        ),
-                      ),
-                      Text(
-                        '${cpuNow.toStringAsFixed(0)}%',
-                        style: KelolaType.display(color: c.text, size: 18),
-                      ),
-                      Sparkline(values: spark, color: c.amber),
-                    ],
-                  ),
-                ),
+              DashboardLoadCard(
+                load1: dash.load1,
+                load5: dash.load5,
+                load15: dash.load15,
               ),
+              if (_pendingUpdates != null) ...[
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () => _open((id) => PackagesScreen(hostId: id)),
+                  child: StatCard(
+                    label: 'Updates',
+                    value: '$_pendingUpdates',
+                    status: _pendingUpdates! > 0
+                        ? HealthStatus.warning
+                        : HealthStatus.healthy,
+                  ),
+                ),
+              ],
             ],
             const SizedBox(height: 14),
             Text(
@@ -802,11 +649,15 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
             ],
             if (host != null) ...[
               const SizedBox(height: 16),
-              DashboardStatusLine(
-                checkedAt: host.attentionAt,
-                readOnly: host.readOnly,
-                sudoNeedsPassword: host.sudoNeedsPassword,
-                sudoUser: host.username,
+              GestureDetector(
+                onTap: () => _toggleReadOnly(host),
+                behavior: HitTestBehavior.opaque,
+                child: DashboardStatusLine(
+                  checkedAt: host.attentionAt,
+                  readOnly: host.readOnly,
+                  sudoNeedsPassword: host.sudoNeedsPassword,
+                  sudoUser: host.username,
+                ),
               ),
             ],
           ],
@@ -1099,10 +950,13 @@ class HostDashboardMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.kc;
     return PopupMenuButton<String>(
       tooltip: 'More',
-      icon: const Icon(Icons.more_horiz_rounded),
+      padding: EdgeInsets.zero,
+      child: Builder(
+        builder: (context) =>
+            KelolaChromeIconButton.plate(context, Icons.more_vert_rounded),
+      ),
       onSelected: (v) {
         switch (v) {
           case 'note':
@@ -1119,24 +973,27 @@ class HostDashboardMenuButton extends StatelessWidget {
             onRemove();
         }
       },
-      itemBuilder: (context) => [
-        const PopupMenuItem(value: 'note', child: Text('Note')),
-        const PopupMenuItem(value: 'edit', child: Text('Edit host')),
-        const PopupMenuItem(value: 'details', child: Text('Host details')),
-        if (onDiagnostic != null)
-          const PopupMenuItem(
-            value: 'diagnostic',
-            child: Text('Diagnostic pack'),
+      itemBuilder: (context) {
+        final c = context.kc;
+        return [
+          const PopupMenuItem(value: 'note', child: Text('Note')),
+          const PopupMenuItem(value: 'edit', child: Text('Edit host')),
+          const PopupMenuItem(value: 'details', child: Text('Host details')),
+          if (onDiagnostic != null)
+            const PopupMenuItem(
+              value: 'diagnostic',
+              child: Text('Diagnostic pack'),
+            ),
+          const PopupMenuItem(value: 'audit', child: Text('Audit log')),
+          PopupMenuItem(
+            value: 'delete',
+            child: Text(
+              'Remove host',
+              style: TextStyle(color: c.red),
+            ),
           ),
-        const PopupMenuItem(value: 'audit', child: Text('Audit log')),
-        PopupMenuItem(
-          value: 'delete',
-          child: Text(
-            'Remove host',
-            style: TextStyle(color: c.red),
-          ),
-        ),
-      ],
+        ];
+      },
     );
   }
 }

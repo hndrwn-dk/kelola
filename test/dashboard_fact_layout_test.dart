@@ -27,30 +27,20 @@ void main() {
     );
   });
 
-  test('OS subtitle keeps the pretty name; session facts stay one short row', () {
+  test('app bar subtitle keeps OS with uptime; no poll row', () {
     expect(
       dashboardOsTitle('Rocky Linux 9.8 (Blue Onyx)'),
       'Rocky Linux 9.8 (Blue Onyx)',
     );
+    expect(
+      dashboardAppBarSubtitle(
+        os: 'Rocky Linux 9.8 (Blue Onyx)',
+        uptime: '7h',
+      ),
+      'Rocky Linux 9.8 · Uptime 7h',
+    );
     expect(dashboardOsTitle(null), isNull);
     expect(dashboardOsTitle('unknown'), isNull);
-
-    final facts = dashboardSessionFacts(
-      disconnected: false,
-      uptime: '7h',
-      pollMs: 5566,
-    );
-    expect(facts, ['up 7h', 'poll 5.6s']);
-    expect(facts.join(' '), isNot(contains('StrongBox')));
-    expect(facts.join(' '), isNot(contains('ms')));
-    expect(facts, hasLength(lessThan(4)));
-
-    expect(
-      dashboardSessionFacts(disconnected: true, uptime: '7h', pollMs: 100),
-      ['Disconnected'],
-    );
-    expect(dashboardPollLabel(850), 'poll 850ms');
-    expect(dashboardPollLabel(1316), 'poll 1.3s');
   });
 
   testWidgets('dashboard app bar shows the OS, not the word Host', (tester) async {
@@ -60,45 +50,29 @@ void main() {
         home: Scaffold(
           appBar: const KelolaHostAppBar(
             hostAlias: 'east-rock-uat',
-            title: 'Rocky Linux 9.8 (Blue Onyx)',
+            title: 'Rocky Linux 9.8 · Uptime 14d',
           ),
-          body: const Text('LOAD 1M'),
+          body: const Text('CPU'),
         ),
       ),
     );
     expect(find.text('east-rock-uat'), findsOneWidget);
     expect(find.textContaining('Rocky Linux 9.8'), findsOneWidget);
+    expect(find.textContaining('Uptime 14d'), findsOneWidget);
     expect(find.text('Host'), findsNothing);
 
     final bar = tester.renderObject<RenderBox>(find.byType(AppBar));
-    final body = tester.renderObject<RenderBox>(find.text('LOAD 1M'));
+    final body = tester.renderObject<RenderBox>(find.text('CPU'));
     final barBottom = bar.localToGlobal(Offset.zero).dy + bar.size.height;
     final bodyTop = body.localToGlobal(Offset.zero).dy;
     expect(bodyTop, greaterThanOrEqualTo(barBottom - 0.5));
   });
 
-  testWidgets('session fact chips stay on one row at a phone width', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(360, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildKelolaDarkTheme(),
-        home: Scaffold(
-          body: DashboardSessionFacts(
-            facts: dashboardSessionFacts(
-              disconnected: false,
-              uptime: '7h',
-              pollMs: 1316,
-            ),
-            readOnly: true,
-          ),
-        ),
-      ),
-    );
-    expect(find.text('up 7h'), findsOneWidget);
-    expect(find.text('poll 1.3s'), findsOneWidget);
-    expect(find.text('READ-ONLY'), findsOneWidget);
-    final row = tester.getRect(find.byType(DashboardSessionFacts));
-    expect(row.height, lessThan(40));
+  test('dashboard source has no session fact row between bar and cards', () {
+    final src = File('lib/presentation/screens/host_dashboard_screen.dart')
+        .readAsStringSync();
+    expect(src, isNot(contains('DashboardSessionFacts')));
+    expect(src, isNot(contains('dashboardPollLabel')));
+    expect(src, contains('dashboardAppBarSubtitle'));
   });
 }

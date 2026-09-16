@@ -65,22 +65,26 @@ void main() {
     expect(find.text('Allow writes'), findsNothing);
   });
 
-  test('dashboard source no longer treats read-only as a menu action', () {
+  test('dashboard cpu is a snapshot StatCard, not a live sparkline poll', () {
     final src = File('lib/presentation/screens/host_dashboard_screen.dart')
         .readAsStringSync();
     expect(src, contains('HostDashboardMenuButton'));
-    expect(src, contains('DashboardSessionFacts'));
+    expect(src, contains('dashboardAppBarSubtitle'));
+    expect(src, contains("label: 'CPU'"));
+    expect(src, contains('formatDashboardCpuDenom'));
+    expect(src, isNot(contains('DashboardSessionFacts')));
+    expect(src, isNot(contains('Sparkline')));
+    expect(src, isNot(contains('CpuTickProbe')));
+    expect(src, isNot(contains('PollBackoff')));
     expect(src, isNot(contains('contextLine: machine')));
     expect(src, isNot(contains("value: 'ro'")));
   });
 
-  test('cpu poll uses backoff and surfaces disconnect instead of swallowing',
-      () {
+  test('dashboard does not run a background CPU poll', () {
     final src = File('lib/presentation/screens/host_dashboard_screen.dart')
         .readAsStringSync();
-    expect(src, contains('PollBackoff'));
-    expect(src, contains('Disconnected'));
     expect(src, contains("label: 'Network'"));
+    expect(src, isNot(contains('CpuTickProbe')));
     expect(src, isNot(contains('} catch (_) {}')));
   });
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:kelola/design/kelola_components.dart' show KelolaBackButton;
+import 'package:kelola/design/kelola_components.dart'
+    show KelolaBackButton, KelolaChromeIconButton;
 import 'package:kelola/presentation/theme/kelola_fonts.dart';
 import 'package:kelola/design/kelola_theme.dart' show KelolaType;
 import 'package:kelola/presentation/theme/kelola_theme.dart';
@@ -43,7 +44,10 @@ class KelolaBar extends StatelessWidget implements PreferredSizeWidget {
               if (leading != null)
                 leading!
               else if (canPop)
-                const KelolaBackButton()
+                const Padding(
+                  padding: EdgeInsets.only(right: 8),
+                  child: KelolaBackButton(),
+                )
               else
                 const SizedBox(width: 10),
               Expanded(
@@ -110,8 +114,18 @@ class KelolaPage extends StatelessWidget {
       appBar: bar ??
           AppBar(
         toolbarHeight: kicker == null && kickerWidget == null ? 56 : 64,
-        leading: leading ?? (canPop ? const KelolaBackButton() : null),
         automaticallyImplyLeading: false,
+        leading: leading ??
+            (canPop
+                ? const Align(
+                    alignment: Alignment.center,
+                    child: KelolaBackButton(),
+                  )
+                : null),
+        leadingWidth: leading == null && canPop
+            ? KelolaChromeIconButton.leadingWidth
+            : null,
+        titleSpacing: KelolaChromeIconButton.titleGap,
         title: kicker == null && kickerWidget == null
             ? Text(title)
             : Column(

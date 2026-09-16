@@ -33,16 +33,17 @@ TextStyle _spanStyle(InlineSpan span, String needle) {
 }
 
 void main() {
-  test('dashboard poll label is duration, not network RTT', () {
-    expect(dashboardPollLabel(5566), 'poll 5.6s');
-    expect(dashboardPollLabel(1316), 'poll 1.3s');
+  test('dashboard app bar subtitle joins OS and uptime without poll', () {
     expect(
-      dashboardSessionFacts(
-        disconnected: false,
+      dashboardAppBarSubtitle(
+        os: 'Rocky Linux 9.8 (Blue Onyx)',
         uptime: '7h',
-        pollMs: 5566,
       ),
-      ['up 7h', 'poll 5.6s'],
+      'Rocky Linux 9.8 · Uptime 7h',
+    );
+    expect(
+      dashboardAppBarSubtitle(os: 'Debian 12', uptime: null),
+      'Debian 12',
     );
   });
 
@@ -93,23 +94,20 @@ void main() {
     expect(loopback.fontWeight, isNot(FontWeight.w600));
   });
 
-  testWidgets('session facts use readable body type, not 8.5 mono tracking',
+  testWidgets('host app bar subtitle uses body type, not 8.5 mono tracking',
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildKelolaDarkTheme(),
-        home: Scaffold(
-          body: DashboardSessionFacts(
-            facts: dashboardSessionFacts(
-              disconnected: false,
-              uptime: '7h',
-              pollMs: 1316,
-            ),
+        home: const Scaffold(
+          appBar: KelolaHostAppBar(
+            hostAlias: 'east-rock-uat',
+            title: 'Rocky Linux 9.8 · Uptime 7h',
           ),
         ),
       ),
     );
-    final text = tester.widget<Text>(find.text('up 7h'));
+    final text = tester.widget<Text>(find.text('Rocky Linux 9.8 · Uptime 7h'));
     expect(text.style!.fontSize, 12);
     expect(text.style!.fontSize, greaterThan(8.5));
   });
