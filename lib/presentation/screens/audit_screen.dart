@@ -202,6 +202,7 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
     final failed = auditFailed(e);
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: c.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
@@ -211,7 +212,7 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
       ),
       builder: (ctx) {
         return KelolaSheet(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
             child: Column(
               mainAxisSize: MainAxisSize.min,

@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:kelola/app_version.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/design/style_guide_screen.dart';
@@ -182,159 +181,157 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
 
     return Scaffold(
       backgroundColor: c.ink,
+      extendBodyBehindAppBar: true,
+      appBar: HostsRootBar(
+        summary: summary,
+        actions: [
+          if (kDebugMode)
+            KelolaChromeIconButton(
+              tooltip: 'Style guide',
+              icon: Icons.palette_outlined,
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const StyleGuideScreen(),
+                  ),
+                );
+              },
+            ),
+          KelolaChromeIconButton(
+            tooltip: 'Settings',
+            icon: Icons.settings_outlined,
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SettingsScreen(),
+                ),
+              );
+            },
+          ),
+          KelolaChromeIconButton(
+            tooltip: 'Search',
+            icon: Icons.search_rounded,
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SearchScreen(),
+                ),
+              );
+            },
+          ),
+          KelolaChromeIconButton(
+            tooltip: 'Add host',
+            icon: Icons.add_rounded,
+            onPressed: () => _openAddHost(plan, reloadAudit: false),
+          ),
+        ],
+      ),
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          const Positioned.fill(child: HostsChromeAccent()),
-          Column(
-            children: [
-              HostsRootBar(
-                summary: summary,
-                actions: [
-                  if (kDebugMode)
-                    IconButton(
-                      tooltip: 'Style guide',
-                      icon: const Icon(Icons.palette_outlined),
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const StyleGuideScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  IconButton(
-                    tooltip: 'Settings',
-                    icon: const Icon(Icons.settings_outlined),
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const SettingsScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Search',
-                    icon: const Icon(Icons.search_rounded),
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const SearchScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Add host',
-                    icon: Icon(Icons.add_rounded, color: c.amber),
-                    onPressed: () => _openAddHost(plan, reloadAudit: false),
-                  ),
-                ],
-              ),
-              Expanded(
-                child: hosts.when(
-                  data: (list) {
-                    if (list.isEmpty) {
-                      return RefreshIndicator(
-                        color: c.amber,
-                        onRefresh: () => _refresh(const []),
-                        child: ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: kelolaScrollPadding(context, top: 12),
-                          children: [
-                            SizedBox(
-                              height: MediaQuery.sizeOf(context).height * 0.35,
-                              child: Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        'Kelola',
-                                        style: KelolaType.display(
-                                          color: c.text,
-                                          size: 22,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        "Add your first host. You'll need SSH access and a minute.",
-                                        textAlign: TextAlign.center,
-                                        style: KelolaType.body(
-                                          color: c.muted,
-                                          size: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      FilledButton(
-                                        onPressed: () => _openAddHost(
-                                          plan,
-                                          reloadAudit: true,
-                                        ),
-                                        style: FilledButton.styleFrom(
-                                          backgroundColor: c.amber,
-                                        ),
-                                        child: Text(
-                                          'Add host',
-                                          style: KelolaType.display(
-                                            color: c.ink,
-                                            size: 13,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+          const HostsChromeAccent(),
+          Padding(
+            padding: EdgeInsets.only(
+              top: MediaQuery.viewPaddingOf(context).top +
+                  HostsRootBar.contentHeight,
+            ),
+            child: hosts.when(
+              data: (list) {
+                if (list.isEmpty) {
+                  return RefreshIndicator(
+                    color: c.amber,
+                    onRefresh: () => _refresh(const []),
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: kelolaScrollPadding(context, top: 12),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Kelola',
+                                style: KelolaType.display(
+                                  color: c.text,
+                                  size: 22,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                "Add your first host. You'll need SSH access and a minute.",
+                                textAlign: TextAlign.center,
+                                style: KelolaType.body(
+                                  color: c.muted,
+                                  size: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Keys stay on this device',
+                                textAlign: TextAlign.center,
+                                style: KelolaType.body(
+                                  color: c.dim,
+                                  size: 12,
+                                ).copyWith(fontStyle: FontStyle.italic),
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton(
+                                onPressed: () => _openAddHost(
+                                  plan,
+                                  reloadAudit: true,
+                                ),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: c.amber,
+                                ),
+                                child: Text(
+                                  'Add host',
+                                  style: KelolaType.display(
+                                    color: c.ink,
+                                    size: 13,
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      );
-                    }
-                    final view = inventory ??
-                        _stableInventory.project(
-                          list,
-                          allowReorder: false,
-                        );
-                    Host? resume;
-                    if (lastHostId != null &&
-                        pool.hasLiveSession(lastHostId)) {
-                      for (final h in list) {
-                        if (h.id == lastHostId) {
-                          resume = h;
-                          break;
-                        }
-                      }
-                    }
-                    return _inventory(
-                      c,
-                      list,
-                      splitUnmonitored(view, plan.isMonitored),
-                      resume,
-                      plan,
-                      selected,
-                    );
-                  },
-                  loading: () => Center(
-                    child: CircularProgressIndicator(color: c.amber),
-                  ),
-                  error: (e, _) => Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: KelolaError(message: hostInventoryErrorCopy(e)),
+                      ],
                     ),
-                  ),
+                  );
+                }
+                final view = inventory ??
+                    _stableInventory.project(
+                      list,
+                      allowReorder: false,
+                    );
+                Host? resume;
+                if (lastHostId != null && pool.hasLiveSession(lastHostId)) {
+                  for (final h in list) {
+                    if (h.id == lastHostId) {
+                      resume = h;
+                      break;
+                    }
+                  }
+                }
+                return _inventory(
+                  c,
+                  list,
+                  splitUnmonitored(view, plan.isMonitored),
+                  resume,
+                  plan,
+                  selected,
+                );
+              },
+              loading: () => Center(
+                child: CircularProgressIndicator(color: c.amber),
+              ),
+              error: (e, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: KelolaError(message: hostInventoryErrorCopy(e)),
                 ),
               ),
-              SafeArea(
-                top: false,
-                child: HostsColophon(
-                  version: kelolaAppVersion,
-                  sourceLabel: ref.watch(entitlementProvider).sourceLabel,
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),

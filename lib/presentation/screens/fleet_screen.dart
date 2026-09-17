@@ -170,6 +170,8 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
           facts: facts,
           scope: scope,
         );
+        // Fleet probe is local-only; keep Packages-cache update counts.
+        final cached = _byId[host.id];
         final live = FleetHostHealth(
           hostId: host.id,
           alias: host.alias,
@@ -180,8 +182,8 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
           diskRootPercent: health.diskRootPercent,
           highDiskMounts: health.highDiskMounts,
           failedUnitCount: health.failedUnitCount,
-          pendingUpdates: health.pendingUpdates,
-          securityUpdates: health.securityUpdates,
+          pendingUpdates: cached?.pendingUpdates ?? health.pendingUpdates,
+          securityUpdates: cached?.securityUpdates ?? health.securityUpdates,
           containersDown: health.containersDown,
           containersUnhealthy: health.containersUnhealthy,
           uptime: health.uptime,

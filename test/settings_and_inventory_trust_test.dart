@@ -123,10 +123,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Nothing to restore on this build.'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
-    expect(find.text('$kelolaAppVersion · build $kelolaVersionCode'), findsOneWidget);
+    expect(
+      find.text('$kelolaAppVersion · build $kelolaVersionCode · std'),
+      findsOneWidget,
+    );
+    expect(find.text('Keys stay on this device'), findsOneWidget);
   });
 
-  testWidgets('Hosts opens Settings and keeps the build token in the colophon', (
+  testWidgets('Hosts opens Settings; build token lives on Version row', (
     tester,
   ) async {
     final db = KelolaDatabase.memory();
@@ -145,11 +149,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('v$kelolaAppVersion · std'), findsOneWidget);
+    expect(find.text('v$kelolaAppVersion · std'), findsNothing);
+    expect(find.byKey(HostsColophon.hairlineKey), findsNothing);
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     expect(find.text('Paid'), findsOneWidget);
-    expect(find.text('v$kelolaAppVersion · std'), findsNothing);
+    expect(
+      find.text('$kelolaAppVersion · build $kelolaVersionCode · std'),
+      findsOneWidget,
+    );
+    expect(find.text('Keys stay on this device'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   });
