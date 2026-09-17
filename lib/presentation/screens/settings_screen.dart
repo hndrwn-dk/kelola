@@ -4,6 +4,7 @@ import 'package:kelola/app_version.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
+import 'package:kelola/providers.dart';
 
 /// Paid only when unlock says so. The build token (`std` / `ext`) is not this.
 /// Fleet unlimited stands in for the unlock set: tunnels has a single
@@ -49,101 +50,104 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final c = context.kc;
     final entitlement = ref.watch(entitlementProvider);
     final paid = entitlementIsPaid(entitlement);
-    return Scaffold(
-      backgroundColor: c.ink,
-      body: Stack(
+    final token = entitlement.sourceLabel.trim();
+    final versionMeta = token.isEmpty
+        ? '$kelolaAppVersion · build $kelolaVersionCode'
+        : '$kelolaAppVersion · build $kelolaVersionCode · $token';
+    return KelolaWashScaffold(
+      appBar: AppBar(
+        backgroundColor: c.ink.withValues(alpha: 0),
+        surfaceTintColor: c.ink.withValues(alpha: 0),
+        foregroundColor: c.text,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        forceMaterialTransparency: true,
+        automaticallyImplyLeading: false,
+        leadingWidth: KelolaChromeIconButton.leadingWidth,
+        leading: const Align(
+          alignment: Alignment.center,
+          child: KelolaBackButton(),
+        ),
+        titleSpacing: KelolaChromeIconButton.titleGap,
+        title: Text(
+          'Settings',
+          style: KelolaType.display(color: c.text, size: 16),
+        ),
+        shape: Border(bottom: BorderSide(color: c.line)),
+      ),
+      body: ListView(
+        padding: kelolaScrollPadding(
+          context,
+          left: 16,
+          top: 12,
+          right: 16,
+        ),
         children: [
-          const Positioned.fill(child: HostsChromeAccent()),
-          Column(
-            children: [
-              AppBar(
-                backgroundColor: c.ink.withValues(alpha: 0),
-                surfaceTintColor: c.ink.withValues(alpha: 0),
-                foregroundColor: c.text,
-                elevation: 0,
-                scrolledUnderElevation: 0,
-                forceMaterialTransparency: true,
-                leading: const KelolaBackButton(),
-                title: Text(
-                  'Settings',
-                  style: KelolaType.display(color: c.text, size: 16),
+          HostGroupTray(
+            label: 'App',
+            child: Column(
+              children: [
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Version',
+                  meta: versionMeta,
                 ),
-                shape: Border(bottom: BorderSide(color: c.line)),
-              ),
-              Expanded(
-                child: ListView(
-                  padding: kelolaScrollPadding(
-                    context,
-                    left: 16,
-                    top: 12,
-                    right: 16,
-                  ),
-                  children: [
-                    HostGroupTray(
-                      label: 'App',
-                      child: Column(
-                        children: [
-                          ServiceRow(
-                            risk: RiskLevel.read,
-                            name: 'Version',
-                            meta:
-                                '$kelolaAppVersion · build $kelolaVersionCode',
-                          ),
-                          const SizedBox(height: 8),
-                          ServiceRow(
-                            risk: RiskLevel.read,
-                            name: paid ? 'Paid' : 'Free',
-                            meta: 'purchase status',
-                          ),
-                          const SizedBox(height: 8),
-                          ServiceRow(
-                            risk: RiskLevel.read,
-                            name: 'Restore purchase',
-                            meta: 'check this account',
-                            onTap: _restore,
-                          ),
-                          if (_restoreNote != null) ...[
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                _restoreNote!,
-                                style: KelolaType.body(color: c.muted, size: 13),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                const SizedBox(height: 8),
+                const ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Keys stay on this device',
+                  meta: 'never leave this phone',
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: paid ? 'Paid' : 'Free',
+                  meta: 'purchase status',
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Restore purchase',
+                  meta: 'check this account',
+                  onTap: _restore,
+                ),
+                if (_restoreNote != null) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _restoreNote!,
+                      style: KelolaType.body(color: c.muted, size: 13),
                     ),
-                    if (kShowLanguageSetting || kShowThemeSetting) ...[
-                      const SizedBox(height: 8),
-                      HostGroupTray(
-                        label: 'Appearance',
-                        child: Column(
-                          children: [
-                            if (kShowLanguageSetting)
-                              const ServiceRow(
-                                risk: RiskLevel.read,
-                                name: 'Language',
-                                meta: 'Not in this version',
-                              ),
-                            if (kShowLanguageSetting && kShowThemeSetting)
-                              const SizedBox(height: 8),
-                            if (kShowThemeSetting)
-                              const ServiceRow(
-                                risk: RiskLevel.read,
-                                name: 'Theme',
-                                meta: 'Not in this version',
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                ],
+              ],
+            ),
           ),
+          if (kShowLanguageSetting || kShowThemeSetting) ...[
+            const SizedBox(height: 8),
+            HostGroupTray(
+              label: 'Appearance',
+              child: Column(
+                children: [
+                  if (kShowLanguageSetting)
+                    const ServiceRow(
+                      risk: RiskLevel.read,
+                      name: 'Language',
+                      meta: 'Not in this version',
+                    ),
+                  if (kShowLanguageSetting && kShowThemeSetting)
+                    const SizedBox(height: 8),
+                  if (kShowThemeSetting)
+                    const ServiceRow(
+                      risk: RiskLevel.read,
+                      name: 'Theme',
+                      meta: 'Not in this version',
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -120,11 +120,9 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
         title: 'Services',
         contextLine: kicker,
         actions: [
-          IconButton(
+          KelolaChromeIconButton(
             tooltip: 'Filter units',
-            icon: Icon(
-              _searching ? Icons.search_off_rounded : Icons.search_rounded,
-            ),
+            icon: _searching ? Icons.search_off_rounded : Icons.search_rounded,
             onPressed: () => setState(() => _searching = !_searching),
           ),
         ],

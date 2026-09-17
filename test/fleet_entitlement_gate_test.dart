@@ -28,6 +28,7 @@ import 'package:kelola/presentation/pro_locked_sheet.dart';
 import 'package:kelola/presentation/screens/fleet_screen.dart';
 import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/screens/hosts_screen.dart';
+import 'package:kelola/presentation/screens/settings_screen.dart';
 import 'package:kelola/providers.dart';
 
 class _ScriptedEntitlement implements Entitlement {
@@ -403,19 +404,17 @@ void main() {
     expect(find.textContaining('http'), findsNothing);
   });
 
-  testWidgets('colophon build token sits on the version line', (tester) async {
-    await pumpScreen(tester, const HostsScreen());
+  testWidgets('build token sits on Settings Version row with keys line',
+      (tester) async {
+    await pumpScreen(tester, const SettingsScreen());
     await tester.pump(const Duration(milliseconds: 100));
 
-    final label = find.text('v$kelolaAppVersion · std');
+    final label =
+        find.text('$kelolaAppVersion · build $kelolaVersionCode · std');
     expect(label, findsOneWidget);
     expect(find.text('open-source'), findsNothing);
-    expect(find.text('std'), findsNothing);
-    final row = find.ancestor(of: label, matching: find.byType(Row)).first;
-    expect(
-      find.descendant(of: row, matching: find.text('Keys stay on this device')),
-      findsOneWidget,
-    );
+    expect(find.text('Keys stay on this device'), findsOneWidget);
+    expect(find.byKey(HostsColophon.hairlineKey), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 50));

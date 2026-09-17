@@ -27,7 +27,11 @@ If not already submitted for this package: paste from `docs/play/fgs-declaration
 ## Build
 
 ```bash
-flutter build appbundle --release
+# Requires pubspec_overrides.yaml pointing kelola_pro at the private billing
+# package. The check refuses a std-stub AAB (all Pro unlocked).
+bash scripts/build_play_aab.sh
 ```
 
 Signed with `android/key.properties` → upload keystore.
+
+Do **not** run bare `flutter build appbundle --release` for Play — that skips the billing gate.

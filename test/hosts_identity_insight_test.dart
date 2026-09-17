@@ -77,7 +77,7 @@ void main() {
     await flushDriftStreams(tester);
   });
 
-  testWidgets('hosts footer shows version and keys line on one row',
+  testWidgets('hosts screen has no colophon; keys and version live in Settings',
       (tester) async {
     final db = KelolaDatabase.memory();
     addTearDown(db.close);
@@ -91,34 +91,19 @@ void main() {
 
     await pumpHosts(tester, db);
 
-    final version = find.text('v$kelolaAppVersion · std');
-    final keys = find.text('Keys stay on this device');
-    expect(version, findsOneWidget);
-    expect(keys, findsOneWidget);
+    expect(find.text('v$kelolaAppVersion · std'), findsNothing);
+    expect(find.text('Keys stay on this device'), findsNothing);
+    expect(find.byKey(const Key('hosts-colophon-hairline')), findsNothing);
     expect(find.text('Kelola'), findsOneWidget);
+    expect(find.byType(HostsUtilityRail), findsOneWidget);
 
-    final row = find.ancestor(of: version, matching: find.byType(Row));
-    expect(row, findsWidgets);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
     expect(
-      find.descendant(of: row.first, matching: keys),
+      find.text('$kelolaAppVersion · build $kelolaVersionCode · std'),
       findsOneWidget,
     );
-    expect(
-      tester.getTopLeft(version).dy,
-      closeTo(tester.getTopLeft(keys).dy, 6),
-    );
-    expect(tester.getTopLeft(version).dx, lessThan(tester.getTopLeft(keys).dx));
-    final gap =
-        tester.getTopLeft(keys).dx - tester.getBottomRight(version).dx;
-    expect(gap, inInclusiveRange(4, 16));
-    expect(
-      find.descendant(
-        of: row.first,
-        matching: find.byType(Expanded),
-      ),
-      findsNothing,
-    );
-    expect(find.byKey(const Key('hosts-colophon-hairline')), findsOneWidget);
+    expect(find.text('Keys stay on this device'), findsOneWidget);
     await flushDriftStreams(tester);
   });
 

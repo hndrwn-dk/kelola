@@ -23,18 +23,18 @@ void main() {
     nprocCores: 1,
   );
 
-  test('fleet dnf command does not refresh metadata (avoids Rocky timeout)', () {
+  test('fleet probe never runs dnf (avoids Rocky network timeout)', () {
     final cmd = const FleetHealthProbe().command(rockyFacts);
-    expect(cmd, contains('dnf check-update'));
-    expect(cmd, isNot(contains('check-update --refresh')));
-    expect(cmd, contains('---UPDATES---'));
-    expect(cmd, contains('---SECURITY---'));
-    expect(cmd, isNot(contains('grep -cve')));
+    expect(cmd, isNot(contains('dnf ')));
+    expect(cmd, isNot(contains('check-update')));
+    expect(cmd, isNot(contains('---UPDATES---')));
+    expect(cmd, isNot(contains('---SECURITY---')));
+    expect(cmd, contains('cat /proc/uptime'));
+    expect(cmd, contains('df -PT'));
   });
 
-  test('FleetHealthProbe timeout allows slow package lists without stacking at 10s',
-      () {
-    expect(const FleetHealthProbe().timeout.inSeconds, greaterThanOrEqualTo(20));
+  test('FleetHealthProbe timeout fits local reads', () {
+    expect(const FleetHealthProbe().timeout.inSeconds, lessThanOrEqualTo(15));
     expect(const FleetHealthProbe().risk, RiskLevel.read);
   });
 
@@ -95,7 +95,7 @@ tmpfs                        tmpfs   1982344        0   1982344       0% /dev/sh
     expect(hostProbeStateLabel(HostProbeOutcome.timedOut), 'timed out');
   });
 
-  test('parses Rocky fleet stdout with mapper disk and package sections', () {
+  test('parses Rocky fleet stdout without package sections', () {
     const stdout = '''
 ---UPTIME---
 7320.5 14000.0
@@ -115,14 +115,6 @@ Filesystem                   Type 1024-blocks    Used Available Capacity Mounted
 ---FAILED---
 0
 ---FAILED_NAMES---
----UPDATES---
-Rocky Linux 9 - AppStream                    1.2 kB/s | 4.5 kB     00:03
-Last metadata expiration check: 0:01:00 ago
-bind-utils.x86_64          32:9.16.23-1.el9          appstream
-bash.x86_64                5.1.8-9.el9               baseos
----SECURITY---
-Last metadata expiration check: 0:01:00 ago
-RLSA-2024:1234 moderate/Sec.  bash-5.1.8-9.el9.x86_64
 ---CONTAINERS---
 ---REBOOT---
 0
@@ -136,9 +128,8 @@ RLSA-2024:1234 moderate/Sec.  bash-5.1.8-9.el9.x86_64
     expect(health.diskRootPercent, 24);
     expect(health.uptime, const Duration(seconds: 7320));
     expect(health.uptimeLabel(), isNot('0m'));
-    expect(health.pendingUpdates, greaterThan(0));
-    expect(health.securityUpdates, 1);
-    expect(health.securityUpdates, lessThanOrEqualTo(health.pendingUpdates));
+    expect(health.pendingUpdates, 0);
+    expect(health.securityUpdates, 0);
   });
 
   test('fleet package list commands stay available for Packages screen refresh',

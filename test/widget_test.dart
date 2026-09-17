@@ -27,6 +27,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(HostsScreen), findsOneWidget);
     expect(find.textContaining('Add your first host'), findsOneWidget);
+    expect(find.text('Keys stay on this device'), findsOneWidget);
     await _flushDriftStreams(tester);
   });
 
@@ -56,7 +57,7 @@ void main() {
     expect(find.text('Assist'), findsNothing);
     expect(find.text('AI Assist'), findsOneWidget);
     expect(find.text('Widget'), findsOneWidget);
-    expect(find.byKey(HostsColophon.hairlineKey), findsOneWidget);
+    expect(find.byKey(HostsColophon.hairlineKey), findsNothing);
 
     await tester.fling(find.text('nas-01'), const Offset(-500, 0), 1000);
     await tester.pumpAndSettle();

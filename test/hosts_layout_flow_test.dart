@@ -127,41 +127,48 @@ void main() {
     expect(block, contains('amber'));
   });
 
-  test('hosts screen flows rail after inventory; hide rail when empty; colophon pinned',
+  test('hosts screen flows rail after inventory; hide rail when empty; no colophon',
       () {
     final src = File('lib/presentation/screens/hosts_screen.dart')
         .readAsStringSync()
         .replaceAll('\r\n', '\n');
     expect(src, contains('HostsChromeAccent'));
     expect(src, contains('HostsUtilityRail'));
-    expect(src, contains('HostsColophon'));
+    expect(src, isNot(contains('HostsColophon')));
     expect(src, contains('loadFleetCacheByHost'));
     expect(src, contains('_utilityTrail'));
     expect(src, contains('..._utilityTrail(plan)'));
     expect(src, contains('hostInventoryMetricsLine'));
-    expect(src, contains('SafeArea(\n                top: false'));
+    expect(src, contains('extendBodyBehindAppBar: true'));
+    expect(src, contains('appBar: HostsRootBar('));
     final trail = src.substring(
       src.indexOf('List<Widget> _utilityTrail'),
       src.indexOf('bool _groupExpanded'),
     );
     expect(trail, contains('HostsUtilityRail'));
     expect(trail, isNot(contains('HostsColophon')));
-    final footerStart = src.indexOf('SafeArea(\n                top: false');
-    final footer = src.substring(footerStart, footerStart + 400);
-    expect(footer, contains('HostsColophon'));
-    expect(footer, isNot(contains('HostsUtilityRail')));
     // Empty state must not call the utility trail.
     final emptyBlock = src.substring(
       src.indexOf('if (list.isEmpty)'),
       src.indexOf('final view = inventory'),
     );
     expect(emptyBlock, isNot(contains('_utilityTrail')));
+    expect(emptyBlock, contains('Keys stay on this device'));
     expect(src, isNot(contains('FleetHealthProbe')));
     // Rail must not double-inset inside the inventory padding (16).
     expect(
       File('lib/design/kelola_components.dart').readAsStringSync(),
       isNot(contains('padding: const EdgeInsets.fromLTRB(14, 0, 14, 0)')),
     );
+  });
+
+  test('settings carries version build token and keys colophon lines', () {
+    final src = File('lib/presentation/screens/settings_screen.dart')
+        .readAsStringSync();
+    expect(src, contains('Keys stay on this device'));
+    expect(src, contains('sourceLabel'));
+    expect(src, contains('kelolaVersionCode'));
+    expect(src, contains('KelolaWashScaffold'));
   });
 
   testWidgets('utility rail shows icons and real state; widget color follows on/off',

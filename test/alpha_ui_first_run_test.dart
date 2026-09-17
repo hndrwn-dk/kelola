@@ -146,14 +146,11 @@ void main() {
   });
 
   test('first-run copy uses host, and opens Containers', () {
-    expect(
-      File('lib/presentation/screens/hosts_screen.dart').readAsStringSync(),
-      contains('Add your first host'),
-    );
-    expect(
-      File('lib/presentation/screens/hosts_screen.dart').readAsStringSync(),
-      isNot(contains('Add your first server')),
-    );
+    final hosts = File('lib/presentation/screens/hosts_screen.dart')
+        .readAsStringSync();
+    expect(hosts, contains('Add your first host'));
+    expect(hosts, contains('Keys stay on this device'));
+    expect(hosts, isNot(contains('Add your first server')));
     expect(
       File('lib/presentation/screens/enrollment_screen.dart').readAsStringSync(),
       contains('every host'),

@@ -1918,6 +1918,10 @@ class KelolaBrandMark extends StatelessWidget {
 }
 
 /// Hosts root AppBar: brand row, then Hosts + summary. Search/add live in [actions].
+///
+/// Mount via [Scaffold.appBar] (or [KelolaWashScaffold]) so [preferredSize] is
+/// honored. Do not place this in a body [Column] without a height cap — an
+/// unconstrained inner column used to expand and starve the inventory scroll.
 class HostsRootBar extends StatelessWidget implements PreferredSizeWidget {
   const HostsRootBar({
     super.key,
@@ -1925,11 +1929,14 @@ class HostsRootBar extends StatelessWidget implements PreferredSizeWidget {
     required this.actions,
   });
 
+  /// Content height below the status bar. Scaffold adds viewPadding.top.
+  static const double contentHeight = 108;
+
   final String? summary;
   final List<Widget> actions;
 
   @override
-  Size get preferredSize => const Size.fromHeight(108);
+  Size get preferredSize => const Size.fromHeight(contentHeight);
 
   @override
   Widget build(BuildContext context) {
@@ -1943,42 +1950,41 @@ class HostsRootBar extends StatelessWidget implements PreferredSizeWidget {
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: c.line)),
           ),
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    height: 40,
-                    child: Row(
-                      children: [
-                        const KelolaBrandMark(size: 22, plateSize: 32),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Kelola',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: KelolaType.display(color: c.text, size: 18),
-                          ),
+          // No SafeArea: Scaffold.appBar already insets for the status bar.
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 12, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 40,
+                  child: Row(
+                    children: [
+                      const KelolaBrandMark(size: 22, plateSize: 32),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Kelola',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: KelolaType.display(color: c.text, size: 18),
                         ),
-                        ...actions,
-                      ],
-                    ),
+                      ),
+                      ...actions,
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Hosts',
-                    style: KelolaType.display(color: c.text, size: 16),
-                  ),
-                  if (line != null && line.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(line, style: KelolaType.body(color: c.dim, size: 12)),
-                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Hosts',
+                  style: KelolaType.display(color: c.text, size: 16),
+                ),
+                if (line != null && line.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(line, style: KelolaType.body(color: c.dim, size: 12)),
                 ],
-              ),
+              ],
             ),
           ),
         ),
@@ -2441,27 +2447,29 @@ class KelolaChromeIconButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   /// Soft circular plate used by back and overflow so both stay identical.
+  ///
+  /// The [SizedBox] is required: bare [Material] in an AppBar leading slot
+  /// expands to the slot (often 56) and draws an oversized circle.
   static Widget plate(
     BuildContext context,
     IconData icon, {
     VoidCallback? onPressed,
   }) {
     final c = context.kc;
-    final face = SizedBox(
+    return SizedBox(
       width: plateSize,
       height: plateSize,
-      child: Icon(icon, size: iconSize, color: c.text),
-    );
-    return Material(
-      color: c.surface3.withValues(alpha: 0.55),
-      shape: const CircleBorder(),
-      child: onPressed == null
-          ? face
-          : InkWell(
-              customBorder: const CircleBorder(),
-              onTap: onPressed,
-              child: face,
-            ),
+      child: Material(
+        color: c.surface3.withValues(alpha: 0.55),
+        shape: const CircleBorder(),
+        child: onPressed == null
+            ? Center(child: Icon(icon, size: iconSize, color: c.text))
+            : InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onPressed,
+                child: Center(child: Icon(icon, size: iconSize, color: c.text)),
+              ),
+      ),
     );
   }
 
@@ -2685,6 +2693,11 @@ class DashboardLoadCard extends StatelessWidget {
 }
 
 /// Amber arc wash behind screen chrome — same character as Hosts home / Settings.
+///
+/// Always mounts [appBar] via [Scaffold.appBar] so [PreferredSizeWidget]
+/// height is honored. Putting an AppBar (or HostsRootBar) in a body [Column]
+/// ignores preferredSize and starves the scroll region — clipped lists with
+/// a black void below.
 class KelolaWashScaffold extends StatelessWidget {
   const KelolaWashScaffold({
     super.key,
@@ -2702,16 +2715,21 @@ class KelolaWashScaffold extends StatelessWidget {
     final c = context.kc;
     return Scaffold(
       backgroundColor: c.ink,
+      extendBodyBehindAppBar: true,
+      appBar: appBar,
       floatingActionButton: floatingActionButton,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          const Positioned.fill(child: HostsChromeAccent()),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              appBar,
-              Expanded(child: body),
-            ],
+          const HostsChromeAccent(),
+          // extendBodyBehindAppBar clears top MediaQuery padding; restore the
+          // chrome inset so the scroll body starts below the transparent bar.
+          Padding(
+            padding: EdgeInsets.only(
+              top: MediaQuery.viewPaddingOf(context).top +
+                  appBar.preferredSize.height,
+            ),
+            child: body,
           ),
         ],
       ),
@@ -2720,7 +2738,7 @@ class KelolaWashScaffold extends StatelessWidget {
 }
 
 /// Compact three-cell footer rail for Hosts: Fleet / AI Assist / Widget.
-/// Keeps inventory space; colophon hairline stays on [HostsColophon] below.
+/// Keeps inventory space. Build/keys colophon lives on Settings.
 class HostsUtilityRail extends StatelessWidget {
   const HostsUtilityRail({
     super.key,
