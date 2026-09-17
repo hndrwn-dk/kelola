@@ -154,12 +154,14 @@ class _LlmSettingsScreenState extends ConsumerState<LlmSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: AppBar(
-        backgroundColor: c.ink,
+        backgroundColor: c.ink.withValues(alpha: 0),
+        surfaceTintColor: c.ink.withValues(alpha: 0),
+        forceMaterialTransparency: true,
         foregroundColor: c.text,
         elevation: 0,
+        scrolledUnderElevation: 0,
         title: Text(
           'AI Assist',
           style: KelolaType.display(color: c.text, size: 16),

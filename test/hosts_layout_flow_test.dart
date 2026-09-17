@@ -157,6 +157,11 @@ void main() {
     );
     expect(emptyBlock, isNot(contains('_utilityTrail')));
     expect(src, isNot(contains('FleetHealthProbe')));
+    // Rail must not double-inset inside the inventory padding (16).
+    expect(
+      File('lib/design/kelola_components.dart').readAsStringSync(),
+      isNot(contains('padding: const EdgeInsets.fromLTRB(14, 0, 14, 0)')),
+    );
   });
 
   testWidgets('utility rail shows icons and real state; widget color follows on/off',

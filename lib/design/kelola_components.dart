@@ -2580,10 +2580,12 @@ class KelolaHostAppBar extends StatelessWidget implements PreferredSizeWidget {
     final canPop = Navigator.canPop(context);
     return AppBar(
       toolbarHeight: _toolbarHeight,
-      backgroundColor: c.ink,
+      backgroundColor: c.ink.withValues(alpha: 0),
+      surfaceTintColor: c.ink.withValues(alpha: 0),
       foregroundColor: c.text,
       elevation: 0,
       scrolledUnderElevation: 0,
+      forceMaterialTransparency: true,
       automaticallyImplyLeading: false,
       leadingWidth: canPop ? KelolaChromeIconButton.leadingWidth : 0,
       leading: canPop
@@ -2682,6 +2684,41 @@ class DashboardLoadCard extends StatelessWidget {
   }
 }
 
+/// Amber arc wash behind screen chrome — same character as Hosts home / Settings.
+class KelolaWashScaffold extends StatelessWidget {
+  const KelolaWashScaffold({
+    super.key,
+    required this.appBar,
+    required this.body,
+    this.floatingActionButton,
+  });
+
+  final PreferredSizeWidget appBar;
+  final Widget body;
+  final Widget? floatingActionButton;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Scaffold(
+      backgroundColor: c.ink,
+      floatingActionButton: floatingActionButton,
+      body: Stack(
+        children: [
+          const Positioned.fill(child: HostsChromeAccent()),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              appBar,
+              Expanded(child: body),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Compact three-cell footer rail for Hosts: Fleet / AI Assist / Widget.
 /// Keeps inventory space; colophon hairline stays on [HostsColophon] below.
 class HostsUtilityRail extends StatelessWidget {
@@ -2708,7 +2745,7 @@ class HostsUtilityRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.kc;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+      padding: EdgeInsets.zero,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: c.surface,

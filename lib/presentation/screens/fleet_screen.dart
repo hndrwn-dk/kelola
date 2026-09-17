@@ -316,12 +316,14 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
     final width = MediaQuery.sizeOf(context).width;
     final columns = width >= 700 ? 4 : 3;
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: AppBar(
-        backgroundColor: c.ink,
+        backgroundColor: c.ink.withValues(alpha: 0),
+        surfaceTintColor: c.ink.withValues(alpha: 0),
+        forceMaterialTransparency: true,
         foregroundColor: c.text,
         elevation: 0,
+        scrolledUnderElevation: 0,
         title: Text('Fleet', style: KelolaType.display(color: c.text, size: 16)),
         actions: [
           TextButton(
