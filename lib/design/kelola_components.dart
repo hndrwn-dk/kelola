@@ -588,6 +588,7 @@ class ServiceRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: KelolaType.mono(
+                          // Same mono family as [meta]; dimmer for hierarchy.
                           color: c.dim,
                           size: compact ? 10 : 11,
                         ).copyWith(height: compact ? 1.25 : null)),
@@ -2820,7 +2821,20 @@ class KelolaWashScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    final top = MediaQuery.viewPaddingOf(context).top;
+    // Raw FlutterView inset — ambient MediaQuery.viewPadding can already be
+    // zeroed by an ancestor (Scaffold / removePadding), which left chrome
+    // under the status bar on Pixel edge-to-edge.
+    final view = View.maybeOf(context);
+    final fromView = view == null
+        ? 0.0
+        : MediaQueryData.fromView(view).viewPadding.top;
+    final top = math.max(
+      fromView,
+      math.max(
+        MediaQuery.viewPaddingOf(context).top,
+        MediaQuery.paddingOf(context).top,
+      ),
+    );
     final barH = appBar.preferredSize.height;
     return Scaffold(
       backgroundColor: c.ink,
