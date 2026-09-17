@@ -68,7 +68,7 @@ void main() {
     expect(view.summary, isNot(contains('hosts')));
   });
 
-  test('inventory metrics: L-prefix load; omit unknown disk; never invent zeros',
+  test('inventory metrics: labeled load/mem/disk; omit unknown; never invent zeros',
       () {
     final ok = _host(alias: 'nas');
     final down = _host(alias: 'edge', attention: HostAttention.unreachable);
@@ -76,17 +76,25 @@ void main() {
       hostInventoryMetricsLine(
         host: ok,
         monitored: true,
-        cache: _cache(hostId: 'nas'),
+        cache: _cache(hostId: 'nas', load1: 0.08, mem: 8, disk: 24),
       ),
-      'L10% · 45% · 83%',
+      'load 0.08 · mem 8% · disk 24%',
     );
     expect(
       hostInventoryMetricsLine(
         host: ok,
         monitored: true,
-        cache: _cache(hostId: 'nas', disk: null),
+        cache: _cache(hostId: 'nas', load1: 0.08, mem: 8, disk: null),
       ),
-      'L10% · 45%',
+      'load 0.08 · mem 8%',
+    );
+    expect(
+      hostInventoryMetricsLine(
+        host: ok,
+        monitored: true,
+        cache: _cache(hostId: 'nas', load1: 0.00, mem: 0, disk: null),
+      ),
+      'load 0.00',
     );
     expect(
       hostInventoryMetricsLine(host: ok, monitored: true, cache: null),
@@ -132,15 +140,17 @@ void main() {
     final src = File('lib/presentation/screens/hosts_screen.dart')
         .readAsStringSync()
         .replaceAll('\r\n', '\n');
-    expect(src, contains('HostsChromeAccent'));
+    expect(src, contains('KelolaWashScaffold'));
     expect(src, contains('HostsUtilityRail'));
     expect(src, isNot(contains('HostsColophon')));
     expect(src, contains('loadFleetCacheByHost'));
     expect(src, contains('_utilityTrail'));
     expect(src, contains('..._utilityTrail(plan)'));
     expect(src, contains('hostInventoryMetricsLine'));
-    expect(src, contains('extendBodyBehindAppBar: true'));
+    expect(src, isNot(contains('extendBodyBehindAppBar')));
     expect(src, contains('appBar: HostsRootBar('));
+    expect(src, contains('detail: metrics'));
+    expect(src, isNot(contains('endValue: metrics')));
     final trail = src.substring(
       src.indexOf('List<Widget> _utilityTrail'),
       src.indexOf('bool _groupExpanded'),

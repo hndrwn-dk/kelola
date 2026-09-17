@@ -109,14 +109,12 @@ HostInventoryBucket inventoryBucket(Host host, {DateTime? now}) {
   return HostInventoryBucket.notChecked;
 }
 
-/// Hosts row trailing metrics from fleet cache: load · mem · disk.
+/// Hosts row metrics from fleet cache — third line under IP/OS.
 ///
-/// Whole line is null when unmonitored, unreachable, or cache missing —
-/// never invent live-looking zeros. Known values are emitted per-field;
-/// unknown disk is omitted (Rocky partial reads keep load/mem).
-///
-/// Load uses an `L` prefix so it is not confused with dashboard CPU %
-/// from `/proc/stat`.
+/// Format: `load 0.00 · mem 8% · disk 24%`. Unknown fields omitted; null when
+/// unmonitored, unreachable, cache missing, or nothing known. Disk stays off
+/// when [FleetHostHealth.diskRootPercent] is null. Mem is omitted when the
+/// cache reports 0% (empty meminfo parse looks like zero — never invent it).
 String? hostInventoryMetricsLine({
   required Host host,
   required bool monitored,
@@ -132,11 +130,14 @@ String? hostInventoryMetricsLine({
     return null;
   }
   final parts = <String>[];
-  parts.add('L${formatFleetLoad(cache.load1, cache.nprocCores)}');
-  parts.add('${cache.memPercent}%');
+  // Raw loadavg — not core-% and not an `L` prefix (that read as cryptic).
+  parts.add('load ${cache.load1.toStringAsFixed(2)}');
+  if (cache.memPercent > 0) {
+    parts.add('mem ${cache.memPercent}%');
+  }
   final disk = cache.diskRootPercent;
   if (disk != null) {
-    parts.add('$disk%');
+    parts.add('disk $disk%');
   }
   return parts.join(' · ');
 }

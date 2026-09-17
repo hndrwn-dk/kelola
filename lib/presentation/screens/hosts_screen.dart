@@ -179,9 +179,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     final selected =
         ref.watch(fleetProbeSelectionProvider).valueOrNull ?? const <String>{};
 
-    return Scaffold(
-      backgroundColor: c.ink,
-      extendBodyBehindAppBar: true,
+    return KelolaWashScaffold(
       appBar: HostsRootBar(
         summary: summary,
         actions: [
@@ -226,114 +224,102 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
           ),
         ],
       ),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const HostsChromeAccent(),
-          Padding(
-            padding: EdgeInsets.only(
-              top: MediaQuery.viewPaddingOf(context).top +
-                  HostsRootBar.contentHeight,
-            ),
-            child: hosts.when(
-              data: (list) {
-                if (list.isEmpty) {
-                  return RefreshIndicator(
-                    color: c.amber,
-                    onRefresh: () => _refresh(const []),
-                    child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: kelolaScrollPadding(context, top: 12),
+      body: hosts.when(
+        data: (list) {
+          if (list.isEmpty) {
+            return RefreshIndicator(
+              color: c.amber,
+              onRefresh: () => _refresh(const []),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: kelolaScrollPadding(context, top: 12),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Kelola',
-                                style: KelolaType.display(
-                                  color: c.text,
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                "Add your first host. You'll need SSH access and a minute.",
-                                textAlign: TextAlign.center,
-                                style: KelolaType.body(
-                                  color: c.muted,
-                                  size: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Keys stay on this device',
-                                textAlign: TextAlign.center,
-                                style: KelolaType.body(
-                                  color: c.dim,
-                                  size: 12,
-                                ).copyWith(fontStyle: FontStyle.italic),
-                              ),
-                              const SizedBox(height: 16),
-                              FilledButton(
-                                onPressed: () => _openAddHost(
-                                  plan,
-                                  reloadAudit: true,
-                                ),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: c.amber,
-                                ),
-                                child: Text(
-                                  'Add host',
-                                  style: KelolaType.display(
-                                    color: c.ink,
-                                    size: 13,
-                                  ),
-                                ),
-                              ),
-                            ],
+                        Text(
+                          'Kelola',
+                          style: KelolaType.display(
+                            color: c.text,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Add your first host. You'll need SSH access and a minute.",
+                          textAlign: TextAlign.center,
+                          style: KelolaType.body(
+                            color: c.muted,
+                            size: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Keys stay on this device',
+                          textAlign: TextAlign.center,
+                          style: KelolaType.body(
+                            color: c.dim,
+                            size: 12,
+                          ).copyWith(fontStyle: FontStyle.italic),
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: () => _openAddHost(
+                            plan,
+                            reloadAudit: true,
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: c.amber,
+                          ),
+                          child: Text(
+                            'Add host',
+                            style: KelolaType.display(
+                              color: c.ink,
+                              size: 13,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  );
-                }
-                final view = inventory ??
-                    _stableInventory.project(
-                      list,
-                      allowReorder: false,
-                    );
-                Host? resume;
-                if (lastHostId != null && pool.hasLiveSession(lastHostId)) {
-                  for (final h in list) {
-                    if (h.id == lastHostId) {
-                      resume = h;
-                      break;
-                    }
-                  }
-                }
-                return _inventory(
-                  c,
-                  list,
-                  splitUnmonitored(view, plan.isMonitored),
-                  resume,
-                  plan,
-                  selected,
-                );
-              },
-              loading: () => Center(
-                child: CircularProgressIndicator(color: c.amber),
+                  ),
+                ],
               ),
-              error: (e, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: KelolaError(message: hostInventoryErrorCopy(e)),
-                ),
-              ),
-            ),
+            );
+          }
+          final view = inventory ??
+              _stableInventory.project(
+                list,
+                allowReorder: false,
+              );
+          Host? resume;
+          if (lastHostId != null && pool.hasLiveSession(lastHostId)) {
+            for (final h in list) {
+              if (h.id == lastHostId) {
+                resume = h;
+                break;
+              }
+            }
+          }
+          return _inventory(
+            c,
+            list,
+            splitUnmonitored(view, plan.isMonitored),
+            resume,
+            plan,
+            selected,
+          );
+        },
+        loading: () => Center(
+          child: CircularProgressIndicator(color: c.amber),
+        ),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: KelolaError(message: hostInventoryErrorCopy(e)),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -551,8 +537,6 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       monitored: !unmonitored,
       cache: _fleetCache[host.id],
     );
-    // Status pill wins over metrics when both would compete for width.
-    final endValue = pill == null ? metrics : null;
     return Dismissible(
       key: ValueKey(host.id),
       direction: DismissDirection.horizontal,
@@ -610,9 +594,9 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             leading: OsIcon.forOsId(host.osId),
             name: host.alias,
             meta: unmonitored ? host.endpoint : host.subtitle,
+            detail: metrics,
             pillText: pill,
             pillStatus: health,
-            endValue: endValue,
             compact: true,
             onTap: () => _openHost(host),
             onPillTap: unmonitored || pill == null

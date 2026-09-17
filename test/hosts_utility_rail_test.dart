@@ -53,7 +53,8 @@ void main() {
     expect(src, contains('..._utilityTrail(plan)'));
     expect(src, isNot(contains("name: 'Home widget'")));
     expect(src, isNot(contains("name: 'Fleet'")));
-    expect(src, contains('extendBodyBehindAppBar: true'));
+    expect(src, contains('KelolaWashScaffold'));
+    expect(src, isNot(contains('extendBodyBehindAppBar')));
     final trail = src.substring(
       src.indexOf('List<Widget> _utilityTrail'),
       src.indexOf('bool _groupExpanded'),
