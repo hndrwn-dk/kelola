@@ -259,7 +259,8 @@ void main() {
     expect(find.textContaining('L0.'), findsNothing);
 
     final nameY = tester.getTopLeft(find.text('east-rock-uat')).dy;
-    final metaY = tester.getTopLeft(find.textContaining('192.168.18.117')).dy;
+    final metaFinder = find.textContaining('192.168.18.117');
+    final metaY = tester.getTopLeft(metaFinder).dy;
     final metricsY = tester.getTopLeft(find.text(metrics)).dy;
     expect(nameY, lessThan(metaY));
     expect(metaY, lessThan(metricsY));
@@ -268,6 +269,12 @@ void main() {
     final nameRight = tester.getTopRight(find.text('east-rock-uat')).dx;
     final metricsLeft = tester.getTopLeft(find.text(metrics)).dx;
     expect(metricsLeft, lessThan(nameRight + 8));
+
+    final metaStyle = tester.widget<Text>(metaFinder).style!;
+    final metricsStyle = tester.widget<Text>(find.text(metrics)).style!;
+    expect(metricsStyle.fontFamily, metaStyle.fontFamily);
+    expect(metricsStyle.color, metaStyle.color);
+    expect(metricsStyle.fontSize, metaStyle.fontSize);
   });
 
   test('no flutter_svg dependency for hosts icons', () {

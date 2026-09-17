@@ -588,8 +588,7 @@ class ServiceRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: KelolaType.mono(
-                          // Same mono family as [meta]; dimmer for hierarchy.
-                          color: c.dim,
+                          color: c.muted,
                           size: compact ? 10 : 11,
                         ).copyWith(height: compact ? 1.25 : null)),
                   if (footer != null) footer!,
@@ -989,6 +988,23 @@ EdgeInsets kelolaScrollPadding(
     top,
     right,
     MediaQuery.viewPaddingOf(context).bottom + extraBottom,
+  );
+}
+
+/// Status-bar inset for shared chrome. Prefers the raw [FlutterView] so an
+/// ancestor that already consumed [MediaQuery.padding] cannot hide the clock
+/// overlap on edge-to-edge Android.
+double kelolaStatusTopInset(BuildContext context) {
+  final view = View.maybeOf(context);
+  final fromView = view == null
+      ? 0.0
+      : MediaQueryData.fromView(view).viewPadding.top;
+  return math.max(
+    fromView,
+    math.max(
+      MediaQuery.viewPaddingOf(context).top,
+      MediaQuery.paddingOf(context).top,
+    ),
   );
 }
 
@@ -2037,7 +2053,7 @@ class HostsRootBar extends StatelessWidget implements PreferredSizeWidget {
     required this.actions,
   });
 
-  /// Content height below the status bar. Scaffold adds viewPadding.top.
+  /// Content height below the status bar. [KelolaWashScaffold] adds SafeArea.
   static const double contentHeight = 108;
 
   final String? summary;
@@ -2058,8 +2074,8 @@ class HostsRootBar extends StatelessWidget implements PreferredSizeWidget {
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: c.line)),
           ),
-          // Status inset comes from [KelolaWashScaffold] once; do not wrap
-          // another SafeArea here or the body will sit too low.
+          // Status inset comes from [KelolaWashScaffold]'s SafeArea; do not
+          // wrap another SafeArea here or the body will sit too low.
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 12, 12),
             child: Column(
@@ -2803,9 +2819,8 @@ class DashboardLoadCard extends StatelessWidget {
 
 /// Amber arc wash behind screen chrome — same character as Hosts home / Settings.
 ///
-/// Chrome height is [viewPadding.top] + [PreferredSizeWidget.preferredSize]
-/// so the bar cannot expand into the body (the scroll-clip regression) and the
-/// status inset is applied exactly once (no double gap under the header).
+/// [SafeArea] pads chrome once. The body subtree has top padding removed so a
+/// primary [ListView] cannot add a second status gap under the header.
 class KelolaWashScaffold extends StatelessWidget {
   const KelolaWashScaffold({
     super.key,
@@ -2821,50 +2836,40 @@ class KelolaWashScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    // Raw FlutterView inset — ambient MediaQuery.viewPadding can already be
-    // zeroed by an ancestor (Scaffold / removePadding), which left chrome
-    // under the status bar on Pixel edge-to-edge.
-    final view = View.maybeOf(context);
-    final fromView = view == null
-        ? 0.0
-        : MediaQueryData.fromView(view).viewPadding.top;
-    final top = math.max(
-      fromView,
-      math.max(
-        MediaQuery.viewPaddingOf(context).top,
-        MediaQuery.paddingOf(context).top,
-      ),
-    );
     final barH = appBar.preferredSize.height;
-    return Scaffold(
-      backgroundColor: c.ink,
-      floatingActionButton: floatingActionButton,
-      // Zero top padding for the body subtree so primary [ListView]s (and
-      // Scaffold when appBar is null) cannot re-apply the status inset on
-      // top of the sized chrome below.
-      body: MediaQuery.removePadding(
-        context: context,
-        removeTop: true,
-        child: Stack(
+    final inset = kelolaStatusTopInset(context);
+    final mq = MediaQuery.of(context);
+    return MediaQuery(
+      data: mq.copyWith(
+        padding: mq.padding.copyWith(top: math.max(mq.padding.top, inset)),
+        viewPadding:
+            mq.viewPadding.copyWith(top: math.max(mq.viewPadding.top, inset)),
+      ),
+      child: Scaffold(
+        backgroundColor: c.ink,
+        floatingActionButton: floatingActionButton,
+        body: Stack(
           fit: StackFit.expand,
           children: [
             const HostsChromeAccent(),
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(
-                  height: top + barH,
-                  child: Padding(
-                    padding: EdgeInsets.only(top: top),
-                    // Also zero for AppBar(primary:true) / SafeArea inside chrome.
-                    child: MediaQuery.removePadding(
-                      context: context,
-                      removeTop: true,
-                      child: SizedBox(height: barH, child: appBar),
-                    ),
+                SafeArea(
+                  bottom: false,
+                  child: SizedBox(height: barH, child: appBar),
+                ),
+                Expanded(
+                  child: Builder(
+                    builder: (context) {
+                      return MediaQuery.removePadding(
+                        context: context,
+                        removeTop: true,
+                        child: body,
+                      );
+                    },
                   ),
                 ),
-                Expanded(child: body),
               ],
             ),
           ],
