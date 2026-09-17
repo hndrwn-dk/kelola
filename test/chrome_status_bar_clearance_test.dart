@@ -150,4 +150,102 @@ void main() {
       greaterThanOrEqualTo(48),
     );
   });
+
+  testWidgets('chrome on Hosts, Settings, Audit, and KelolaPage clears status bar',
+      (tester) async {
+    phoneStatusBar(tester);
+    Future<void> pump(Widget home) async {
+      await tester.pumpWidget(
+        MaterialApp(theme: buildKelolaDarkTheme(), home: home),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pump(
+      KelolaWashScaffold(
+        appBar: HostsRootBar(
+          summary: '1',
+          actions: [
+            KelolaChromeIconButton(
+              icon: Icons.settings_outlined,
+              tooltip: 'Settings',
+              onPressed: () {},
+            ),
+            KelolaChromeIconButton(
+              icon: Icons.add_rounded,
+              tooltip: 'Add host',
+              onPressed: () {},
+            ),
+          ],
+        ),
+        body: const Text('INSIGHTS AUDIT'),
+      ),
+    );
+    expect(tester.getTopLeft(find.text('Kelola')).dy, greaterThanOrEqualTo(48));
+    expect(
+      tester.getTopLeft(find.byTooltip('Settings')).dy,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getTopLeft(find.byTooltip('Add host')).dy,
+      greaterThanOrEqualTo(48),
+    );
+
+    await pump(
+      KelolaWashScaffold(
+        appBar: AppBar(
+          title: const Text('Settings'),
+          backgroundColor: Colors.transparent,
+          forceMaterialTransparency: true,
+        ),
+        body: const Text('settings-body'),
+      ),
+    );
+    expect(tester.getTopLeft(find.text('Settings')).dy, greaterThanOrEqualTo(48));
+
+    await pump(
+      KelolaWashScaffold(
+        appBar: AppBar(
+          toolbarHeight: 64,
+          title: const Text('Audit'),
+          backgroundColor: Colors.transparent,
+          forceMaterialTransparency: true,
+        ),
+        body: const Text('audit-body'),
+      ),
+    );
+    expect(tester.getTopLeft(find.text('Audit')).dy, greaterThanOrEqualTo(48));
+
+    await pump(const KelolaPage(title: 'Add host', body: Text('page-body')));
+    expect(tester.getTopLeft(find.text('Add host')).dy, greaterThanOrEqualTo(48));
+  });
+
+  testWidgets('consumed MediaQuery padding still clears chrome via view inset',
+      (tester) async {
+    phoneStatusBar(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildKelolaDarkTheme(),
+        builder: (context, child) {
+          return MediaQuery.removePadding(
+            context: context,
+            removeTop: true,
+            child: child!,
+          );
+        },
+        home: const KelolaWashScaffold(
+          appBar: HostsRootBar(
+            summary: '1',
+            actions: [],
+          ),
+          body: Text('INSIGHTS AUDIT'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('Kelola')).dy, greaterThanOrEqualTo(48));
+    final summaryBottom = tester.getBottomLeft(find.text('1')).dy;
+    final insightsTop = tester.getTopLeft(find.text('INSIGHTS AUDIT')).dy;
+    expect(insightsTop - summaryBottom, lessThan(40));
+  });
 }
