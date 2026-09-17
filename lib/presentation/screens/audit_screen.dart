@@ -88,6 +88,16 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         toolbarHeight: 64,
+        automaticallyImplyLeading: false,
+        leadingWidth:
+            Navigator.canPop(context) ? KelolaChromeIconButton.leadingWidth : 0,
+        leading: Navigator.canPop(context)
+            ? const Align(
+                alignment: Alignment.center,
+                child: KelolaBackButton(),
+              )
+            : null,
+        titleSpacing: KelolaChromeIconButton.titleGap,
         title: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,10 +114,10 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
           ],
         ),
         actions: [
-          IconButton(
+          KelolaChromeIconButton(
             tooltip: 'Copy JSON',
             onPressed: _rows.isEmpty ? null : _copyJson,
-            icon: const Icon(Icons.copy_rounded),
+            icon: Icons.copy_rounded,
           ),
         ],
       ),
@@ -198,48 +208,12 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
   }
 
   void _openDetail(BuildContext context, AuditEvent e) {
-    final c = context.kc;
-    final failed = auditFailed(e);
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: c.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(KelolaRadii.lg),
-        ),
-        side: BorderSide(color: c.line),
-      ),
-      builder: (ctx) {
-        return KelolaSheet(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  auditDisplayTitle(e),
-                  style: KelolaType.display(color: c.text, size: 16),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _metaLine(e),
-                  style: KelolaType.mono(
-                    color: failed ? c.red : c.muted,
-                    size: 11,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  e.command,
-                  style: KelolaType.mono(color: c.text, size: 11),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    showAuditCommandSheet(
+      context,
+      title: auditDisplayTitle(e),
+      meta: _metaLine(e),
+      metaFailed: auditFailed(e),
+      command: e.command,
     );
   }
 }

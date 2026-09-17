@@ -29,8 +29,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('row 0'), findsOneWidget);
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
-    expect(scaffold.appBar, isNotNull);
-    expect(scaffold.extendBodyBehindAppBar, isTrue);
+    // Chrome is laid out in the body stack — not Scaffold.appBar — so the
+    // preferred height cannot expand and steal the scroll viewport.
+    expect(scaffold.appBar, isNull);
+    expect(scaffold.extendBodyBehindAppBar, isFalse);
 
     final bodyBox = tester.getRect(find.byType(ListView));
     final screen = tester.getSize(find.byType(Scaffold).first);
@@ -45,14 +47,13 @@ void main() {
     expect(find.text('row LAST'), findsOneWidget);
   });
 
-  testWidgets('HostsRootBar as Scaffold.appBar leaves inventory height',
+  testWidgets('HostsRootBar as wash chrome leaves inventory height',
       (tester) async {
     final last = GlobalKey();
     await tester.pumpWidget(
       MaterialApp(
         theme: buildKelolaDarkTheme(),
-        home: Scaffold(
-          extendBodyBehindAppBar: true,
+        home: KelolaWashScaffold(
           appBar: HostsRootBar(
             summary: '2 hosts',
             actions: [
@@ -63,30 +64,17 @@ void main() {
               ),
             ],
           ),
-          body: Stack(
-            fit: StackFit.expand,
+          body: ListView(
             children: [
-              Padding(
-                padding: EdgeInsets.only(
-                  top: MediaQueryData.fromView(
-                        tester.view,
-                      ).padding.top +
-                      HostsRootBar.contentHeight,
-                ),
-                child: ListView(
-                  children: [
-                    for (var i = 0; i < 30; i++) Text('host $i'),
-                    Text(key: last, 'host LAST'),
-                    HostsUtilityRail(
-                      fleetMeta: '2 hosts',
-                      assistMeta: 'set up',
-                      widgetMeta: 'off',
-                      onFleet: () {},
-                      onAssist: () {},
-                      onWidget: () {},
-                    ),
-                  ],
-                ),
+              for (var i = 0; i < 30; i++) Text('host $i'),
+              Text(key: last, 'host LAST'),
+              HostsUtilityRail(
+                fleetMeta: '2 hosts',
+                assistMeta: 'set up',
+                widgetMeta: 'off',
+                onFleet: () {},
+                onAssist: () {},
+                onWidget: () {},
               ),
             ],
           ),
@@ -106,7 +94,8 @@ void main() {
     expect(find.text('off'), findsOneWidget);
   });
 
-  testWidgets('Audit-style sheet scrolls a long command body', (tester) async {
+  testWidgets('Audit-style sheet scrolls a long command body and exposes Close',
+      (tester) async {
     final long = List.generate(80, (i) => 'line $i of probe script').join('\n');
     final endKey = GlobalKey();
     await tester.pumpWidget(
@@ -121,16 +110,35 @@ void main() {
                     showModalBottomSheet<void>(
                       context: context,
                       isScrollControlled: true,
+                      useSafeArea: true,
                       builder: (ctx) {
                         return KelolaSheet(
-                          child: SingleChildScrollView(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(long, style: const TextStyle(fontSize: 11)),
-                                Text(key: endKey, 'SCRIPT_END'),
-                              ],
-                            ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  const Expanded(child: Text('Connection lost')),
+                                  KelolaChromeIconButton(
+                                    icon: Icons.close,
+                                    tooltip: 'Close',
+                                    onPressed: () => Navigator.of(ctx).pop(),
+                                  ),
+                                ],
+                              ),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxHeight: 240),
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(long, style: const TextStyle(fontSize: 11)),
+                                      Text(key: endKey, 'SCRIPT_END'),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         );
                       },
@@ -146,11 +154,15 @@ void main() {
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
+    expect(find.byTooltip('Close'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(endKey),
       200,
       scrollable: find.byType(Scrollable).last,
     );
     expect(find.text('SCRIPT_END'), findsOneWidget);
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connection lost'), findsNothing);
   });
 }

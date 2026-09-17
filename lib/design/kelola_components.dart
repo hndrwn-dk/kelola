@@ -588,7 +588,7 @@ class ServiceRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: KelolaType.mono(
-                          color: c.muted,
+                          color: c.dim,
                           size: compact ? 10 : 11,
                         ).copyWith(height: compact ? 1.25 : null)),
                   if (footer != null) footer!,
@@ -1031,6 +1031,113 @@ class _KelolaSheetState extends State<KelolaSheet> {
       ),
     );
   }
+}
+
+/// Visible grabber above sheet content — pairs with an explicit Close control
+/// so long `isScrollControlled` sheets are never a dead-end full screen.
+class KelolaSheetDragHandle extends StatelessWidget {
+  const KelolaSheetDragHandle({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 4),
+        child: Container(
+          width: 36,
+          height: 4,
+          decoration: BoxDecoration(
+            color: c.muted.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Audit command detail: scrollable body, drag handle, Close, status-safe.
+Future<void> showAuditCommandSheet(
+  BuildContext context, {
+  required String title,
+  required String meta,
+  required String command,
+  bool metaFailed = false,
+}) {
+  final c = context.kc;
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: c.surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(KelolaRadii.lg),
+      ),
+      side: BorderSide(color: c.line),
+    ),
+    builder: (ctx) {
+      final maxBody = kelolaSheetMaxBodyHeight(ctx);
+      return KelolaSheet(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const KelolaSheetDragHandle(),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: KelolaType.display(color: c.text, size: 16),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            meta,
+                            style: KelolaType.mono(
+                              color: metaFailed ? c.red : c.muted,
+                              size: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  KelolaChromeIconButton(
+                    icon: Icons.close,
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: (maxBody * 0.65).clamp(120.0, maxBody),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                  child: Text(
+                    command,
+                    style: KelolaType.mono(color: c.text, size: 11),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _MeasureHeight extends SingleChildRenderObjectWidget {
@@ -1950,7 +2057,8 @@ class HostsRootBar extends StatelessWidget implements PreferredSizeWidget {
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: c.line)),
           ),
-          // No SafeArea: Scaffold.appBar already insets for the status bar.
+          // Status inset comes from [KelolaWashScaffold] once; do not wrap
+          // another SafeArea here or the body will sit too low.
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 12, 12),
             child: Column(
@@ -2694,10 +2802,9 @@ class DashboardLoadCard extends StatelessWidget {
 
 /// Amber arc wash behind screen chrome — same character as Hosts home / Settings.
 ///
-/// Always mounts [appBar] via [Scaffold.appBar] so [PreferredSizeWidget]
-/// height is honored. Putting an AppBar (or HostsRootBar) in a body [Column]
-/// ignores preferredSize and starves the scroll region — clipped lists with
-/// a black void below.
+/// Chrome height is [viewPadding.top] + [PreferredSizeWidget.preferredSize]
+/// so the bar cannot expand into the body (the scroll-clip regression) and the
+/// status inset is applied exactly once (no double gap under the header).
 class KelolaWashScaffold extends StatelessWidget {
   const KelolaWashScaffold({
     super.key,
@@ -2713,25 +2820,41 @@ class KelolaWashScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
+    final top = MediaQuery.viewPaddingOf(context).top;
+    final barH = appBar.preferredSize.height;
     return Scaffold(
       backgroundColor: c.ink,
-      extendBodyBehindAppBar: true,
-      appBar: appBar,
       floatingActionButton: floatingActionButton,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const HostsChromeAccent(),
-          // extendBodyBehindAppBar clears top MediaQuery padding; restore the
-          // chrome inset so the scroll body starts below the transparent bar.
-          Padding(
-            padding: EdgeInsets.only(
-              top: MediaQuery.viewPaddingOf(context).top +
-                  appBar.preferredSize.height,
+      // Zero top padding for the body subtree so primary [ListView]s (and
+      // Scaffold when appBar is null) cannot re-apply the status inset on
+      // top of the sized chrome below.
+      body: MediaQuery.removePadding(
+        context: context,
+        removeTop: true,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const HostsChromeAccent(),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: top + barH,
+                  child: Padding(
+                    padding: EdgeInsets.only(top: top),
+                    // Also zero for AppBar(primary:true) / SafeArea inside chrome.
+                    child: MediaQuery.removePadding(
+                      context: context,
+                      removeTop: true,
+                      child: SizedBox(height: barH, child: appBar),
+                    ),
+                  ),
+                ),
+                Expanded(child: body),
+              ],
             ),
-            child: body,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
