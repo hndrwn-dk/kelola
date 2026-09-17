@@ -234,6 +234,42 @@ void main() {
     expect(find.text('ollama · llama3.2'), findsOneWidget);
   });
 
+  testWidgets('host metrics sit on third line under IP/OS, not as endValue',
+      (tester) async {
+    const metrics = 'load 0.00 · mem 8% · disk 24%';
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildKelolaDarkTheme(),
+        home: Scaffold(
+          body: ServiceRow(
+            risk: RiskLevel.read,
+            status: HealthStatus.healthy,
+            name: 'east-rock-uat',
+            meta: '192.168.18.117 · Rocky Linux 9.8 (Blue Onyx)',
+            detail: metrics,
+            compact: true,
+            onTap: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(metrics), findsOneWidget);
+    expect(find.textContaining('L0.'), findsNothing);
+
+    final nameY = tester.getTopLeft(find.text('east-rock-uat')).dy;
+    final metaY = tester.getTopLeft(find.textContaining('192.168.18.117')).dy;
+    final metricsY = tester.getTopLeft(find.text(metrics)).dy;
+    expect(nameY, lessThan(metaY));
+    expect(metaY, lessThan(metricsY));
+
+    // Metrics stay in the left column — right of the name is only chevron.
+    final nameRight = tester.getTopRight(find.text('east-rock-uat')).dx;
+    final metricsLeft = tester.getTopLeft(find.text(metrics)).dx;
+    expect(metricsLeft, lessThan(nameRight + 8));
+  });
+
   test('no flutter_svg dependency for hosts icons', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     expect(pubspec, isNot(contains('flutter_svg')));
