@@ -79,12 +79,14 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
     final groups = groupAuditByDay(visible, now: now);
     final title = auditScreenTitle(_scopeLabel(hosts));
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: AppBar(
-        backgroundColor: c.ink,
+        backgroundColor: c.ink.withValues(alpha: 0),
+        surfaceTintColor: c.ink.withValues(alpha: 0),
+        forceMaterialTransparency: true,
         foregroundColor: c.text,
         elevation: 0,
+        scrolledUnderElevation: 0,
         toolbarHeight: 64,
         title: Column(
           mainAxisSize: MainAxisSize.min,

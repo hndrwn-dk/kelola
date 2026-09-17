@@ -212,8 +212,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
   Widget build(BuildContext context) {
     final c = context.kc;
     final host = _host;
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: host?.alias ?? watchedHostAlias(ref, widget.hostId),
         title: 'Edit host',

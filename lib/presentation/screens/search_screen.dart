@@ -36,12 +36,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final view = const InventorySearch().query(index, _q, filter: _filter);
     final kicker = searchKicker(idle: view.idle, counts: view.counts);
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: AppBar(
-        backgroundColor: c.ink,
+        backgroundColor: c.ink.withValues(alpha: 0),
+        surfaceTintColor: c.ink.withValues(alpha: 0),
+        forceMaterialTransparency: true,
         foregroundColor: c.text,
         elevation: 0,
+        scrolledUnderElevation: 0,
         toolbarHeight: 64,
         title: Column(
           mainAxisSize: MainAxisSize.min,

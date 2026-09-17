@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kelola/design/kelola_components.dart'
-    show KelolaBackButton, KelolaChromeIconButton;
+    show KelolaBackButton, KelolaChromeIconButton, KelolaWashScaffold;
 import 'package:kelola/presentation/theme/kelola_fonts.dart';
 import 'package:kelola/design/kelola_theme.dart' show KelolaType;
 import 'package:kelola/presentation/theme/kelola_theme.dart';
@@ -109,40 +109,46 @@ class KelolaPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<KelolaColors>();
     final canPop = Navigator.of(context).canPop();
-    return Scaffold(
+    final resolvedBar = bar ??
+        AppBar(
+          toolbarHeight: kicker == null && kickerWidget == null ? 56 : 64,
+          backgroundColor: (colors?.ink ?? Colors.black).withValues(alpha: 0),
+          surfaceTintColor: (colors?.ink ?? Colors.black).withValues(alpha: 0),
+          forceMaterialTransparency: true,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          automaticallyImplyLeading: false,
+          leading: leading ??
+              (canPop
+                  ? const Align(
+                      alignment: Alignment.center,
+                      child: KelolaBackButton(),
+                    )
+                  : null),
+          leadingWidth: leading == null && canPop
+              ? KelolaChromeIconButton.leadingWidth
+              : null,
+          titleSpacing: KelolaChromeIconButton.titleGap,
+          title: kicker == null && kickerWidget == null
+              ? Text(title)
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: KelolaFonts.title(size: 17),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    kickerWidget ??
+                        Text(kicker!, style: KelolaFonts.eyebrow(colors!)),
+                  ],
+                ),
+          actions: actions,
+        );
+    return KelolaWashScaffold(
       floatingActionButton: fab,
-      appBar: bar ??
-          AppBar(
-        toolbarHeight: kicker == null && kickerWidget == null ? 56 : 64,
-        automaticallyImplyLeading: false,
-        leading: leading ??
-            (canPop
-                ? const Align(
-                    alignment: Alignment.center,
-                    child: KelolaBackButton(),
-                  )
-                : null),
-        leadingWidth: leading == null && canPop
-            ? KelolaChromeIconButton.leadingWidth
-            : null,
-        titleSpacing: KelolaChromeIconButton.titleGap,
-        title: kicker == null && kickerWidget == null
-            ? Text(title)
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: KelolaFonts.title(size: 17),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  kickerWidget ??
-                      Text(kicker!, style: KelolaFonts.eyebrow(colors!)),
-                ],
-              ),
-        actions: actions,
-      ),
+      appBar: resolvedBar,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
