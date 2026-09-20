@@ -3,7 +3,9 @@
 **Version name:** 0.2.5  
 **Version code:** 8  
 **Track:** Alpha (or Internal)  
-**AAB:** `build/app/outputs/bundle/release/app-release.aab`
+**AAB:** `bundles_release/v0.2.5+8/app-release-0.2.5+8.aab` (gitignored; local only)
+
+**Play paste:** `bundles_release/play-console/PLAY_STORE_v0.2.5+8.txt`
 
 ## Short description (Play “Release notes”, en-US)
 

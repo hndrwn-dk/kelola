@@ -3,7 +3,7 @@
 **Version name:** 0.2.4  
 **Version code:** 6  
 **Track:** Alpha (or Internal)  
-**AAB:** `build/app/outputs/bundle/release/app-release.aab`
+**AAB:** `bundles_release/v0.2.4+6/app-release-0.2.4+6.aab` (gitignored; local only)
 
 ## Short description (Play “Release notes”, en-US)
 
