@@ -16,8 +16,32 @@ void main() {
     final wrap = wrapper.readAsStringSync();
     expect(wrap, contains('check_play_billing'));
     expect(wrap, contains('flutter build appbundle --release'));
+    expect(wrap, contains('bundles_release'));
+    expect(wrap, contains('app-release-'));
     // Gate runs before build; set -e means a check failure aborts the AAB.
     expect(wrap, contains('set -euo pipefail'));
+  });
+
+  test('tracked Play notes point at bundles_release, not build/outputs', () {
+    final dir = Directory(p.join(root, 'docs', 'play'));
+    final notes = dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => p.basename(f.path).startsWith('release-notes-'));
+    expect(notes, isNotEmpty);
+    for (final file in notes) {
+      final src = file.readAsStringSync();
+      expect(
+        src,
+        contains('bundles_release/'),
+        reason: '${file.path} must store the AAB under bundles_release',
+      );
+      expect(
+        src,
+        isNot(contains('build/app/outputs/bundle')),
+        reason: '${file.path} must not treat Gradle output as the release store',
+      );
+    }
   });
 
   test('build_play_aab.sh refuses without pubspec_overrides.yaml', () {
