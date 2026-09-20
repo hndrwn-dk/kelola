@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kelola/app_version.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -69,7 +70,7 @@ void main() {
     expect(pack, contains('nginx.service'));
     expect(pack, contains('borgmatic.service'));
     expect(pack, contains('df -PT'));
-    expect(pack, contains('kelola: 0.2.4'));
+    expect(pack, contains('kelola: $kelolaAppVersion'));
     expect(pack, contains('flutter: 3.47'));
     expect(pack, contains('<HOST_'));
     expect(pack, isNot(contains('nas-01')));
