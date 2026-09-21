@@ -3,12 +3,21 @@
 Fill this under **Monitor and improve → App content → Foreground service**. The form applies to every typed FGS when targeting Android 14+; `specialUse` adds a free-form justification (and the matching manifest property), not a separate form.
 
 **Type in use:** `specialUse`  
+**Use case on the form:** Other  
 **Permissions added for M5:** `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, `POST_NOTIFICATIONS`  
 **Not used:** `connectedDevice` / `CHANGE_NETWORK_*` / Bluetooth / USB / NFC — Kelola does not hold those prerequisites and will not add them as padding.
 
 ---
 
-## Description (paste)
+## Play Console single field (paste)
+
+Use this in **Describe your app's use of this permission, including why the task must start immediately and cannot be paused or restarted**. ~650 characters.
+
+Kelola keeps user-started SSH local port forwards alive so admin UIs on the user's own Linux hosts stay reachable at 127.0.0.1 in the phone browser. An ongoing notification shows active tunnels and Stop all. The service must start as soon as a tunnel starts: if deferred, Android can freeze or kill the process when the user leaves Kelola for the browser, dropping the SSH session and local URL. Pause or restart closes those sockets and breaks the in-browser session until the user starts each tunnel again. The service stops when the last tunnel is stopped, idles out, or the app is removed from Recents. No other FGS type fits (not media, location, health, sync, or a connected accessory).
+
+---
+
+## Description (long reference)
 
 Kelola opens local SSH port forwards so the user can reach admin UIs on their own Linux hosts (for example Cockpit or Grafana) from the phone browser. While one or more forwards are active, the app runs a foreground service with an ongoing notification that shows how many tunnels are open and which host aliases they belong to. The service exists only to keep those SSH sessions and loopback listeners alive and to give the user a single **Stop all** action. Listening sockets bind only to 127.0.0.1. The service stops as soon as the last tunnel closes (user stop, idle timeout after no forwarded connections, or app removal from recents).
 

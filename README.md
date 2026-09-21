@@ -8,6 +8,8 @@ Kelola is a Flutter client (Android and iOS) from Tursina Labs. It SSHs in with 
 
 **Not (v1):** a monitoring product, an Ansible replacement, a multi-user team tool, or a cloud account. There is no Tursina backend and no telemetry.
 
+Kelola has **LLM incident assist** (Explain / Summarise / Propose): explicit, redacted, and previewed. It does **not** have terminal autocomplete. The terminal never calls a model.
+
 ## How it works
 
 1. The phone generates an ECDSA P-256 key in **Android StrongBox** or **iOS Secure Enclave**. The private key is non-exportable; signing is biometric-gated.
@@ -31,6 +33,10 @@ One hardware key per phone, reused for every host. That is intentional.
 | Disk (`df` + `du`), processes, containers (start/stop/restart/logs), SFTP files | Working |
 | Local audit log (write-before-exec, JSON copy) | Working |
 | Read-only host switch | Enforced at the SSH dispatcher |
+| Fleet health grid (read-only) | Working; Play builds cap free fleet at 3 hosts |
+| Assist (Explain / Summarise / Propose) | Working; no terminal autocomplete |
+| Tunnels (SSH local port forward) | Working; Play builds gate behind a one-time unlock |
+| Snippets, home widget, OS shortcuts | Working |
 
 
 ## Screenshots
@@ -96,8 +102,10 @@ readiness/         product spec and milestone plan
 
 ## Support
 
-Kelola is free and open source, with no accounts, no telemetry, and no
-paywalled features. If it saves you time, you can support development:
+Kelola is free and open source, with no accounts and no telemetry. Source and
+debug builds unlock every feature. Play builds gate tunnels and unlimited fleet
+hosts behind a one-time unlock; later items in that bundle ship to the same
+purchase at no further cost. If it saves you time, you can support development:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/hendrawandaryonokarso)
 
