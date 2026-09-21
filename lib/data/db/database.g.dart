@@ -6927,6 +6927,272 @@ class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
   }
 }
 
+class $CommandHistoryTable extends CommandHistory
+    with TableInfo<$CommandHistoryTable, CommandHistoryRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CommandHistoryTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _commandMeta = const VerificationMeta(
+    'command',
+  );
+  @override
+  late final GeneratedColumn<String> command = GeneratedColumn<String>(
+    'command',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _usedAtMeta = const VerificationMeta('usedAt');
+  @override
+  late final GeneratedColumn<DateTime> usedAt = GeneratedColumn<DateTime>(
+    'used_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [hostId, command, usedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'command_history';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CommandHistoryRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('command')) {
+      context.handle(
+        _commandMeta,
+        command.isAcceptableOrUnknown(data['command']!, _commandMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_commandMeta);
+    }
+    if (data.containsKey('used_at')) {
+      context.handle(
+        _usedAtMeta,
+        usedAt.isAcceptableOrUnknown(data['used_at']!, _usedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_usedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {hostId, command};
+  @override
+  CommandHistoryRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CommandHistoryRow(
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      command: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}command'],
+      )!,
+      usedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}used_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CommandHistoryTable createAlias(String alias) {
+    return $CommandHistoryTable(attachedDatabase, alias);
+  }
+}
+
+class CommandHistoryRow extends DataClass
+    implements Insertable<CommandHistoryRow> {
+  final String hostId;
+  final String command;
+  final DateTime usedAt;
+  const CommandHistoryRow({
+    required this.hostId,
+    required this.command,
+    required this.usedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['host_id'] = Variable<String>(hostId);
+    map['command'] = Variable<String>(command);
+    map['used_at'] = Variable<DateTime>(usedAt);
+    return map;
+  }
+
+  CommandHistoryCompanion toCompanion(bool nullToAbsent) {
+    return CommandHistoryCompanion(
+      hostId: Value(hostId),
+      command: Value(command),
+      usedAt: Value(usedAt),
+    );
+  }
+
+  factory CommandHistoryRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CommandHistoryRow(
+      hostId: serializer.fromJson<String>(json['hostId']),
+      command: serializer.fromJson<String>(json['command']),
+      usedAt: serializer.fromJson<DateTime>(json['usedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'hostId': serializer.toJson<String>(hostId),
+      'command': serializer.toJson<String>(command),
+      'usedAt': serializer.toJson<DateTime>(usedAt),
+    };
+  }
+
+  CommandHistoryRow copyWith({
+    String? hostId,
+    String? command,
+    DateTime? usedAt,
+  }) => CommandHistoryRow(
+    hostId: hostId ?? this.hostId,
+    command: command ?? this.command,
+    usedAt: usedAt ?? this.usedAt,
+  );
+  CommandHistoryRow copyWithCompanion(CommandHistoryCompanion data) {
+    return CommandHistoryRow(
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      command: data.command.present ? data.command.value : this.command,
+      usedAt: data.usedAt.present ? data.usedAt.value : this.usedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CommandHistoryRow(')
+          ..write('hostId: $hostId, ')
+          ..write('command: $command, ')
+          ..write('usedAt: $usedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(hostId, command, usedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CommandHistoryRow &&
+          other.hostId == this.hostId &&
+          other.command == this.command &&
+          other.usedAt == this.usedAt);
+}
+
+class CommandHistoryCompanion extends UpdateCompanion<CommandHistoryRow> {
+  final Value<String> hostId;
+  final Value<String> command;
+  final Value<DateTime> usedAt;
+  final Value<int> rowid;
+  const CommandHistoryCompanion({
+    this.hostId = const Value.absent(),
+    this.command = const Value.absent(),
+    this.usedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CommandHistoryCompanion.insert({
+    required String hostId,
+    required String command,
+    required DateTime usedAt,
+    this.rowid = const Value.absent(),
+  }) : hostId = Value(hostId),
+       command = Value(command),
+       usedAt = Value(usedAt);
+  static Insertable<CommandHistoryRow> custom({
+    Expression<String>? hostId,
+    Expression<String>? command,
+    Expression<DateTime>? usedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (hostId != null) 'host_id': hostId,
+      if (command != null) 'command': command,
+      if (usedAt != null) 'used_at': usedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CommandHistoryCompanion copyWith({
+    Value<String>? hostId,
+    Value<String>? command,
+    Value<DateTime>? usedAt,
+    Value<int>? rowid,
+  }) {
+    return CommandHistoryCompanion(
+      hostId: hostId ?? this.hostId,
+      command: command ?? this.command,
+      usedAt: usedAt ?? this.usedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (command.present) {
+      map['command'] = Variable<String>(command.value);
+    }
+    if (usedAt.present) {
+      map['used_at'] = Variable<DateTime>(usedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CommandHistoryCompanion(')
+          ..write('hostId: $hostId, ')
+          ..write('command: $command, ')
+          ..write('usedAt: $usedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$KelolaDatabase extends GeneratedDatabase {
   _$KelolaDatabase(QueryExecutor e) : super(e);
   $KelolaDatabaseManager get managers => $KelolaDatabaseManager(this);
@@ -6944,6 +7210,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
   late final $HostTagsTable hostTags = $HostTagsTable(this);
   late final $FleetCacheTable fleetCache = $FleetCacheTable(this);
   late final $TunnelTargetsTable tunnelTargets = $TunnelTargetsTable(this);
+  late final $CommandHistoryTable commandHistory = $CommandHistoryTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6961,6 +7228,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     hostTags,
     fleetCache,
     tunnelTargets,
+    commandHistory,
   ];
 }
 
@@ -10388,6 +10656,178 @@ typedef $$TunnelTargetsTableProcessedTableManager =
       TunnelTargetRow,
       PrefetchHooks Function()
     >;
+typedef $$CommandHistoryTableCreateCompanionBuilder =
+    CommandHistoryCompanion Function({
+      required String hostId,
+      required String command,
+      required DateTime usedAt,
+      Value<int> rowid,
+    });
+typedef $$CommandHistoryTableUpdateCompanionBuilder =
+    CommandHistoryCompanion Function({
+      Value<String> hostId,
+      Value<String> command,
+      Value<DateTime> usedAt,
+      Value<int> rowid,
+    });
+
+class $$CommandHistoryTableFilterComposer
+    extends Composer<_$KelolaDatabase, $CommandHistoryTable> {
+  $$CommandHistoryTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get command => $composableBuilder(
+    column: $table.command,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get usedAt => $composableBuilder(
+    column: $table.usedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CommandHistoryTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $CommandHistoryTable> {
+  $$CommandHistoryTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get command => $composableBuilder(
+    column: $table.command,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get usedAt => $composableBuilder(
+    column: $table.usedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CommandHistoryTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $CommandHistoryTable> {
+  $$CommandHistoryTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get command =>
+      $composableBuilder(column: $table.command, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get usedAt =>
+      $composableBuilder(column: $table.usedAt, builder: (column) => column);
+}
+
+class $$CommandHistoryTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $CommandHistoryTable,
+          CommandHistoryRow,
+          $$CommandHistoryTableFilterComposer,
+          $$CommandHistoryTableOrderingComposer,
+          $$CommandHistoryTableAnnotationComposer,
+          $$CommandHistoryTableCreateCompanionBuilder,
+          $$CommandHistoryTableUpdateCompanionBuilder,
+          (
+            CommandHistoryRow,
+            BaseReferences<
+              _$KelolaDatabase,
+              $CommandHistoryTable,
+              CommandHistoryRow
+            >,
+          ),
+          CommandHistoryRow,
+          PrefetchHooks Function()
+        > {
+  $$CommandHistoryTableTableManager(
+    _$KelolaDatabase db,
+    $CommandHistoryTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CommandHistoryTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CommandHistoryTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CommandHistoryTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> hostId = const Value.absent(),
+                Value<String> command = const Value.absent(),
+                Value<DateTime> usedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CommandHistoryCompanion(
+                hostId: hostId,
+                command: command,
+                usedAt: usedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String hostId,
+                required String command,
+                required DateTime usedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CommandHistoryCompanion.insert(
+                hostId: hostId,
+                command: command,
+                usedAt: usedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CommandHistoryTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $CommandHistoryTable,
+      CommandHistoryRow,
+      $$CommandHistoryTableFilterComposer,
+      $$CommandHistoryTableOrderingComposer,
+      $$CommandHistoryTableAnnotationComposer,
+      $$CommandHistoryTableCreateCompanionBuilder,
+      $$CommandHistoryTableUpdateCompanionBuilder,
+      (
+        CommandHistoryRow,
+        BaseReferences<
+          _$KelolaDatabase,
+          $CommandHistoryTable,
+          CommandHistoryRow
+        >,
+      ),
+      CommandHistoryRow,
+      PrefetchHooks Function()
+    >;
 
 class $KelolaDatabaseManager {
   final _$KelolaDatabase _db;
@@ -10415,4 +10855,6 @@ class $KelolaDatabaseManager {
       $$FleetCacheTableTableManager(_db, _db.fleetCache);
   $$TunnelTargetsTableTableManager get tunnelTargets =>
       $$TunnelTargetsTableTableManager(_db, _db.tunnelTargets);
+  $$CommandHistoryTableTableManager get commandHistory =>
+      $$CommandHistoryTableTableManager(_db, _db.commandHistory);
 }

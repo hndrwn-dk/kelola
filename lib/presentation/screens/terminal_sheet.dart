@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/command_history/command_history.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/keep_awake/keep_awake.dart';
 import 'package:kelola/domain/probes/command_runner_probe.dart';
@@ -39,9 +40,12 @@ class CommandSheet extends ConsumerStatefulWidget {
 class _CommandSheetState extends ConsumerState<CommandSheet> {
   final _out = StringBuffer();
   final _input = TextEditingController();
+  final _historySearch = TextEditingController();
   final _scroll = ScrollController();
   String? _error;
   bool _busy = false;
+  bool _historyOpen = false;
+  List<String> _history = const [];
   late final KeepAwake _keepAwake;
 
   @override
@@ -55,6 +59,7 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
   void dispose() {
     unawaited(_keepAwake.release('command'));
     _input.dispose();
+    _historySearch.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -64,10 +69,17 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     if (line.isEmpty || _busy) {
       return;
     }
+    await ref
+        .read(hostRepositoryProvider)
+        .recordCommandHistory(widget.host.id, line);
+    if (!mounted) {
+      return;
+    }
     _input.clear();
     setState(() {
       _busy = true;
       _error = null;
+      _historyOpen = false;
     });
     try {
       await ref.read(enrollmentProvider.notifier).ensureKey();
@@ -142,12 +154,12 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
         settings: settings,
         request: request,
         run: (s) => s.proposeFromIntent(
-              settings: settings,
-              intent: intent,
-              context: assistCtx,
-              hostnames: hostnames,
-              usernames: usernames,
-            ),
+          settings: settings,
+          intent: intent,
+          context: assistCtx,
+          hostnames: hostnames,
+          usernames: usernames,
+        ),
       );
       if (!mounted || proposal == null) {
         return;
@@ -203,6 +215,35 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     });
   }
 
+  Future<void> _toggleHistory() async {
+    if (_busy) {
+      return;
+    }
+    if (_historyOpen) {
+      setState(() => _historyOpen = false);
+      return;
+    }
+    final items = await ref
+        .read(hostRepositoryProvider)
+        .listCommandHistory(widget.host.id);
+    if (!mounted) {
+      return;
+    }
+    _historySearch.clear();
+    setState(() {
+      _historyOpen = true;
+      _history = items;
+    });
+  }
+
+  void _pickHistory(String line) {
+    _input.value = TextEditingValue(
+      text: line,
+      selection: TextSelection.collapsed(offset: line.length),
+    );
+    setState(() => _historyOpen = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
@@ -241,19 +282,7 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
                   borderRadius: BorderRadius.circular(KelolaRadii.md),
                   border: Border.all(color: c.line),
                 ),
-                child: SingleChildScrollView(
-                  controller: _scroll,
-                  child: _out.isEmpty
-                      ? Text(
-                          commandRunnerEmptyCopy,
-                          style: KelolaType.body(color: c.muted, size: 13),
-                        )
-                      : SelectableText(
-                          _out.toString(),
-                          style: KelolaType.mono(color: c.text, size: 12)
-                              .copyWith(height: 1.45),
-                        ),
-                ),
+                child: _historyOpen ? _historyPane(c) : _outputPane(c),
               ),
             ),
             const SizedBox(height: 10),
@@ -275,9 +304,90 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
               meta: 'assist · catalog only',
               onTap: _busy ? null : _propose,
             ),
+            const SizedBox(height: 8),
+            ServiceRow(
+              risk: RiskLevel.read,
+              name: 'History',
+              meta: _historyOpen ? 'close' : 'this host',
+              onTap: _busy ? null : _toggleHistory,
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _outputPane(KelolaColors c) {
+    return SingleChildScrollView(
+      controller: _scroll,
+      child: _out.isEmpty
+          ? Text(
+              commandRunnerEmptyCopy,
+              style: KelolaType.body(color: c.muted, size: 13),
+            )
+          : SelectableText(
+              _out.toString(),
+              style: KelolaType.mono(
+                color: c.text,
+                size: 12,
+              ).copyWith(height: 1.45),
+            ),
+    );
+  }
+
+  Widget _historyPane(KelolaColors c) {
+    final filtered = filterCommandHistory(_history, _historySearch.text);
+    final emptyCopy = _historySearch.text.trim().isEmpty
+        ? commandHistoryEmptyCopy
+        : commandHistoryNoMatchCopy;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _historySearch,
+          style: KelolaType.mono(color: c.text, size: 13),
+          decoration: InputDecoration(
+            hintText: 'search commands',
+            hintStyle: KelolaType.body(color: c.dim, size: 13),
+            isDense: true,
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: filtered.isEmpty
+              ? Text(
+                  emptyCopy,
+                  style: KelolaType.body(color: c.muted, size: 13),
+                )
+              : ListView.separated(
+                  padding: kelolaScrollPadding(
+                    context,
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    extraBottom: 8,
+                  ),
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
+                  itemBuilder: (context, i) {
+                    final line = filtered[i];
+                    return InkWell(
+                      onTap: () => _pickHistory(line),
+                      child: RiskBand(
+                        risk: RiskLevel.read,
+                        child: Text(
+                          line,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: KelolaType.mono(color: c.text, size: 12),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }

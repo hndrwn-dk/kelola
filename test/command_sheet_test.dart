@@ -3,30 +3,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/app.dart';
 import 'package:kelola/data/db/database.dart';
+import 'package:kelola/data/db/host_repository.dart';
+import 'package:kelola/domain/command_history/command_history.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/command_runner_probe.dart';
 import 'package:kelola/presentation/screens/terminal_sheet.dart';
 import 'package:kelola/providers.dart';
 
+const _host = Host(
+  id: 'h1',
+  alias: 'east-worker-uat',
+  address: '10.0.0.1',
+  port: 22,
+  username: 'hendr',
+  keyAlias: 'kelola',
+);
+
+Widget _sheet(KelolaDatabase db, {Host host = _host}) {
+  return ProviderScope(
+    overrides: [databaseProvider.overrideWithValue(db)],
+    child: KelolaApp(home: CommandSheet(host: host)),
+  );
+}
+
 void main() {
-  testWidgets('sheet copy is a command runner, not a live terminal',
-      (tester) async {
+  testWidgets('sheet copy is a command runner, not a live terminal', (
+    tester,
+  ) async {
     final db = KelolaDatabase.memory();
     addTearDown(db.close);
-    const host = Host(
-      id: 'h1',
-      alias: 'east-worker-uat',
-      address: '10.0.0.1',
-      port: 22,
-      username: 'hendr',
-      keyAlias: 'kelola',
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(db)],
-        child: const KelolaApp(home: CommandSheet(host: host)),
-      ),
-    );
+    await tester.pumpWidget(_sheet(db));
     await tester.pumpAndSettle();
 
     expect(find.text('east-worker-uat'), findsOneWidget);
@@ -37,5 +43,85 @@ void main() {
     expect(find.text('SSH'), findsNothing);
     expect(find.textContaining('one command'), findsOneWidget);
     expect(find.text('Propose'), findsOneWidget);
+    expect(find.text('History'), findsOneWidget);
+  });
+
+  testWidgets('History empty copy is per-host and stays in the sheet', (
+    tester,
+  ) async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    await tester.pumpWidget(_sheet(db));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(commandHistoryEmptyCopy), findsOneWidget);
+    expect(find.text(commandRunnerEmptyCopy), findsNothing);
+    expect(find.textContaining('search commands'), findsOneWidget);
+  });
+
+  testWidgets('History lists this host and filling a line restores output', (
+    tester,
+  ) async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    final repo = HostRepository(db);
+    final host = await repo.insert(
+      alias: 'east-worker-uat',
+      address: '10.0.0.1',
+      port: 22,
+      username: 'hendr',
+    );
+    await repo.recordCommandHistory(host.id, 'df -h');
+    await repo.recordCommandHistory(host.id, 'uptime');
+
+    await tester.pumpWidget(_sheet(db, host: host));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('uptime'), findsOneWidget);
+    expect(find.text('df -h'), findsOneWidget);
+    expect(find.text(commandRunnerEmptyCopy), findsNothing);
+
+    await tester.tap(find.text('uptime'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(commandRunnerEmptyCopy), findsOneWidget);
+    expect(find.text('df -h'), findsNothing);
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, 'uptime');
+  });
+
+  testWidgets('History filter is a local substring', (tester) async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    final repo = HostRepository(db);
+    final host = await repo.insert(
+      alias: 'east-worker-uat',
+      address: '10.0.0.1',
+      port: 22,
+      username: 'hendr',
+    );
+    await repo.recordCommandHistory(host.id, 'uptime');
+    await repo.recordCommandHistory(host.id, 'systemctl status nginx');
+
+    await tester.pumpWidget(_sheet(db, host: host));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, 'SYS');
+    await tester.pump();
+
+    expect(find.text('systemctl status nginx'), findsOneWidget);
+    expect(find.text('uptime'), findsNothing);
+
+    await tester.enterText(find.byType(TextField).first, 'zzz');
+    await tester.pump();
+    expect(find.text(commandHistoryNoMatchCopy), findsOneWidget);
   });
 }
