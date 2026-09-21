@@ -8,6 +8,7 @@ import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/db/tunnel_repository.dart';
+import 'package:kelola/data/keep_awake/wakelock_plus_port.dart';
 import 'package:kelola/data/keystore/hardware_signer.dart';
 import 'package:kelola/data/keystore/method_channel_hardware_signer.dart';
 import 'package:kelola/data/ssh/host_key_policy.dart';
@@ -19,6 +20,7 @@ import 'package:kelola/data/widget/home_widget_bridge.dart';
 import 'package:kelola/data/llm/assist_service.dart';
 import 'package:kelola/data/llm/dart_io_llm_http.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/keep_awake/keep_awake.dart';
 import 'package:kelola/domain/incident/correlation.dart';
 import 'package:kelola/domain/llm/preview_gate.dart';
 import 'package:kelola/domain/llm/settings.dart';
@@ -44,6 +46,10 @@ final hostRepositoryProvider = Provider<HostRepository>((ref) {
 
 final hardwareSignerProvider = Provider<HardwareSigner>((ref) {
   return MethodChannelHardwareSigner();
+});
+
+final keepAwakeProvider = Provider<KeepAwake>((ref) {
+  return KeepAwake(WakelockPlusPort());
 });
 
 final enrollmentProvider =

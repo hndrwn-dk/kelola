@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
@@ -60,5 +61,48 @@ void main() {
       find.widgetWithText(FilledButton, 'Confirm'),
     );
     expect(armed.onPressed, isNotNull);
+  });
+
+  testWidgets('medium haptic once on first token match, again after rematch',
+      (tester) async {
+    final types = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          types.add(call.arguments as String);
+        }
+        return null;
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildKelolaDarkTheme(),
+        home: Scaffold(
+          body: DestructiveConfirmSheet(
+            title: 'Reboot nas-01?',
+            consequence: 'The host will restart.',
+            warning: 'SSH will drop.',
+            confirmToken: 'nas-01',
+            onConfirmed: () {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'nas-01');
+    await tester.pump();
+    expect(types, ['HapticFeedbackType.mediumImpact']);
+
+    await tester.enterText(find.byType(TextField), 'nas-01x');
+    await tester.pump();
+    expect(types, ['HapticFeedbackType.mediumImpact']);
+
+    await tester.enterText(find.byType(TextField), 'nas-01');
+    await tester.pump();
+    expect(types, [
+      'HapticFeedbackType.mediumImpact',
+      'HapticFeedbackType.mediumImpact',
+    ]);
   });
 }

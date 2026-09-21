@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/domain/deep_link.dart';
-import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
+import 'package:kelola/presentation/kelola_link_open.dart';
+import 'package:kelola/presentation/os_shortcut_sync.dart';
+import 'package:kelola/presentation/tunnels_keep_awake.dart';
 import 'package:kelola/presentation/screens/hosts_screen.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
+import 'package:kelola/providers.dart';
 
 class BootGate extends ConsumerStatefulWidget {
   const BootGate({super.key});
@@ -13,8 +16,7 @@ class BootGate extends ConsumerStatefulWidget {
 }
 
 class _BootGateState extends ConsumerState<BootGate> {
-  String? _hostId;
-  var _incident = false;
+  Widget? _home;
   var _ready = false;
 
   @override
@@ -27,12 +29,15 @@ class _BootGateState extends ConsumerState<BootGate> {
     final link = parseKelolaLink(
       WidgetsBinding.instance.platformDispatcher.defaultRouteName,
     );
+    final dash = await dashboardForLink(
+      ref.read(hostRepositoryProvider),
+      link,
+    );
     if (!mounted) {
       return;
     }
     setState(() {
-      _hostId = link.hostId;
-      _incident = link.incident;
+      _home = dash ?? const HostsScreen();
       _ready = true;
     });
   }
@@ -44,10 +49,8 @@ class _BootGateState extends ConsumerState<BootGate> {
         body: Center(child: KelolaSpinner()),
       );
     }
-    final id = _hostId;
-    if (id == null || id.isEmpty) {
-      return const HostsScreen();
-    }
-    return HostDashboardScreen(hostId: id, openIncident: _incident);
+    return TunnelsKeepAwake(
+      child: OsShortcutSync(child: _home ?? const HostsScreen()),
+    );
   }
 }

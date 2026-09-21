@@ -37,6 +37,7 @@ class MethodChannelHardwareSigner implements HardwareSigner {
     if (raw == null) {
       throw HardwareSignerException('sign returned nothing');
     }
+    await HapticFeedback.lightImpact();
     return _bytes(raw);
   }
 
@@ -45,6 +46,7 @@ class MethodChannelHardwareSigner implements HardwareSigner {
     String reason = 'Confirm destructive action',
   }) async {
     await _channel.invokeMethod<void>('confirmPresence', {'reason': reason});
+    await HapticFeedback.lightImpact();
   }
 
   static Uint8List _bytes(dynamic raw) {

@@ -8,6 +8,7 @@ import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/keep_awake/keep_awake.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
 import 'package:kelola/domain/journal/journal_follow.dart';
 import 'package:kelola/domain/journal/journal_view.dart';
@@ -58,12 +59,14 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
   String? _older;
   JournalFollowHandle? _follow;
   final _scroll = ScrollController();
+  late final KeepAwake _keepAwake;
 
   bool get _journalFiltersEnabled => _hasJournald && !_usedSyslog;
 
   @override
   void initState() {
     super.initState();
+    _keepAwake = ref.read(keepAwakeProvider);
     _priority = widget.unit != null ? 3 : null;
     _load(reset: true);
   }
@@ -74,6 +77,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
     final follow = _follow;
     _follow = null;
     follow?.cancel();
+    unawaited(_keepAwake.release('follow'));
     _scroll.dispose();
     super.dispose();
   }
@@ -302,6 +306,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
         return;
       }
       _follow = handle;
+      unawaited(_keepAwake.acquire('follow'));
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -316,6 +321,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
     final handle = _follow;
     _follow = null;
     await handle?.cancel();
+    await _keepAwake.release('follow');
   }
 
   void _setFilter(VoidCallback change) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import 'package:kelola/domain/files/sftp_list_view.dart';
 import 'package:kelola/domain/files/sftp_path.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/keep_awake/keep_awake.dart';
 import 'package:kelola/domain/probes/sftp_probe.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/screens/file_editor_screen.dart';
@@ -81,12 +83,34 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   bool _loading = true;
   bool _showHidden = false;
   _Transfer? _transfer;
+  late final KeepAwake _keepAwake;
 
   @override
   void initState() {
     super.initState();
+    _keepAwake = ref.read(keepAwakeProvider);
     _path = widget.initialPath;
     _load();
+  }
+
+  @override
+  void dispose() {
+    _transfer?.cancel.cancel();
+    unawaited(_keepAwake.release('transfer'));
+    super.dispose();
+  }
+
+  void _holdTransfer(_Transfer xfer) {
+    _transfer = xfer;
+    unawaited(_keepAwake.acquire('transfer'));
+  }
+
+  void _clearTransfer() {
+    if (_transfer == null) {
+      return;
+    }
+    _transfer = null;
+    unawaited(_keepAwake.release('transfer'));
   }
 
   Future<void> _load() async {
@@ -415,7 +439,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final dir = await Directory.systemTemp.createTemp('kelola-edit');
     final local = File('${dir.path}/${e.name}');
     final xfer = _Transfer(label: 'Download ${e.name}');
-    setState(() => _transfer = xfer);
+    setState(() => _holdTransfer(xfer));
     final bytes = await _run(
       SftpDownloadProbe(remotePath: e.path, localPath: local.path),
       cancel: xfer.cancel,
@@ -432,7 +456,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (!mounted) {
       return;
     }
-    setState(() => _transfer = null);
+    setState(_clearTransfer);
     if (bytes == null || !local.existsSync()) {
       return;
     }
@@ -473,7 +497,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final dest = File('${(await _transferDir()).path}/${e.name}');
     final xfer = _Transfer(label: 'Download ${e.name}');
     setState(() {
-      _transfer = xfer;
+      _holdTransfer(xfer);
       _error = null;
     });
     final n = await _run(
@@ -492,7 +516,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (!mounted) {
       return;
     }
-    setState(() => _transfer = null);
+    setState(_clearTransfer);
     if (n != null) {
       setState(() => _error = null);
       if (!mounted) {
@@ -682,7 +706,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       return;
     }
     final xfer = _Transfer(label: 'Upload $name');
-    setState(() => _transfer = xfer);
+    setState(() => _holdTransfer(xfer));
     await _run(
       SftpUploadProbe(localPath: chosen.path, remotePath: remote),
       cancel: xfer.cancel,
@@ -697,7 +721,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       },
     );
     if (mounted) {
-      setState(() => _transfer = null);
+      setState(_clearTransfer);
     }
     await _load();
   }

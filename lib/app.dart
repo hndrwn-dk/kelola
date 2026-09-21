@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/deep_link.dart';
+import 'package:kelola/presentation/kelola_link_open.dart';
 import 'package:kelola/presentation/screens/boot_gate.dart';
-import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart' as legacy;
+import 'package:kelola/providers.dart';
 
 final kelolaNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -36,7 +38,7 @@ class _KelolaAppState extends State<KelolaApp> {
     super.initState();
     _links.setMethodCallHandler((call) async {
       if (call.method == 'opened' && call.arguments is String) {
-        _openLink(call.arguments as String);
+        await _openLink(call.arguments as String);
       }
     });
   }
@@ -47,18 +49,20 @@ class _KelolaAppState extends State<KelolaApp> {
     super.dispose();
   }
 
-  void _openLink(String raw) {
-    final link = parseKelolaLink(raw);
-    final id = link.hostId;
-    if (id == null || id.isEmpty) {
+  Future<void> _openLink(String raw) async {
+    final nav = kelolaNavigatorKey.currentState;
+    final context = kelolaNavigatorKey.currentContext;
+    if (nav == null || context == null || !context.mounted) {
       return;
     }
-    kelolaNavigatorKey.currentState?.push(
+    final repo = ProviderScope.containerOf(context).read(hostRepositoryProvider);
+    final dash = await dashboardForLink(repo, parseKelolaLink(raw));
+    if (dash == null || !nav.mounted) {
+      return;
+    }
+    nav.push(
       MaterialPageRoute<void>(
-        builder: (_) => HostDashboardScreen(
-          hostId: id,
-          openIncident: link.incident,
-        ),
+        builder: (_) => dash,
       ),
     );
   }
