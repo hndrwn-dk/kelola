@@ -15,15 +15,25 @@ import 'package:kelola/presentation/screens/unit_detail_screen.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 import 'package:kelola/providers.dart';
 
+bool unitFocusFound(Iterable<String> names, String? focusUnitName) {
+  final name = focusUnitName;
+  if (name == null || name.isEmpty) {
+    return false;
+  }
+  return names.contains(name);
+}
+
 class UnitsScreen extends ConsumerStatefulWidget {
   const UnitsScreen({
     super.key,
     required this.hostId,
     this.failedOnly = true,
+    this.focusUnitName,
   });
 
   final String hostId;
   final bool failedOnly;
+  final String? focusUnitName;
 
   @override
   ConsumerState<UnitsScreen> createState() => _UnitsScreenState();
@@ -39,6 +49,7 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
   String _q = '';
   bool _searching = false;
   bool _landed = false;
+  bool _focused = false;
 
   @override
   void initState() {
@@ -97,8 +108,45 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
     } finally {
       if (mounted) {
         setState(() => _loading = false);
+        _maybeFocusUnit();
       }
     }
+  }
+
+  void _maybeFocusUnit() {
+    if (_focused) {
+      return;
+    }
+    final name = widget.focusUnitName;
+    if (name == null || name.isEmpty) {
+      return;
+    }
+    _focused = true;
+    final names = _result?.units.map((u) => u.name) ?? const <String>[];
+    final found = unitFocusFound(names, name);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      if (!found) {
+        Navigator.of(context).pop();
+        return;
+      }
+      final host = _host;
+      if (host == null) {
+        Navigator.of(context).pop();
+        return;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => UnitDetailScreen(
+            host: host,
+            facts: _facts ?? HostFacts.undiscovered,
+            unitName: name,
+          ),
+        ),
+      );
+    });
   }
 
   UnitListView get _view {

@@ -105,15 +105,38 @@ String formatDashboardGiBPair({required int kibUsed, required int kibTotal}) {
   return '${g(kibUsed)} / ${g(kibTotal)} GiB';
 }
 
+enum DeepLinkDestination { none, incident, unit, tunnels }
+
+DeepLinkDestination dashboardDeepLinkDestination({
+  required bool openTunnels,
+  String? openUnitName,
+  required bool openIncident,
+}) {
+  if (openTunnels) {
+    return DeepLinkDestination.tunnels;
+  }
+  if (openUnitName != null && openUnitName.isNotEmpty) {
+    return DeepLinkDestination.unit;
+  }
+  if (openIncident) {
+    return DeepLinkDestination.incident;
+  }
+  return DeepLinkDestination.none;
+}
+
 class HostDashboardScreen extends ConsumerStatefulWidget {
   const HostDashboardScreen({
     super.key,
     required this.hostId,
     this.openIncident = false,
+    this.openTunnels = false,
+    this.openUnitName,
   });
 
   final String hostId;
   final bool openIncident;
+  final bool openTunnels;
+  final String? openUnitName;
 
   @override
   ConsumerState<HostDashboardScreen> createState() =>
@@ -127,7 +150,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   int? _pendingUpdates;
   String? _error;
   bool _loading = true;
-  var _openedIncident = false;
+  var _openedDeepLink = false;
 
   @override
   void initState() {
@@ -234,25 +257,54 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     } finally {
       if (mounted) {
         setState(() => _loading = false);
-        _maybeOpenIncident();
+        _maybeOpenDeepLink();
       }
     }
   }
 
-  void _maybeOpenIncident() {
-    if (!widget.openIncident || _openedIncident) {
+  void _maybeOpenDeepLink() {
+    if (_openedDeepLink) {
+      return;
+    }
+    final dest = dashboardDeepLinkDestination(
+      openTunnels: widget.openTunnels,
+      openUnitName: widget.openUnitName,
+      openIncident: widget.openIncident,
+    );
+    if (dest == DeepLinkDestination.none) {
       return;
     }
     final host = _host;
     if (host == null) {
       return;
     }
-    _openedIncident = true;
+    _openedDeepLink = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
       }
-      openHostIncident(context, ref, host);
+      switch (dest) {
+        case DeepLinkDestination.tunnels:
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => TunnelsScreen(hostId: widget.hostId),
+            ),
+          );
+        case DeepLinkDestination.unit:
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => UnitsScreen(
+                hostId: widget.hostId,
+                failedOnly: false,
+                focusUnitName: widget.openUnitName,
+              ),
+            ),
+          );
+        case DeepLinkDestination.incident:
+          openHostIncident(context, ref, host);
+        case DeepLinkDestination.none:
+          break;
+      }
     });
   }
 

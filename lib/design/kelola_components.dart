@@ -1222,6 +1222,7 @@ class DestructiveConfirmSheet extends StatefulWidget {
 
 class _DestructiveConfirmSheetState extends State<DestructiveConfirmSheet> {
   final _controller = TextEditingController();
+  bool _wasMatch = false;
   bool get _match => _controller.text.trim() == widget.confirmToken;
 
   @override
@@ -1288,7 +1289,14 @@ class _DestructiveConfirmSheetState extends State<DestructiveConfirmSheet> {
           const SizedBox(height: 7),
           TextField(
             controller: _controller,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) {
+              final now = _match;
+              if (now && !_wasMatch) {
+                HapticFeedback.mediumImpact();
+              }
+              _wasMatch = now;
+              setState(() {});
+            },
             style: KelolaType.mono(color: c.text, size: 12),
             decoration: InputDecoration(
               hintText: widget.confirmToken,

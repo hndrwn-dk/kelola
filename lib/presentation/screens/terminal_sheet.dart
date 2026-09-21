@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/keep_awake/keep_awake.dart';
 import 'package:kelola/domain/probes/command_runner_probe.dart';
 import 'package:kelola/presentation/assist_flow.dart';
 import 'package:kelola/presentation/assist_proposal.dart';
@@ -39,9 +42,18 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
   final _scroll = ScrollController();
   String? _error;
   bool _busy = false;
+  late final KeepAwake _keepAwake;
+
+  @override
+  void initState() {
+    super.initState();
+    _keepAwake = ref.read(keepAwakeProvider);
+    unawaited(_keepAwake.acquire('command'));
+  }
 
   @override
   void dispose() {
+    unawaited(_keepAwake.release('command'));
     _input.dispose();
     _scroll.dispose();
     super.dispose();
