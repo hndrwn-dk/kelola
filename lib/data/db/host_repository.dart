@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/domain/audit/audit_event.dart';
+import 'package:kelola/domain/command_history/command_history.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/containers/container_row.dart';
@@ -177,6 +178,9 @@ class HostRepository {
         _db.tunnelTargets,
       )..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.recents)..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(
+        _db.commandHistory,
+      )..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.pins)..where((t) => t.hostId.equals(id))).go();
       final last = await lastHostId();
       if (last == id) {
@@ -314,6 +318,57 @@ class HostRepository {
         _db.recents,
       )..where((t) => t.id.isIn(drop.map((e) => e.id)))).go();
     }
+  }
+
+  Future<void> recordCommandHistory(
+    String hostId,
+    String command, {
+    DateTime? now,
+  }) async {
+    if (!shouldRecordCommandHistory(command)) {
+      return;
+    }
+    final line = normalizeCommandHistoryLine(command);
+    final usedAt = now ?? DateTime.now().toUtc();
+    await _db.transaction(() async {
+      await _db
+          .into(_db.commandHistory)
+          .insertOnConflictUpdate(
+            CommandHistoryCompanion.insert(
+              hostId: hostId,
+              command: line,
+              usedAt: usedAt,
+            ),
+          );
+      final extras =
+          await (_db.select(_db.commandHistory)
+                ..where((t) => t.hostId.equals(hostId))
+                ..orderBy([(t) => OrderingTerm.desc(t.usedAt)]))
+              .get();
+      if (extras.length <= kCommandHistoryCap) {
+        return;
+      }
+      final drop = extras.sublist(kCommandHistoryCap);
+      for (final row in drop) {
+        await (_db.delete(_db.commandHistory)..where(
+              (t) =>
+                  t.hostId.equals(row.hostId) & t.command.equals(row.command),
+            ))
+            .go();
+      }
+    });
+  }
+
+  Future<List<String>> listCommandHistory(
+    String hostId, {
+    String query = '',
+  }) async {
+    final rows =
+        await (_db.select(_db.commandHistory)
+              ..where((t) => t.hostId.equals(hostId))
+              ..orderBy([(t) => OrderingTerm.desc(t.usedAt)]))
+            .get();
+    return filterCommandHistory(rows.map((r) => r.command).toList(), query);
   }
 
   Future<void> setLastHost(String? id) async {
@@ -912,8 +967,7 @@ class HostRepository {
           load1: r.load1,
           nprocCores: r.nprocCores,
           memPercent: r.memPercent,
-          diskRootPercent:
-              r.diskRootPercent < 0 ? null : r.diskRootPercent,
+          diskRootPercent: r.diskRootPercent < 0 ? null : r.diskRootPercent,
           highDiskMounts: _decodeStringList(r.highDiskJson),
           failedUnitCount: r.failedUnitCount,
           pendingUpdates: r.pendingUpdates,

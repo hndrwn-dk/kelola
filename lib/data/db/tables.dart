@@ -205,3 +205,13 @@ class TunnelTargets extends Table {
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
+
+@DataClassName('CommandHistoryRow')
+class CommandHistory extends Table {
+  TextColumn get hostId => text().references(Hosts, #id)();
+  TextColumn get command => text()();
+  DateTimeColumn get usedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {hostId, command};
+}

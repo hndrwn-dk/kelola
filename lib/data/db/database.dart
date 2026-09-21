@@ -19,6 +19,7 @@ part 'database.g.dart';
     HostTags,
     FleetCache,
     TunnelTargets,
+    CommandHistory,
   ],
 )
 class KelolaDatabase extends _$KelolaDatabase {
@@ -29,7 +30,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -134,6 +135,9 @@ WHERE id = 1
       }
       if (from < 15) {
         await m.addColumn(appSettings, appSettings.appLockTimeoutSec);
+      }
+      if (from < 16) {
+        await m.createTable(commandHistory);
       }
     },
   );
