@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/app_version.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/app_lock/app_lock_timeout.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/providers.dart';
 
@@ -29,6 +30,57 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _restoreNote;
 
+  Future<void> _pickLockTimeout() async {
+    final can = ref.read(appLockAvailableProvider).asData?.value ?? false;
+    if (!can) {
+      return;
+    }
+    final c = context.kc;
+    final current = AppLockTimeout.fromSeconds(
+      ref.read(appLockTimeoutProvider).asData?.value ?? 0,
+    );
+    final chosen = await showModalBottomSheet<AppLockTimeout>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < AppLockTimeout.values.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 8),
+                  ServiceRow(
+                    risk: RiskLevel.read,
+                    name: AppLockTimeout.values[i].label,
+                    meta: AppLockTimeout.values[i] == current
+                        ? 'selected'
+                        : 'timeout',
+                    onTap: () => Navigator.of(ctx).pop(AppLockTimeout.values[i]),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (chosen == null || !mounted) {
+      return;
+    }
+    await ref.read(hostRepositoryProvider).setAppLockTimeoutSec(chosen.seconds);
+    ref.invalidate(appLockTimeoutProvider);
+  }
+
   Future<void> _restore() async {
     final result = await ref.read(entitlementProvider).restore();
     if (!mounted) {
@@ -47,6 +99,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final timeout = ref.watch(appLockTimeoutProvider).asData?.value ?? 0;
+    final canAuth = ref.watch(appLockAvailableProvider).asData?.value ?? false;
+    final lockReady = ref.watch(appLockAvailableProvider).hasValue;
     final c = context.kc;
     final entitlement = ref.watch(entitlementProvider);
     final paid = entitlementIsPaid(entitlement);
@@ -97,6 +152,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   risk: RiskLevel.read,
                   name: 'Keys stay on this device',
                   meta: 'never leave this phone',
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'App lock',
+                  meta: !lockReady
+                      ? AppLockTimeout.off.label
+                      : canAuth
+                          ? AppLockTimeout.fromSeconds(timeout).label
+                          : 'set a device screen lock first',
+                  onTap: canAuth ? _pickLockTimeout : null,
                 ),
                 const SizedBox(height: 8),
                 ServiceRow(

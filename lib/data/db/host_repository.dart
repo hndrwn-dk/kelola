@@ -953,6 +953,19 @@ class HostRepository {
         );
   }
 
+  Future<int> appLockTimeoutSec() async {
+    return (await _settings())?.appLockTimeoutSec ?? 0;
+  }
+
+  Future<void> setAppLockTimeoutSec(int value) async {
+    final existing = await _settings();
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
+          _appSettingsWrite(existing, appLockTimeoutSec: Value(value)),
+        );
+  }
+
   Future<LlmSettings> loadLlmSettings() async {
     return (await loadLlmSettingsBundle()).resolved;
   }
@@ -1021,6 +1034,7 @@ class HostRepository {
     Value<String?> llmOpenaiModel = const Value.absent(),
     Value<int> tunnelIdleMinutes = const Value.absent(),
     Value<bool> snippetLibraryReady = const Value.absent(),
+    Value<int> appLockTimeoutSec = const Value.absent(),
   }) {
     return AppSettingsCompanion(
       id: const Value(1),
@@ -1060,6 +1074,9 @@ class HostRepository {
       snippetLibraryReady: snippetLibraryReady.present
           ? snippetLibraryReady
           : Value(existing?.snippetLibraryReady ?? false),
+      appLockTimeoutSec: appLockTimeoutSec.present
+          ? appLockTimeoutSec
+          : Value(existing?.appLockTimeoutSec ?? 0),
     );
   }
 

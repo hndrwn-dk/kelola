@@ -125,6 +125,10 @@ class AppSettings extends Table {
   BoolColumn get snippetLibraryReady =>
       boolean().withDefault(const Constant(false))();
 
+  /// Seconds of background before the inventory re-locks.
+  /// `0` off, `-1` immediately, `60` / `300` / `900` otherwise.
+  IntColumn get appLockTimeoutSec => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

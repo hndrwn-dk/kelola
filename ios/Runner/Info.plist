@@ -3,7 +3,7 @@
 <plist version="1.0">
 	<dict>
 		<key>NSFaceIDUsageDescription</key>
-		<string>Kelola uses Face ID to sign SSH challenges. The private key never leaves the Secure Enclave.</string>
+		<string>Kelola uses Face ID to unlock the inventory and to sign SSH challenges. The private key never leaves the Secure Enclave.</string>
 		<key>CFBundleURLTypes</key>
 		<array>
 			<dict>

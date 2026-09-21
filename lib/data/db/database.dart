@@ -29,7 +29,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -131,6 +131,9 @@ SET snippet_library_ready = CASE
 END
 WHERE id = 1
 ''');
+      }
+      if (from < 15) {
+        await m.addColumn(appSettings, appSettings.appLockTimeoutSec);
       }
     },
   );
