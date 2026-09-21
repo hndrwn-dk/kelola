@@ -3867,6 +3867,18 @@ class $AppSettingsTable extends AppSettings
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _appLockTimeoutSecMeta = const VerificationMeta(
+    'appLockTimeoutSec',
+  );
+  @override
+  late final GeneratedColumn<int> appLockTimeoutSec = GeneratedColumn<int>(
+    'app_lock_timeout_sec',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3885,6 +3897,7 @@ class $AppSettingsTable extends AppSettings
     llmOpenaiModel,
     tunnelIdleMinutes,
     snippetLibraryReady,
+    appLockTimeoutSec,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4027,6 +4040,15 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('app_lock_timeout_sec')) {
+      context.handle(
+        _appLockTimeoutSecMeta,
+        appLockTimeoutSec.isAcceptableOrUnknown(
+          data['app_lock_timeout_sec']!,
+          _appLockTimeoutSecMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4100,6 +4122,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.bool,
         data['${effectivePrefix}snippet_library_ready'],
       )!,
+      appLockTimeoutSec: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}app_lock_timeout_sec'],
+      )!,
     );
   }
 
@@ -4131,6 +4157,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   /// True after the snippet library has been seeded once. Stops an empty
   /// table from resurrecting starters the user deleted.
   final bool snippetLibraryReady;
+
+  /// Seconds of background before the inventory re-locks.
+  /// `0` off, `-1` immediately, `60` / `300` / `900` otherwise.
+  final int appLockTimeoutSec;
   const AppSettingsRow({
     required this.id,
     this.lastHostId,
@@ -4148,6 +4178,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     this.llmOpenaiModel,
     required this.tunnelIdleMinutes,
     required this.snippetLibraryReady,
+    required this.appLockTimeoutSec,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4190,6 +4221,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     }
     map['tunnel_idle_minutes'] = Variable<int>(tunnelIdleMinutes);
     map['snippet_library_ready'] = Variable<bool>(snippetLibraryReady);
+    map['app_lock_timeout_sec'] = Variable<int>(appLockTimeoutSec);
     return map;
   }
 
@@ -4233,6 +4265,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           : Value(llmOpenaiModel),
       tunnelIdleMinutes: Value(tunnelIdleMinutes),
       snippetLibraryReady: Value(snippetLibraryReady),
+      appLockTimeoutSec: Value(appLockTimeoutSec),
     );
   }
 
@@ -4260,6 +4293,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       snippetLibraryReady: serializer.fromJson<bool>(
         json['snippetLibraryReady'],
       ),
+      appLockTimeoutSec: serializer.fromJson<int>(json['appLockTimeoutSec']),
     );
   }
   @override
@@ -4282,6 +4316,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       'llmOpenaiModel': serializer.toJson<String?>(llmOpenaiModel),
       'tunnelIdleMinutes': serializer.toJson<int>(tunnelIdleMinutes),
       'snippetLibraryReady': serializer.toJson<bool>(snippetLibraryReady),
+      'appLockTimeoutSec': serializer.toJson<int>(appLockTimeoutSec),
     };
   }
 
@@ -4302,6 +4337,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     Value<String?> llmOpenaiModel = const Value.absent(),
     int? tunnelIdleMinutes,
     bool? snippetLibraryReady,
+    int? appLockTimeoutSec,
   }) => AppSettingsRow(
     id: id ?? this.id,
     lastHostId: lastHostId.present ? lastHostId.value : this.lastHostId,
@@ -4331,6 +4367,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
         : this.llmOpenaiModel,
     tunnelIdleMinutes: tunnelIdleMinutes ?? this.tunnelIdleMinutes,
     snippetLibraryReady: snippetLibraryReady ?? this.snippetLibraryReady,
+    appLockTimeoutSec: appLockTimeoutSec ?? this.appLockTimeoutSec,
   );
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
@@ -4376,6 +4413,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       snippetLibraryReady: data.snippetLibraryReady.present
           ? data.snippetLibraryReady.value
           : this.snippetLibraryReady,
+      appLockTimeoutSec: data.appLockTimeoutSec.present
+          ? data.appLockTimeoutSec.value
+          : this.appLockTimeoutSec,
     );
   }
 
@@ -4397,7 +4437,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('llmOpenaiApiKey: $llmOpenaiApiKey, ')
           ..write('llmOpenaiModel: $llmOpenaiModel, ')
           ..write('tunnelIdleMinutes: $tunnelIdleMinutes, ')
-          ..write('snippetLibraryReady: $snippetLibraryReady')
+          ..write('snippetLibraryReady: $snippetLibraryReady, ')
+          ..write('appLockTimeoutSec: $appLockTimeoutSec')
           ..write(')'))
         .toString();
   }
@@ -4420,6 +4461,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     llmOpenaiModel,
     tunnelIdleMinutes,
     snippetLibraryReady,
+    appLockTimeoutSec,
   );
   @override
   bool operator ==(Object other) =>
@@ -4440,7 +4482,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.llmOpenaiApiKey == this.llmOpenaiApiKey &&
           other.llmOpenaiModel == this.llmOpenaiModel &&
           other.tunnelIdleMinutes == this.tunnelIdleMinutes &&
-          other.snippetLibraryReady == this.snippetLibraryReady);
+          other.snippetLibraryReady == this.snippetLibraryReady &&
+          other.appLockTimeoutSec == this.appLockTimeoutSec);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
@@ -4460,6 +4503,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<String?> llmOpenaiModel;
   final Value<int> tunnelIdleMinutes;
   final Value<bool> snippetLibraryReady;
+  final Value<int> appLockTimeoutSec;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.lastHostId = const Value.absent(),
@@ -4477,6 +4521,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.llmOpenaiModel = const Value.absent(),
     this.tunnelIdleMinutes = const Value.absent(),
     this.snippetLibraryReady = const Value.absent(),
+    this.appLockTimeoutSec = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -4495,6 +4540,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.llmOpenaiModel = const Value.absent(),
     this.tunnelIdleMinutes = const Value.absent(),
     this.snippetLibraryReady = const Value.absent(),
+    this.appLockTimeoutSec = const Value.absent(),
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
@@ -4513,6 +4559,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Expression<String>? llmOpenaiModel,
     Expression<int>? tunnelIdleMinutes,
     Expression<bool>? snippetLibraryReady,
+    Expression<int>? appLockTimeoutSec,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4532,6 +4579,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (tunnelIdleMinutes != null) 'tunnel_idle_minutes': tunnelIdleMinutes,
       if (snippetLibraryReady != null)
         'snippet_library_ready': snippetLibraryReady,
+      if (appLockTimeoutSec != null) 'app_lock_timeout_sec': appLockTimeoutSec,
     });
   }
 
@@ -4552,6 +4600,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<String?>? llmOpenaiModel,
     Value<int>? tunnelIdleMinutes,
     Value<bool>? snippetLibraryReady,
+    Value<int>? appLockTimeoutSec,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -4570,6 +4619,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       llmOpenaiModel: llmOpenaiModel ?? this.llmOpenaiModel,
       tunnelIdleMinutes: tunnelIdleMinutes ?? this.tunnelIdleMinutes,
       snippetLibraryReady: snippetLibraryReady ?? this.snippetLibraryReady,
+      appLockTimeoutSec: appLockTimeoutSec ?? this.appLockTimeoutSec,
     );
   }
 
@@ -4624,6 +4674,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     if (snippetLibraryReady.present) {
       map['snippet_library_ready'] = Variable<bool>(snippetLibraryReady.value);
     }
+    if (appLockTimeoutSec.present) {
+      map['app_lock_timeout_sec'] = Variable<int>(appLockTimeoutSec.value);
+    }
     return map;
   }
 
@@ -4645,7 +4698,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('llmOpenaiApiKey: $llmOpenaiApiKey, ')
           ..write('llmOpenaiModel: $llmOpenaiModel, ')
           ..write('tunnelIdleMinutes: $tunnelIdleMinutes, ')
-          ..write('snippetLibraryReady: $snippetLibraryReady')
+          ..write('snippetLibraryReady: $snippetLibraryReady, ')
+          ..write('appLockTimeoutSec: $appLockTimeoutSec')
           ..write(')'))
         .toString();
   }
@@ -8712,6 +8766,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<String?> llmOpenaiModel,
       Value<int> tunnelIdleMinutes,
       Value<bool> snippetLibraryReady,
+      Value<int> appLockTimeoutSec,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -8731,6 +8786,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<String?> llmOpenaiModel,
       Value<int> tunnelIdleMinutes,
       Value<bool> snippetLibraryReady,
+      Value<int> appLockTimeoutSec,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -8819,6 +8875,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<bool> get snippetLibraryReady => $composableBuilder(
     column: $table.snippetLibraryReady,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get appLockTimeoutSec => $composableBuilder(
+    column: $table.appLockTimeoutSec,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8911,6 +8972,11 @@ class $$AppSettingsTableOrderingComposer
     column: $table.snippetLibraryReady,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get appLockTimeoutSec => $composableBuilder(
+    column: $table.appLockTimeoutSec,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -8995,6 +9061,11 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.snippetLibraryReady,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get appLockTimeoutSec => $composableBuilder(
+    column: $table.appLockTimeoutSec,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -9044,6 +9115,7 @@ class $$AppSettingsTableTableManager
                 Value<String?> llmOpenaiModel = const Value.absent(),
                 Value<int> tunnelIdleMinutes = const Value.absent(),
                 Value<bool> snippetLibraryReady = const Value.absent(),
+                Value<int> appLockTimeoutSec = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 lastHostId: lastHostId,
@@ -9061,6 +9133,7 @@ class $$AppSettingsTableTableManager
                 llmOpenaiModel: llmOpenaiModel,
                 tunnelIdleMinutes: tunnelIdleMinutes,
                 snippetLibraryReady: snippetLibraryReady,
+                appLockTimeoutSec: appLockTimeoutSec,
               ),
           createCompanionCallback:
               ({
@@ -9080,6 +9153,7 @@ class $$AppSettingsTableTableManager
                 Value<String?> llmOpenaiModel = const Value.absent(),
                 Value<int> tunnelIdleMinutes = const Value.absent(),
                 Value<bool> snippetLibraryReady = const Value.absent(),
+                Value<int> appLockTimeoutSec = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 lastHostId: lastHostId,
@@ -9097,6 +9171,7 @@ class $$AppSettingsTableTableManager
                 llmOpenaiModel: llmOpenaiModel,
                 tunnelIdleMinutes: tunnelIdleMinutes,
                 snippetLibraryReady: snippetLibraryReady,
+                appLockTimeoutSec: appLockTimeoutSec,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

@@ -8,6 +8,8 @@ import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/db/tunnel_repository.dart';
+import 'package:kelola/data/app_lock/app_lock_port.dart';
+import 'package:kelola/data/app_lock/method_channel_app_lock.dart';
 import 'package:kelola/data/keep_awake/wakelock_plus_port.dart';
 import 'package:kelola/data/keystore/hardware_signer.dart';
 import 'package:kelola/data/keystore/method_channel_hardware_signer.dart';
@@ -46,6 +48,26 @@ final hostRepositoryProvider = Provider<HostRepository>((ref) {
 
 final hardwareSignerProvider = Provider<HardwareSigner>((ref) {
   return MethodChannelHardwareSigner();
+});
+
+final appLockPortProvider = Provider<AppLockPort>((ref) {
+  return MethodChannelAppLock();
+});
+
+final appLockTimeoutProvider = FutureProvider<int>((ref) async {
+  try {
+    return await ref.watch(hostRepositoryProvider).appLockTimeoutSec();
+  } catch (_) {
+    return 0;
+  }
+});
+
+final appLockAvailableProvider = FutureProvider<bool>((ref) async {
+  try {
+    return await ref.watch(appLockPortProvider).canAuthenticate();
+  } catch (_) {
+    return false;
+  }
 });
 
 final keepAwakeProvider = Provider<KeepAwake>((ref) {

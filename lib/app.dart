@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/deep_link.dart';
 import 'package:kelola/presentation/kelola_link_open.dart';
+import 'package:kelola/presentation/app_lock_gate.dart';
 import 'package:kelola/presentation/screens/boot_gate.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart' as legacy;
 import 'package:kelola/providers.dart';
@@ -50,6 +51,18 @@ class _KelolaAppState extends State<KelolaApp> {
   }
 
   Future<void> _openLink(String raw) async {
+    final context = kelolaNavigatorKey.currentContext;
+    if (context != null) {
+      final scope = AppLockScope.maybeOf(context);
+      if (scope != null && scope.locked) {
+        scope.enqueueLink(raw);
+        return;
+      }
+    }
+    await _openUnlockedLink(raw);
+  }
+
+  Future<void> _openUnlockedLink(String raw) async {
     final nav = kelolaNavigatorKey.currentState;
     final context = kelolaNavigatorKey.currentContext;
     if (nav == null || context == null || !context.mounted) {
@@ -87,6 +100,12 @@ class _KelolaAppState extends State<KelolaApp> {
         darkTheme: theme,
         themeMode: ThemeMode.dark,
         home: widget.home ?? const BootGate(),
+        builder: (context, child) {
+          return AppLockGate(
+            onUnlockedLink: _openUnlockedLink,
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
       ),
     );
   }

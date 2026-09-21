@@ -11,6 +11,7 @@ class MainActivity : FlutterFragmentActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(HardwareSignerPlugin())
+        flutterEngine.plugins.add(AppLockPlugin())
         flutterEngine.plugins.add(KelolaWidgetPlugin())
         flutterEngine.plugins.add(TunnelPlugin())
         flutterEngine.plugins.add(ShortcutsPlugin())

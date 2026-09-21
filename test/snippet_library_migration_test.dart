@@ -52,7 +52,7 @@ void main() {
       await db.customSelect('SELECT 1').get();
 
       final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.data['user_version'], 14);
+      expect(version.data['user_version'], 15);
 
       final ready = await db
           .customSelect(

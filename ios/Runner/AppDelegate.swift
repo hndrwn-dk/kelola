@@ -15,5 +15,8 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "HardwareSignerPlugin") {
       HardwareSignerPlugin.register(with: registrar)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppLockPlugin") {
+      AppLockPlugin.register(with: registrar)
+    }
   }
 }
