@@ -1,1 +1,1 @@
-enum ProFeature { tunnels, fleetUnlimited }
+enum ProFeature { tunnels, fleetUnlimited, fleetWatch }

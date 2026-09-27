@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
+import 'package:kelola/data/fleet/fleet_watch_bridge.dart';
+import 'package:kelola/presentation/fleet/fleet_watch_controller.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/secrets/flutter_secure_secret_store.dart';
 import 'package:kelola/data/secrets/secret_store.dart';
@@ -34,6 +36,8 @@ import 'package:kelola/domain/tunnels/tunnel_close_reason.dart';
 import 'package:kelola/domain/tunnels/tunnel_target.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+
+import 'package:kelola/domain/entitlement/entitlement.dart';
 
 export 'package:kelola/domain/entitlement/entitlement.dart'
     show entitlementProvider, entitlementRevisionProvider;
@@ -337,6 +341,28 @@ final fleetProbeSelectionProvider =
 );
 
 /// Live host membership and attention from Drift table watches.
+final fleetWatchBridgeProvider = Provider<FleetWatchBridge>((ref) {
+  return MethodChannelFleetWatchBridge();
+});
+
+final fleetWatchControllerProvider = Provider<FleetWatchController>((ref) {
+  final bridge = ref.watch(fleetWatchBridgeProvider);
+  final controller = FleetWatchController(
+    hosts: ref.watch(hostRepositoryProvider),
+    pool: ref.watch(sessionPoolProvider),
+    bridge: bridge,
+    widgetBridge: ref.watch(homeWidgetBridgeProvider),
+    entitlement: ref.watch(entitlementProvider),
+    selectedHostIds: () async =>
+        ref.read(fleetProbeSelectionProvider).valueOrNull,
+  );
+  bridge.setTickHandler(controller.maybeTick);
+  ref.onDispose(() {
+    bridge.setTickHandler(null);
+  });
+  return controller;
+});
+
 final hostsProvider = StreamProvider<List<Host>>((ref) {
   return ref.watch(hostRepositoryProvider).watchList().map(sortByAttention);
 });

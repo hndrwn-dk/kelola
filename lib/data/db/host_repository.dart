@@ -194,6 +194,9 @@ class HostRepository {
       await (_db.delete(
         _db.journalBookmarks,
       )..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(
+        _db.fleetWatchState,
+      )..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.snippets)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.pins)..where((t) => t.hostId.equals(id))).go();
       final last = await lastHostId();
@@ -1240,6 +1243,85 @@ class HostRepository {
     return (await _settings())?.appLockTimeoutSec ?? 0;
   }
 
+  Future<bool> fleetWatchEnabled() async {
+    return (await _settings())?.fleetWatchEnabled ?? false;
+  }
+
+  Future<void> setFleetWatchEnabled(bool value) async {
+    final existing = await _settings();
+    await _db.into(_db.appSettings).insertOnConflictUpdate(
+          _appSettingsWrite(existing, fleetWatchEnabled: Value(value)),
+        );
+  }
+
+  Future<FleetWatchThresholds> fleetWatchThresholds() async {
+    final row = await _settings();
+    return FleetWatchThresholds(
+      diskPercent: _clampWatchPercent(row?.fleetWatchDiskPercent ?? 90),
+      memPercent: _clampWatchPercent(row?.fleetWatchMemPercent ?? 90),
+      failedUnits: _clampWatchCount(row?.fleetWatchFailedUnits ?? 1),
+      containers: _clampWatchCount(row?.fleetWatchContainers ?? 1),
+      reboot: row?.fleetWatchReboot ?? true,
+    );
+  }
+
+  Future<void> setFleetWatchThresholds(FleetWatchThresholds value) async {
+    final existing = await _settings();
+    await _db.into(_db.appSettings).insertOnConflictUpdate(
+          _appSettingsWrite(
+            existing,
+            fleetWatchDiskPercent: Value(_clampWatchPercent(value.diskPercent)),
+            fleetWatchMemPercent: Value(_clampWatchPercent(value.memPercent)),
+            fleetWatchFailedUnits: Value(_clampWatchCount(value.failedUnits)),
+            fleetWatchContainers: Value(_clampWatchCount(value.containers)),
+            fleetWatchReboot: Value(value.reboot),
+          ),
+        );
+  }
+
+  Future<DateTime?> fleetWatchLastTickAt() async {
+    return (await _settings())?.fleetWatchLastTickAt;
+  }
+
+  Future<void> setFleetWatchLastTickAt(DateTime value) async {
+    final existing = await _settings();
+    await _db.into(_db.appSettings).insertOnConflictUpdate(
+          _appSettingsWrite(
+            existing,
+            fleetWatchLastTickAt: Value(value.toUtc()),
+          ),
+        );
+  }
+
+  Future<String?> fleetWatchFingerprint(String hostId) async {
+    final row = await (_db.select(_db.fleetWatchState)
+          ..where((t) => t.hostId.equals(hostId)))
+        .getSingleOrNull();
+    return row?.fingerprint;
+  }
+
+  Future<void> setFleetWatchFingerprint(String hostId, String fingerprint) {
+    return _db.into(_db.fleetWatchState).insertOnConflictUpdate(
+          FleetWatchStateCompanion.insert(
+            hostId: hostId,
+            fingerprint: fingerprint,
+            updatedAt: DateTime.now().toUtc(),
+          ),
+        );
+  }
+
+  static int _clampWatchPercent(int value) {
+    if (value < 50) return 50;
+    if (value > 99) return 99;
+    return value;
+  }
+
+  static int _clampWatchCount(int value) {
+    if (value < 1) return 1;
+    if (value > 20) return 20;
+    return value;
+  }
+
   Future<void> setAppLockTimeoutSec(int value) async {
     final existing = await _settings();
     await _db
@@ -1350,6 +1432,13 @@ class HostRepository {
     Value<bool> snippetLibraryReady = const Value.absent(),
     Value<int> appLockTimeoutSec = const Value.absent(),
     Value<int> sessionLogRetentionDays = const Value.absent(),
+    Value<bool> fleetWatchEnabled = const Value.absent(),
+    Value<int> fleetWatchDiskPercent = const Value.absent(),
+    Value<int> fleetWatchMemPercent = const Value.absent(),
+    Value<int> fleetWatchFailedUnits = const Value.absent(),
+    Value<int> fleetWatchContainers = const Value.absent(),
+    Value<bool> fleetWatchReboot = const Value.absent(),
+    Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
   }) {
     return AppSettingsCompanion(
       id: const Value(1),
@@ -1397,6 +1486,27 @@ class HostRepository {
               existing?.sessionLogRetentionDays ??
                   kDefaultSessionLogRetentionDays,
             ),
+      fleetWatchEnabled: fleetWatchEnabled.present
+          ? fleetWatchEnabled
+          : Value(existing?.fleetWatchEnabled ?? false),
+      fleetWatchDiskPercent: fleetWatchDiskPercent.present
+          ? fleetWatchDiskPercent
+          : Value(existing?.fleetWatchDiskPercent ?? 90),
+      fleetWatchMemPercent: fleetWatchMemPercent.present
+          ? fleetWatchMemPercent
+          : Value(existing?.fleetWatchMemPercent ?? 90),
+      fleetWatchFailedUnits: fleetWatchFailedUnits.present
+          ? fleetWatchFailedUnits
+          : Value(existing?.fleetWatchFailedUnits ?? 1),
+      fleetWatchContainers: fleetWatchContainers.present
+          ? fleetWatchContainers
+          : Value(existing?.fleetWatchContainers ?? 1),
+      fleetWatchReboot: fleetWatchReboot.present
+          ? fleetWatchReboot
+          : Value(existing?.fleetWatchReboot ?? true),
+      fleetWatchLastTickAt: fleetWatchLastTickAt.present
+          ? fleetWatchLastTickAt
+          : Value(existing?.fleetWatchLastTickAt),
     );
   }
 

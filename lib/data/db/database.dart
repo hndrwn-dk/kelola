@@ -22,6 +22,7 @@ part 'database.g.dart';
     CommandHistory,
     SessionLogs,
     JournalBookmarks,
+    FleetWatchState,
   ],
 )
 class KelolaDatabase extends _$KelolaDatabase {
@@ -32,7 +33,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -171,6 +172,27 @@ WHERE id = 1
           final names = cols.map((r) => r.read<String>('name')).toSet();
           if (!names.contains('kind')) {
             await m.addColumn(tunnelTargets, tunnelTargets.kind);
+          }
+        }
+      }
+      if (from < 20) {
+        await m.createTable(fleetWatchState);
+        final hasSettings = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' AND name='app_settings'",
+        ).get();
+        if (hasSettings.isNotEmpty) {
+          final cols = await customSelect(
+            'PRAGMA table_info(app_settings)',
+          ).get();
+          final names = cols.map((r) => r.read<String>('name')).toSet();
+          if (!names.contains('fleet_watch_enabled')) {
+            await m.addColumn(appSettings, appSettings.fleetWatchEnabled);
+            await m.addColumn(appSettings, appSettings.fleetWatchDiskPercent);
+            await m.addColumn(appSettings, appSettings.fleetWatchMemPercent);
+            await m.addColumn(appSettings, appSettings.fleetWatchFailedUnits);
+            await m.addColumn(appSettings, appSettings.fleetWatchContainers);
+            await m.addColumn(appSettings, appSettings.fleetWatchReboot);
+            await m.addColumn(appSettings, appSettings.fleetWatchLastTickAt);
           }
         }
       }

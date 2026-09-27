@@ -72,6 +72,23 @@ void main() {
     );
   });
 
+  test('isUnlocked(ProFeature.fleetWatch) stays out of fleet domain', () {
+    expect(
+      _occurrenceFiles(
+        p.join(root, 'lib', 'domain', 'fleet'),
+        'isUnlocked(ProFeature.fleetWatch)',
+      ),
+      isEmpty,
+    );
+    expect(
+      _occurrenceFiles(p.join(root, 'lib'), 'isUnlocked(ProFeature.fleetWatch)'),
+      [
+        'lib/presentation/fleet/fleet_watch_controller.dart x2',
+        'lib/presentation/screens/settings_screen.dart x1',
+      ],
+    );
+  });
+
   test('isUnlocked(ProFeature.tunnels) has exactly one production read', () {
     expect(
       _occurrenceFiles(

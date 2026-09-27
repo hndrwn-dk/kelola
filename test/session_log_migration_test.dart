@@ -46,7 +46,7 @@ CREATE TABLE app_settings (
     await db.customSelect('SELECT 1').get();
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 19);
+    expect(version.data['user_version'], 20);
 
     final logCols = await db.customSelect('PRAGMA table_info(session_logs)').get();
     expect(

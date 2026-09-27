@@ -6,6 +6,8 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/app_lock/app_lock_timeout.dart';
 import 'package:kelola/domain/session_logs/session_log.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
+import 'package:kelola/domain/fleet/fleet_health.dart';
+import 'package:kelola/presentation/pro_locked_sheet.dart';
 import 'package:kelola/providers.dart';
 
 /// Paid only when unlock says so. The build token (`std` / `ext`) is not this.
@@ -133,6 +135,166 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ref.invalidate(sessionLogRetentionProvider);
   }
 
+  Future<void> _openFleetWatch() async {
+    final entitlement = ref.read(entitlementProvider);
+    if (!entitlement.isUnlocked(ProFeature.fleetWatch)) {
+      await showProLockedSheet(
+        context,
+        title: 'Fleet watch',
+        body: 'Background fleet watch refreshes selected hosts about hourly '
+            'and alerts locally when a watched signal changes. '
+            'This build keeps watch locked.',
+        onPurchase: () => entitlement.purchase(),
+      );
+      return;
+    }
+    final hosts = ref.read(hostRepositoryProvider);
+    var enabled = await hosts.fleetWatchEnabled();
+    var thresholds = await hosts.fleetWatchThresholds();
+    if (!mounted) {
+      return;
+    }
+    final c = context.kc;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: StatefulBuilder(
+            builder: (ctx, setSheet) {
+              return SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                    Text(
+                      'Fleet watch',
+                      style: KelolaType.display(color: c.text, size: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Roughly hourly. Local alerts only.',
+                      style: KelolaType.body(color: c.muted, size: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    ServiceRow(
+                      risk: RiskLevel.read,
+                      name: enabled ? 'On' : 'Off',
+                      meta: 'default off',
+                      onTap: () async {
+                        enabled = !enabled;
+                        await ref
+                            .read(fleetWatchControllerProvider)
+                            .setEnabled(enabled);
+                        setSheet(() {});
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _WatchPillRow(
+                      label: 'Disk',
+                      values: const ['80', '90', '95'],
+                      selected: '${thresholds.diskPercent}',
+                      onPick: (raw) async {
+                        thresholds = FleetWatchThresholds(
+                          diskPercent: int.parse(raw),
+                          memPercent: thresholds.memPercent,
+                          failedUnits: thresholds.failedUnits,
+                          containers: thresholds.containers,
+                          reboot: thresholds.reboot,
+                        );
+                        await hosts.setFleetWatchThresholds(thresholds);
+                        setSheet(() {});
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _WatchPillRow(
+                      label: 'Memory',
+                      values: const ['80', '90', '95'],
+                      selected: '${thresholds.memPercent}',
+                      onPick: (raw) async {
+                        thresholds = FleetWatchThresholds(
+                          diskPercent: thresholds.diskPercent,
+                          memPercent: int.parse(raw),
+                          failedUnits: thresholds.failedUnits,
+                          containers: thresholds.containers,
+                          reboot: thresholds.reboot,
+                        );
+                        await hosts.setFleetWatchThresholds(thresholds);
+                        setSheet(() {});
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _WatchPillRow(
+                      label: 'Failed units',
+                      values: const ['1', '2', '5'],
+                      selected: '${thresholds.failedUnits}',
+                      onPick: (raw) async {
+                        thresholds = FleetWatchThresholds(
+                          diskPercent: thresholds.diskPercent,
+                          memPercent: thresholds.memPercent,
+                          failedUnits: int.parse(raw),
+                          containers: thresholds.containers,
+                          reboot: thresholds.reboot,
+                        );
+                        await hosts.setFleetWatchThresholds(thresholds);
+                        setSheet(() {});
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _WatchPillRow(
+                      label: 'Containers',
+                      values: const ['1', '2', '5'],
+                      selected: '${thresholds.containers}',
+                      onPick: (raw) async {
+                        thresholds = FleetWatchThresholds(
+                          diskPercent: thresholds.diskPercent,
+                          memPercent: thresholds.memPercent,
+                          failedUnits: thresholds.failedUnits,
+                          containers: int.parse(raw),
+                          reboot: thresholds.reboot,
+                        );
+                        await hosts.setFleetWatchThresholds(thresholds);
+                        setSheet(() {});
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _WatchPillRow(
+                      label: 'Reboot',
+                      values: const ['on', 'off'],
+                      selected: thresholds.reboot ? 'on' : 'off',
+                      onPick: (raw) async {
+                        thresholds = FleetWatchThresholds(
+                          diskPercent: thresholds.diskPercent,
+                          memPercent: thresholds.memPercent,
+                          failedUnits: thresholds.failedUnits,
+                          containers: thresholds.containers,
+                          reboot: raw == 'on',
+                        );
+                        await hosts.setFleetWatchThresholds(thresholds);
+                        setSheet(() {});
+                      },
+                    ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+    if (mounted) setState(() {});
+  }
+
   Future<void> _restore() async {
     final result = await ref.read(entitlementProvider).restore();
     if (!mounted) {
@@ -228,6 +390,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: 8),
                 ServiceRow(
                   risk: RiskLevel.read,
+                  name: 'Fleet watch',
+                  meta: paid ? 'roughly hourly' : 'unlock required',
+                  onTap: _openFleetWatch,
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
                   name: paid ? 'Paid' : 'Free',
                   meta: 'purchase status',
                 ),
@@ -277,6 +446,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _WatchPillRow extends StatelessWidget {
+  const _WatchPillRow({
+    required this.label,
+    required this.values,
+    required this.selected,
+    required this.onPick,
+  });
+
+  final String label;
+  final List<String> values;
+  final String selected;
+  final Future<void> Function(String raw) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: KelolaType.body(color: c.muted, size: 12)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 5,
+          runSpacing: 5,
+          children: [
+            for (final value in values)
+              FilterPill(
+                label: value,
+                selected: value == selected,
+                onTap: () => onPick(value),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
