@@ -19,6 +19,7 @@ import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_view.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
+import 'package:kelola/domain/probes/workload_logs_probe.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
 import 'package:kelola/presentation/screens/workload_detail_screen.dart';
 import 'package:kelola/presentation/screens/workloads_screen.dart';
@@ -113,6 +114,10 @@ void main() {
 
   testWidgets('detail shows describe, events, and top as read rows',
       (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     pool.describe = 'Name: web\nReplicas: 3';
     pool.events = const [
       K8sEvent(
@@ -162,6 +167,55 @@ void main() {
       isA<WorkloadTopProbe>(),
     ]);
     expect(pool.scopes, everyElement(ProbeScope.host));
+    expect(find.text('Exec'), findsNothing);
+    expect(find.text('Logs'), findsOneWidget);
+    expect(find.text('Restart'), findsOneWidget);
+    expect(find.text('Scale up'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+  });
+
+  testWidgets('pod detail offers exec and logs, not rollout restart',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          hostRepositoryProvider.overrideWithValue(repo),
+          sessionPoolProvider.overrideWithValue(pool),
+          enrollmentProvider.overrideWith(_ReadyEnrollment.new),
+        ],
+        child: KelolaApp(
+          home: WorkloadDetailScreen(
+            host: host,
+            facts: HostFacts.undiscovered.copyWith(runtimes: const ['kubectl']),
+            workload: const K8sWorkload(
+              kind: K8sKind.pod,
+              namespace: 'prod',
+              name: 'web-abc',
+              ready: 1,
+              desired: 1,
+              phase: 'Running',
+              health: HealthStatus.healthy,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Exec'), findsOneWidget);
+    expect(find.text('Logs'), findsOneWidget);
+    expect(find.text('Restart'), findsNothing);
+    expect(find.text('Scale up'), findsNothing);
+    expect(find.text('Delete'), findsOneWidget);
+
+    pool.logs = '2026-09-27T01:00:00Z ready';
+    await tester.tap(find.text('Logs'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('ready'), findsOneWidget);
+    expect(pool.probes.whereType<WorkloadLogsProbe>(), hasLength(1));
   });
 
   test('workloads UI never re-detects kubectl or uses fleet', () {
@@ -171,13 +225,22 @@ void main() {
         .readAsStringSync();
     final probes = File('lib/domain/probes/workload_probes.dart')
         .readAsStringSync();
+    final action = File('lib/domain/probes/workload_action_probe.dart')
+        .readAsStringSync();
+    final logs = File('lib/domain/probes/workload_logs_probe.dart')
+        .readAsStringSync();
+    final exec = File('lib/domain/probes/workload_exec_probe.dart')
+        .readAsStringSync();
+    final confirm = File(
+      'lib/presentation/widgets/confirm_workload_action.dart',
+    ).readAsStringSync();
     expect(list, contains('HostFactsProbe'));
-    expect(list, isNot(contains('command -v')));
-    expect(detail, isNot(contains('command -v')));
-    expect(probes, isNot(contains('command -v')));
-    expect(list, isNot(contains('ProbeScope.fleet')));
-    expect(detail, isNot(contains('ProbeScope.fleet')));
-    expect(probes, isNot(contains('ProbeScope.fleet')));
+    expect(detail, contains('confirmWorkloadAction'));
+    expect(confirm, contains('DestructiveConfirmSheet'));
+    for (final src in [list, detail, probes, action, logs, exec, confirm]) {
+      expect(src, isNot(contains('command -v')));
+      expect(src, isNot(contains('ProbeScope.fleet')));
+    }
   });
 }
 
@@ -200,6 +263,7 @@ class _WorkloadPool extends SshSessionPool {
   String describe = '';
   List<K8sEvent> events = const [];
   List<K8sTopRow> top = const [];
+  String logs = '';
   final probes = <Probe<dynamic>>[];
   final scopes = <ProbeScope>[];
 
@@ -226,6 +290,9 @@ class _WorkloadPool extends SshSessionPool {
     }
     if (probe is WorkloadTopProbe) {
       return top as T;
+    }
+    if (probe is WorkloadLogsProbe) {
+      return logs as T;
     }
     throw StateError('unexpected ${probe.runtimeType}');
   }

@@ -84,8 +84,8 @@ void main() {
     final src = File('lib/presentation/screens/host_dashboard_screen.dart')
         .readAsStringSync();
     expect(src, contains("label: 'Network'"));
-    expect(src, contains("label: 'Workloads'"));
-    expect(src, contains("meta: 'kubectl'"));
+    expect(src, contains("label: 'Kubernetes'"));
+    expect(src, contains("meta: 'cluster'"));
     expect(src, isNot(contains('CpuTickProbe')));
     expect(src, isNot(contains('} catch (_) {}')));
   });
