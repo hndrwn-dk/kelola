@@ -197,6 +197,7 @@ class _TunnelStubPool extends SshSessionPool {
     required Future<bool> Function(String type, Uint8List fingerprint)
         onVerifyHostKey,
     FutureOr<String?> Function()? onPasswordRequest,
+    SSHAgentHandler? agentHandler,
   }) async {
     return SSHClient(
       socket,

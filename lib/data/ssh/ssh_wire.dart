@@ -4,6 +4,10 @@ import 'dart:typed_data';
 class SshWireWriter {
   final BytesBuilder _out = BytesBuilder(copy: false);
 
+  void writeUint8(int value) {
+    _out.add([value & 0xff]);
+  }
+
   void writeUint32(int value) {
     _out.add([
       (value >> 24) & 0xff,
@@ -54,6 +58,13 @@ class SshWireReader {
 
   final Uint8List data;
   int _offset = 0;
+
+  int readUint8() {
+    if (_offset >= data.length) {
+      throw const FormatException('truncated ssh uint8');
+    }
+    return data[_offset++];
+  }
 
   int readUint32() {
     if (_offset + 4 > data.length) {

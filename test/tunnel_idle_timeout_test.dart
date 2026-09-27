@@ -311,6 +311,7 @@ class _StubPool extends SshSessionPool {
     required Future<bool> Function(String type, Uint8List fingerprint)
         onVerifyHostKey,
     FutureOr<String?> Function()? onPasswordRequest,
+    SSHAgentHandler? agentHandler,
   }) async {
     final client = SSHClient(
       socket,

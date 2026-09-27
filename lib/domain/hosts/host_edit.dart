@@ -18,4 +18,6 @@ abstract final class HostEditAudit {
       'Changed username to $username';
   static const setReadOnly = 'Set read-only';
   static const allowedWrites = 'Allowed writes';
+  static const enabledAgentForward = 'Enabled agent forwarding';
+  static const disabledAgentForward = 'Disabled agent forwarding';
 }

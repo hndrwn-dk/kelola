@@ -27,6 +27,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
   List<Host> _others = const [];
   String? _jumpHostId;
   bool _readOnly = false;
+  bool _agentForward = false;
   bool _loading = true;
 
   @override
@@ -62,6 +63,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
       _tags.text = host?.tags.join(', ') ?? '';
       _jumpHostId = host?.jumpHostId;
       _readOnly = host?.readOnly ?? false;
+      _agentForward = host?.agentForward ?? false;
       _loading = false;
     });
   }
@@ -111,6 +113,37 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
     setState(() {
       _host = updated ?? host;
       _readOnly = turningOn;
+    });
+    ref.invalidate(hostsProvider);
+  }
+
+  Future<void> _toggleAgentForward() async {
+    final host = _host;
+    if (host == null) {
+      return;
+    }
+    final turningOn = !_agentForward;
+    if (turningOn) {
+      final ok = await showMutateConfirm(
+        context,
+        title: 'Forward agent on ${host.alias}?',
+        body: 'This host may ask Kelola to sign with the on-device key. '
+            'The private key never leaves the phone. sshd must allow agent forwarding.',
+        confirmLabel: 'Forward agent',
+      );
+      if (!ok || !mounted) {
+        return;
+      }
+    }
+    await ref.read(hostRepositoryProvider).setAgentForward(host.id, turningOn);
+    await ref.read(sessionPoolProvider).disconnect(host.id);
+    final updated = await ref.read(hostRepositoryProvider).get(host.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _host = updated ?? host;
+      _agentForward = turningOn;
     });
     ref.invalidate(hostsProvider);
   }
@@ -317,6 +350,21 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                           label: 'Read-only',
                           active: _readOnly,
                           onTap: _toggleReadOnly,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Text(
+                          'Agent forward',
+                          style: KelolaType.body(color: c.muted, size: 12),
+                        ),
+                        const Spacer(),
+                        ModePill(
+                          label: 'Agent forward',
+                          active: _agentForward,
+                          onTap: _toggleAgentForward,
                         ),
                       ],
                     ),

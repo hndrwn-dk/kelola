@@ -689,6 +689,31 @@ class HostRepository {
     await updateHost(id, readOnly: value);
   }
 
+  Future<void> setAgentForward(String id, bool value) async {
+    final current = await get(id);
+    if (current == null || current.agentForward == value) {
+      return;
+    }
+    await (_db.update(_db.hosts)..where((t) => t.id.equals(id))).write(
+      HostsCompanion(
+        agentForward: Value(value),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ),
+    );
+    await recordAudit(
+      hostId: id,
+      hostAlias: current.alias,
+      remoteUser: current.username,
+      title: value
+          ? HostEditAudit.enabledAgentForward
+          : HostEditAudit.disabledAgentForward,
+      command: 'host-edit agent-forward',
+      risk: 'mutate',
+      usedSudo: false,
+      exitCode: 0,
+    );
+  }
+
   /// Local mutate of host identity. Changing [address] deletes the pinned
   /// host key in the same transaction so the next connect must TOFU.
   Future<HostEditResult> updateHost(
@@ -1150,6 +1175,7 @@ class HostRepository {
       prettyName: prettyName,
       osId: osId,
       sudoNeedsPassword: row.sudoNeedsPassword,
+      agentForward: row.agentForward,
       tags: tags,
     );
   }
