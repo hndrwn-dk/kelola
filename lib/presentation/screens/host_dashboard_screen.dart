@@ -32,6 +32,7 @@ import 'package:kelola/presentation/screens/terminal_sheet.dart';
 import 'package:kelola/presentation/screens/snippets_screen.dart';
 import 'package:kelola/presentation/screens/tunnels_screen.dart';
 import 'package:kelola/presentation/screens/units_screen.dart';
+import 'package:kelola/presentation/screens/workloads_screen.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/probes/host_action_probe.dart';
@@ -636,7 +637,13 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                   ),
                 ),
                 const SizedBox(width: 7),
-                const Expanded(child: SizedBox.shrink()),
+                Expanded(
+                  child: ToolTile(
+                    label: 'Workloads',
+                    meta: 'kubectl',
+                    onTap: () => _open((id) => WorkloadsScreen(hostId: id)),
+                  ),
+                ),
                 const SizedBox(width: 7),
                 const Expanded(child: SizedBox.shrink()),
               ],
