@@ -32,7 +32,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -158,6 +158,20 @@ WHERE id = 1
             appSettings,
             appSettings.sessionLogRetentionDays,
           );
+        }
+      }
+      if (from < 19) {
+        final hasTunnels = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' AND name='tunnel_targets'",
+        ).get();
+        if (hasTunnels.isNotEmpty) {
+          final cols = await customSelect(
+            'PRAGMA table_info(tunnel_targets)',
+          ).get();
+          final names = cols.map((r) => r.read<String>('name')).toSet();
+          if (!names.contains('kind')) {
+            await m.addColumn(tunnelTargets, tunnelTargets.kind);
+          }
         }
       }
     },

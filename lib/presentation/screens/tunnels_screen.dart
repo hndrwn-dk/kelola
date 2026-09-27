@@ -6,6 +6,7 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/tunnels/active_tunnel.dart';
+import 'package:kelola/domain/tunnels/tunnel_kind.dart';
 import 'package:kelola/domain/tunnels/tunnel_presets.dart';
 import 'package:kelola/domain/tunnels/tunnel_target.dart';
 import 'package:kelola/domain/tunnels/tunnel_validation.dart';
@@ -106,6 +107,7 @@ class _TunnelTargetEditor extends StatefulWidget {
 
 class _TunnelTargetEditorState extends State<_TunnelTargetEditor> {
   late TunnelPreset _preset;
+  late TunnelKind _kind;
   late final TextEditingController _label;
   late final TextEditingController _remoteHost;
   late final TextEditingController _remotePort;
@@ -119,6 +121,7 @@ class _TunnelTargetEditorState extends State<_TunnelTargetEditor> {
     super.initState();
     final existing = widget.existing;
     _preset = existing == null ? TunnelPreset.cockpit : TunnelPreset.custom;
+    _kind = existing?.kind ?? TunnelKind.local;
     _label = TextEditingController(text: existing?.label ?? 'Cockpit');
     _remoteHost =
         TextEditingController(text: existing?.remoteHost ?? '127.0.0.1');
@@ -150,6 +153,19 @@ class _TunnelTargetEditorState extends State<_TunnelTargetEditor> {
     super.dispose();
   }
 
+  void _setKind(TunnelKind kind) {
+    setState(() {
+      _kind = kind;
+      _preset = TunnelPreset.custom;
+      _error = null;
+      if (kind == TunnelKind.kubectl && !_remoteHost.text.contains('/')) {
+        _remoteHost.text = 'svc/nginx';
+        _remotePort.text = '80';
+        _path.text = '';
+      }
+    });
+  }
+
   void _applyPreset(TunnelPreset preset) {
     final applied = TunnelPresets.apply(
       preset: preset,
@@ -163,6 +179,7 @@ class _TunnelTargetEditorState extends State<_TunnelTargetEditor> {
     );
     setState(() {
       _preset = preset;
+      _kind = TunnelKind.local;
       _error = null;
       if (preset != TunnelPreset.custom) {
         _label.text = applied.label;
@@ -181,10 +198,17 @@ class _TunnelTargetEditorState extends State<_TunnelTargetEditor> {
       id: widget.existing?.id ?? const Uuid().v7(),
       hostId: widget.hostId,
       label: _label.text.trim(),
-      remoteHost: _remoteHost.text.trim(),
-      remotePort: int.tryParse(_remotePort.text.trim()) ?? 0,
+      remoteHost: _kind == TunnelKind.dynamic ? '' : _remoteHost.text.trim(),
+      remotePort:
+          _kind == TunnelKind.dynamic ? 0 : int.tryParse(_remotePort.text.trim()) ?? 0,
       scheme: _scheme,
-      path: _path.text.trim().isEmpty ? '/' : _path.text.trim(),
+      path: switch (_kind) {
+        TunnelKind.kubectl => _path.text.trim(),
+        TunnelKind.dynamic || TunnelKind.remote => '',
+        TunnelKind.local =>
+          _path.text.trim().isEmpty ? '/' : _path.text.trim(),
+      },
+      kind: _kind,
     );
   }
 
@@ -244,18 +268,35 @@ class _TunnelTargetEditorState extends State<_TunnelTargetEditor> {
               style: KelolaType.display(color: c.text, size: 16),
             ),
             const SizedBox(height: 12),
+            Text('Kind', style: KelolaType.body(color: c.muted, size: 12)),
+            const SizedBox(height: 6),
             Wrap(
               spacing: 5,
               runSpacing: 5,
               children: [
-                for (final preset in TunnelPreset.values)
+                for (final kind in TunnelKind.values)
                   FilterPill(
-                    label: preset.name,
-                    selected: _preset == preset,
-                    onTap: _saving ? null : () => _applyPreset(preset),
+                    label: kind.pillLabel,
+                    selected: _kind == kind,
+                    onTap: _saving ? null : () => _setKind(kind),
                   ),
               ],
             ),
+            if (_kind == TunnelKind.local) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 5,
+                runSpacing: 5,
+                children: [
+                  for (final preset in TunnelPreset.values)
+                    FilterPill(
+                      label: preset.name,
+                      selected: _preset == preset,
+                      onTap: _saving ? null : () => _applyPreset(preset),
+                    ),
+                ],
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(
@@ -287,56 +328,80 @@ class _TunnelTargetEditorState extends State<_TunnelTargetEditor> {
                 if (_error != null) setState(() => _error = null);
               },
             ),
-            const SizedBox(height: 10),
-            KelolaInput(
-              label: 'Remote host',
-              controller: _remoteHost,
-              mono: true,
-              hint: '127.0.0.1',
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
-            ),
-            const SizedBox(height: 10),
-            KelolaInput(
-              label: 'Remote port',
-              controller: _remotePort,
-              mono: true,
-              keyboardType: TextInputType.number,
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
-            ),
-            const SizedBox(height: 10),
-            KelolaInput(
-              label: 'Path',
-              controller: _path,
-              mono: true,
-              hint: '/',
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
-            ),
-            const SizedBox(height: 10),
-            Text('Scheme', style: KelolaType.body(color: c.muted, size: 12)),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 5,
-              children: [
-                for (final scheme in TunnelScheme.values)
-                  FilterPill(
-                    label: scheme.value,
-                    selected: _scheme == scheme,
-                    onTap: _saving
-                        ? null
-                        : () => setState(() {
-                              _scheme = scheme;
-                              _preset = TunnelPreset.custom;
-                              _error = null;
-                            }),
-                  ),
-              ],
-            ),
+            if (_kind != TunnelKind.dynamic) ...[
+              const SizedBox(height: 10),
+              KelolaInput(
+                label: switch (_kind) {
+                  TunnelKind.kubectl => 'Resource',
+                  TunnelKind.remote => 'Destination host',
+                  _ => 'Remote host',
+                },
+                controller: _remoteHost,
+                mono: true,
+                hint: _kind == TunnelKind.kubectl ? 'svc/nginx' : '127.0.0.1',
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+              ),
+              const SizedBox(height: 10),
+              KelolaInput(
+                label: switch (_kind) {
+                  TunnelKind.kubectl => 'Port',
+                  TunnelKind.remote => 'Destination port',
+                  _ => 'Remote port',
+                },
+                controller: _remotePort,
+                mono: true,
+                keyboardType: TextInputType.number,
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+              ),
+            ],
+            if (_kind == TunnelKind.local) ...[
+              const SizedBox(height: 10),
+              KelolaInput(
+                label: 'Path',
+                controller: _path,
+                mono: true,
+                hint: '/',
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+              ),
+              const SizedBox(height: 10),
+              Text('Scheme', style: KelolaType.body(color: c.muted, size: 12)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 5,
+                children: [
+                  for (final scheme in TunnelScheme.values)
+                    FilterPill(
+                      label: scheme.value,
+                      selected: _scheme == scheme,
+                      onTap: _saving
+                          ? null
+                          : () => setState(() {
+                                _scheme = scheme;
+                                _preset = TunnelPreset.custom;
+                                _error = null;
+                              }),
+                    ),
+                ],
+              ),
+            ],
+            if (_kind == TunnelKind.kubectl) ...[
+              const SizedBox(height: 10),
+              KelolaInput(
+                label: 'Namespace',
+                controller: _path,
+                mono: true,
+                hint: 'default',
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+              ),
+            ],
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
@@ -436,9 +501,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     final ok = await showMutateConfirm(
       context,
       title: 'Stop ${tunnel.target.label}?',
-      body:
-          'Closes the local forward on 127.0.0.1:${tunnel.localPort}. '
-          'The remote service keeps running.',
+      body: tunnelStopBody(tunnel),
       confirmLabel: 'Stop tunnel',
     );
     if (!ok || !mounted) return;
@@ -621,7 +684,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                             style: KelolaType.display(color: c.text, size: 13),
                           ),
                           Text(
-                            '${t.scheme.value}://${t.remoteHost}:${t.remotePort}${t.path}',
+                            tunnelTargetMeta(t),
                             style: KelolaType.mono(color: c.muted, size: 11),
                           ),
                         ],
@@ -743,7 +806,9 @@ class _ActiveTunnelCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 4,
             children: [
-              if (listening && tunnel.localPort > 0)
+              if (listening &&
+                  tunnel.localPort > 0 &&
+                  tunnelAllowsBrowser(tunnel.target))
                 TextButton(
                   onPressed: onOpen,
                   child: const Text('Open'),

@@ -1,4 +1,5 @@
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/units/shell_quote.dart';
 
 enum KubectlFlavor { none, kubectl, k3s }
 
@@ -38,4 +39,23 @@ String kubectlRun(HostFacts facts, String args) {
     KubectlFlavor.k3s => 'sudo -n k3s kubectl $args || k3s kubectl $args',
     KubectlFlavor.kubectl => 'kubectl $args || sudo -n kubectl $args',
   };
+}
+
+/// Host-side port-forward. Binds loopback only; facts pick the binary.
+String kubectlPortForwardCommand(
+  HostFacts facts, {
+  required String resource,
+  required int port,
+  String namespace = '',
+}) {
+  final ns = namespace.trim();
+  final nsArg = ns.isEmpty ? '' : '-n ${shellSingleQuote(ns)} ';
+  final res = shellSingleQuote(resource);
+  return 'LC_ALL=C ${kubectlRun(facts, '${nsArg}port-forward --address 127.0.0.1 $res :$port')}';
+}
+
+int? parseKubectlForwardPort(String stdout) {
+  final match = RegExp(r'Forwarding from 127\.0\.0\.1:(\d+)').firstMatch(stdout);
+  if (match == null) return null;
+  return int.tryParse(match.group(1)!);
 }

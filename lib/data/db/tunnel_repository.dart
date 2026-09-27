@@ -43,6 +43,7 @@ class TunnelRepository {
             remotePort: target.remotePort,
             scheme: target.scheme.value,
             path: Value(target.path),
+            kind: Value(target.kind.value),
           ),
         );
   }
@@ -85,6 +86,7 @@ class TunnelRepository {
       remotePort: row.remotePort,
       scheme: scheme,
       path: row.path,
+      kind: TunnelKind.parse(row.kind),
     );
   }
 }

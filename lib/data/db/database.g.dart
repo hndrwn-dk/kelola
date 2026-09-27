@@ -6751,6 +6751,16 @@ class $TunnelTargetsTable extends TunnelTargets
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('local'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -6760,6 +6770,7 @@ class $TunnelTargetsTable extends TunnelTargets
     remotePort,
     scheme,
     path,
+    kind,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6824,6 +6835,12 @@ class $TunnelTargetsTable extends TunnelTargets
         path.isAcceptableOrUnknown(data['path']!, _pathMeta),
       );
     }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
     return context;
   }
 
@@ -6861,6 +6878,10 @@ class $TunnelTargetsTable extends TunnelTargets
         DriftSqlType.string,
         data['${effectivePrefix}path'],
       )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
     );
   }
 
@@ -6878,6 +6899,7 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
   final int remotePort;
   final String scheme;
   final String path;
+  final String kind;
   const TunnelTargetRow({
     required this.id,
     required this.hostId,
@@ -6886,6 +6908,7 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
     required this.remotePort,
     required this.scheme,
     required this.path,
+    required this.kind,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6897,6 +6920,7 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
     map['remote_port'] = Variable<int>(remotePort);
     map['scheme'] = Variable<String>(scheme);
     map['path'] = Variable<String>(path);
+    map['kind'] = Variable<String>(kind);
     return map;
   }
 
@@ -6909,6 +6933,7 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
       remotePort: Value(remotePort),
       scheme: Value(scheme),
       path: Value(path),
+      kind: Value(kind),
     );
   }
 
@@ -6925,6 +6950,7 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
       remotePort: serializer.fromJson<int>(json['remotePort']),
       scheme: serializer.fromJson<String>(json['scheme']),
       path: serializer.fromJson<String>(json['path']),
+      kind: serializer.fromJson<String>(json['kind']),
     );
   }
   @override
@@ -6938,6 +6964,7 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
       'remotePort': serializer.toJson<int>(remotePort),
       'scheme': serializer.toJson<String>(scheme),
       'path': serializer.toJson<String>(path),
+      'kind': serializer.toJson<String>(kind),
     };
   }
 
@@ -6949,6 +6976,7 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
     int? remotePort,
     String? scheme,
     String? path,
+    String? kind,
   }) => TunnelTargetRow(
     id: id ?? this.id,
     hostId: hostId ?? this.hostId,
@@ -6957,6 +6985,7 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
     remotePort: remotePort ?? this.remotePort,
     scheme: scheme ?? this.scheme,
     path: path ?? this.path,
+    kind: kind ?? this.kind,
   );
   TunnelTargetRow copyWithCompanion(TunnelTargetsCompanion data) {
     return TunnelTargetRow(
@@ -6971,6 +7000,7 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
           : this.remotePort,
       scheme: data.scheme.present ? data.scheme.value : this.scheme,
       path: data.path.present ? data.path.value : this.path,
+      kind: data.kind.present ? data.kind.value : this.kind,
     );
   }
 
@@ -6983,14 +7013,23 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
           ..write('remoteHost: $remoteHost, ')
           ..write('remotePort: $remotePort, ')
           ..write('scheme: $scheme, ')
-          ..write('path: $path')
+          ..write('path: $path, ')
+          ..write('kind: $kind')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, hostId, label, remoteHost, remotePort, scheme, path);
+  int get hashCode => Object.hash(
+    id,
+    hostId,
+    label,
+    remoteHost,
+    remotePort,
+    scheme,
+    path,
+    kind,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -7001,7 +7040,8 @@ class TunnelTargetRow extends DataClass implements Insertable<TunnelTargetRow> {
           other.remoteHost == this.remoteHost &&
           other.remotePort == this.remotePort &&
           other.scheme == this.scheme &&
-          other.path == this.path);
+          other.path == this.path &&
+          other.kind == this.kind);
 }
 
 class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
@@ -7012,6 +7052,7 @@ class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
   final Value<int> remotePort;
   final Value<String> scheme;
   final Value<String> path;
+  final Value<String> kind;
   final Value<int> rowid;
   const TunnelTargetsCompanion({
     this.id = const Value.absent(),
@@ -7021,6 +7062,7 @@ class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
     this.remotePort = const Value.absent(),
     this.scheme = const Value.absent(),
     this.path = const Value.absent(),
+    this.kind = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TunnelTargetsCompanion.insert({
@@ -7031,6 +7073,7 @@ class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
     required int remotePort,
     required String scheme,
     this.path = const Value.absent(),
+    this.kind = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        hostId = Value(hostId),
@@ -7046,6 +7089,7 @@ class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
     Expression<int>? remotePort,
     Expression<String>? scheme,
     Expression<String>? path,
+    Expression<String>? kind,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7056,6 +7100,7 @@ class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
       if (remotePort != null) 'remote_port': remotePort,
       if (scheme != null) 'scheme': scheme,
       if (path != null) 'path': path,
+      if (kind != null) 'kind': kind,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7068,6 +7113,7 @@ class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
     Value<int>? remotePort,
     Value<String>? scheme,
     Value<String>? path,
+    Value<String>? kind,
     Value<int>? rowid,
   }) {
     return TunnelTargetsCompanion(
@@ -7078,6 +7124,7 @@ class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
       remotePort: remotePort ?? this.remotePort,
       scheme: scheme ?? this.scheme,
       path: path ?? this.path,
+      kind: kind ?? this.kind,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7106,6 +7153,9 @@ class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
     if (path.present) {
       map['path'] = Variable<String>(path.value);
     }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7122,6 +7172,7 @@ class TunnelTargetsCompanion extends UpdateCompanion<TunnelTargetRow> {
           ..write('remotePort: $remotePort, ')
           ..write('scheme: $scheme, ')
           ..write('path: $path, ')
+          ..write('kind: $kind, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -11700,6 +11751,7 @@ typedef $$TunnelTargetsTableCreateCompanionBuilder =
       required int remotePort,
       required String scheme,
       Value<String> path,
+      Value<String> kind,
       Value<int> rowid,
     });
 typedef $$TunnelTargetsTableUpdateCompanionBuilder =
@@ -11711,6 +11763,7 @@ typedef $$TunnelTargetsTableUpdateCompanionBuilder =
       Value<int> remotePort,
       Value<String> scheme,
       Value<String> path,
+      Value<String> kind,
       Value<int> rowid,
     });
 
@@ -11755,6 +11808,11 @@ class $$TunnelTargetsTableFilterComposer
 
   ColumnFilters<String> get path => $composableBuilder(
     column: $table.path,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -11802,6 +11860,11 @@ class $$TunnelTargetsTableOrderingComposer
     column: $table.path,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TunnelTargetsTableAnnotationComposer
@@ -11837,6 +11900,9 @@ class $$TunnelTargetsTableAnnotationComposer
 
   GeneratedColumn<String> get path =>
       $composableBuilder(column: $table.path, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
 }
 
 class $$TunnelTargetsTableTableManager
@@ -11883,6 +11949,7 @@ class $$TunnelTargetsTableTableManager
                 Value<int> remotePort = const Value.absent(),
                 Value<String> scheme = const Value.absent(),
                 Value<String> path = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TunnelTargetsCompanion(
                 id: id,
@@ -11892,6 +11959,7 @@ class $$TunnelTargetsTableTableManager
                 remotePort: remotePort,
                 scheme: scheme,
                 path: path,
+                kind: kind,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -11903,6 +11971,7 @@ class $$TunnelTargetsTableTableManager
                 required int remotePort,
                 required String scheme,
                 Value<String> path = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TunnelTargetsCompanion.insert(
                 id: id,
@@ -11912,6 +11981,7 @@ class $$TunnelTargetsTableTableManager
                 remotePort: remotePort,
                 scheme: scheme,
                 path: path,
+                kind: kind,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

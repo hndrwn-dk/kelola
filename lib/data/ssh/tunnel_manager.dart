@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -6,6 +7,10 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/ssh/session_pool.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
+import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/k8s/kubectl.dart';
+import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/tunnels/active_tunnel.dart';
 import 'package:kelola/domain/tunnels/tunnel_close_reason.dart';
@@ -30,6 +35,43 @@ typedef TunnelOpenChannelFn = Future<SSHSocket> Function({
   required String remoteHost,
   required int remotePort,
 });
+
+typedef TunnelStartDynamicFn = Future<int> Function(SSHClient client);
+
+typedef TunnelStartRemoteFn = Future<TunnelRemoteStart> Function({
+  required SSHClient client,
+  required TunnelTarget target,
+});
+
+typedef TunnelStartKubectlFn = Future<TunnelKubectlStart> Function({
+  required SSHClient client,
+  required TunnelTarget target,
+  required HostFacts facts,
+});
+
+typedef TunnelDiscoverFactsFn = Future<HostFacts> Function(Host host);
+
+class TunnelRemoteStart {
+  const TunnelRemoteStart({
+    required this.listenPort,
+    required this.connections,
+    required this.close,
+  });
+
+  final int listenPort;
+  final Stream<SSHSocket> connections;
+  final Future<void> Function() close;
+}
+
+class TunnelKubectlStart {
+  const TunnelKubectlStart({
+    required this.hostPort,
+    required this.stop,
+  });
+
+  final int hostPort;
+  final Future<void> Function() stop;
+}
 
 /// Production poll interval for idle deadline checks against the injected clock.
 ///
@@ -72,6 +114,10 @@ class TunnelManager implements TunnelSessionApi {
     int Function()? idleMinutes,
     TunnelBindFn? bind,
     TunnelOpenChannelFn? openChannel,
+    TunnelStartDynamicFn? startDynamic,
+    TunnelStartRemoteFn? startRemote,
+    TunnelStartKubectlFn? startKubectl,
+    TunnelDiscoverFactsFn? discoverFacts,
     String Function()? newId,
     Duration idlePollInterval = kTunnelIdlePollInterval,
   })  : _pool = pool,
@@ -80,6 +126,10 @@ class TunnelManager implements TunnelSessionApi {
         _idleMinutes = idleMinutes ?? (() => 10),
         _bind = bind ?? bindLoopbackEphemeral,
         _openChannel = openChannel ?? _defaultOpenChannel,
+        _startDynamic = startDynamic,
+        _startRemote = startRemote,
+        _startKubectl = startKubectl,
+        _discoverFacts = discoverFacts,
         _newId = newId ?? (() => const Uuid().v7()),
         _idlePollInterval = idlePollInterval;
 
@@ -89,6 +139,10 @@ class TunnelManager implements TunnelSessionApi {
   final int Function() _idleMinutes;
   final TunnelBindFn _bind;
   final TunnelOpenChannelFn _openChannel;
+  final TunnelStartDynamicFn? _startDynamic;
+  final TunnelStartRemoteFn? _startRemote;
+  final TunnelStartKubectlFn? _startKubectl;
+  final TunnelDiscoverFactsFn? _discoverFacts;
   final String Function() _newId;
   final Duration _idlePollInterval;
 
@@ -148,24 +202,16 @@ class TunnelManager implements TunnelSessionApi {
     _emit();
 
     try {
-      final server = await _bind();
-      session.server = server;
-      session.localPort = server.port;
-      session.state = TunnelState.listening;
-      _emit();
-
-      final host = await _hosts.get(target.hostId);
-      if (host == null) {
-        throw StateError('Host ${target.hostId} not found');
+      switch (target.kind) {
+        case TunnelKind.dynamic:
+          await _startDynamicSession(session);
+        case TunnelKind.remote:
+          await _startRemoteSession(session);
+        case TunnelKind.kubectl:
+          await _startKubectlSession(session);
+        case TunnelKind.local:
+          await _startLocalSession(session);
       }
-      final client = await _pool.acquireTunnelClient(host);
-      session.client = client;
-      session.hostId = host.id;
-      session.remoteUser = host.username;
-      _armClientDrop(client, host.id);
-
-      _startAcceptLoop(session);
-      _armIdle(session);
       await _recordOpenAudit(session);
       return session.snapshot();
     } catch (e) {
@@ -320,6 +366,276 @@ class TunnelManager implements TunnelSessionApi {
     _maybeStopIdlePoll();
   }
 
+  Future<SSHClient> _attachClient(_TunnelSession session) async {
+    final host = await _hosts.get(session.target.hostId);
+    if (host == null) {
+      throw StateError('Host ${session.target.hostId} not found');
+    }
+    final client = await _pool.acquireTunnelClient(host);
+    session.client = client;
+    session.hostId = host.id;
+    session.remoteUser = host.username;
+    _armClientDrop(client, host.id);
+    return client;
+  }
+
+  Future<void> _startLocalSession(_TunnelSession session) async {
+    final server = await _bind();
+    session.server = server;
+    session.localPort = server.port;
+    session.state = TunnelState.listening;
+    _emit();
+    await _attachClient(session);
+    _startAcceptLoop(session);
+    _armIdle(session);
+  }
+
+  Future<void> _startDynamicSession(_TunnelSession session) async {
+    final client = await _attachClient(session);
+    final startDynamic = _startDynamic;
+    final port = startDynamic != null
+        ? await startDynamic(client)
+        : await _defaultStartDynamic(session, client);
+    session.localPort = port;
+    session.state = TunnelState.listening;
+    _armIdle(session);
+    _emit();
+  }
+
+  Future<int> _defaultStartDynamic(
+    _TunnelSession session,
+    SSHClient client,
+  ) async {
+    final dyn = await client.forwardDynamic(
+      bindHost: '127.0.0.1',
+      bindPort: 0,
+      options: const SSHDynamicForwardOptions(
+        maxConnections: kTunnelMaxChannels,
+      ),
+    );
+    session.dynamicForward = dyn;
+    return dyn.port;
+  }
+
+  Future<void> _startRemoteSession(_TunnelSession session) async {
+    final client = await _attachClient(session);
+    final startRemote = _startRemote;
+    final started = startRemote != null
+        ? await startRemote(client: client, target: session.target)
+        : await _defaultStartRemote(session, client);
+    session.localPort = started.listenPort;
+    session.remoteCloser = started.close;
+    session.remoteSub = started.connections.listen(
+      (ch) => unawaited(_onRemoteInbound(session, ch)),
+      onError: (Object e) {
+        if (session.state == TunnelState.listening ||
+            session.state == TunnelState.idleClosing) {
+          unawaited(_failSession(session, describeSshError(e)));
+        }
+      },
+    );
+    session.state = TunnelState.listening;
+    _armIdle(session);
+    _emit();
+  }
+
+  Future<TunnelRemoteStart> _defaultStartRemote(
+    _TunnelSession session,
+    SSHClient client,
+  ) async {
+    final fwd = await client.forwardRemote(host: 'localhost', port: 0);
+    if (fwd == null) {
+      throw StateError('Host refused remote forward on localhost');
+    }
+    session.remoteForward = fwd;
+    return TunnelRemoteStart(
+      listenPort: fwd.port,
+      connections: fwd.connections,
+      close: () async {
+        fwd.close();
+      },
+    );
+  }
+
+  Future<void> _onRemoteInbound(
+    _TunnelSession session,
+    SSHSocket remote,
+  ) async {
+    if (session.state != TunnelState.listening &&
+        session.state != TunnelState.idleClosing) {
+      remote.destroy();
+      return;
+    }
+    if (session.liveChannelCount >= kTunnelMaxChannels) {
+      session.droppedChannels++;
+      try {
+        remote.destroy();
+      } catch (_) {}
+      _emit(channelOnly: true);
+      return;
+    }
+
+    _clearIdleOnActivity(session);
+    session.opening++;
+    Socket? local;
+    try {
+      local = await Socket.connect(
+        session.target.remoteHost,
+        session.target.remotePort,
+        timeout: const Duration(seconds: 10),
+      );
+    } catch (e) {
+      if (session.opening > 0) session.opening--;
+      try {
+        remote.destroy();
+      } catch (_) {}
+      await _failSession(session, describeSshError(e));
+      return;
+    }
+
+    final channel = _LiveChannel(local: local, remote: remote);
+    session.channels.add(channel);
+    if (session.opening > 0) session.opening--;
+    _clearIdleOnActivity(session);
+    _emit(channelOnly: true);
+
+    try {
+      await _pipe(local, remote);
+    } finally {
+      session.channels.remove(channel);
+      try {
+        local.destroy();
+      } catch (_) {}
+      try {
+        remote.destroy();
+      } catch (_) {}
+      if (_sessions.containsKey(session.id) &&
+          (session.state == TunnelState.listening ||
+              session.state == TunnelState.idleClosing)) {
+        if (session.channels.isEmpty && session.opening == 0) {
+          _armIdle(session);
+        } else {
+          _emit(channelOnly: true);
+        }
+      }
+    }
+  }
+
+  Future<void> _startKubectlSession(_TunnelSession session) async {
+    final client = await _attachClient(session);
+    final host = await _hosts.get(session.target.hostId);
+    if (host == null) {
+      throw StateError('Host ${session.target.hostId} not found');
+    }
+    final facts = await _factsForKubectl(host);
+    if (kubectlFlavor(facts) == KubectlFlavor.none) {
+      throw StateError('No kubectl on this host');
+    }
+    final startKubectl = _startKubectl;
+    final started = startKubectl != null
+        ? await startKubectl(
+            client: client,
+            target: session.target,
+            facts: facts,
+          )
+        : await _defaultStartKubectl(session, client, facts);
+    session.kubectlHostPort = started.hostPort;
+    session.kubectlStop = started.stop;
+    session.auditCommand = kubectlPortForwardCommand(
+      facts,
+      resource: session.target.remoteHost,
+      port: session.target.remotePort,
+      namespace: session.target.path,
+    );
+    final server = await _bind();
+    session.server = server;
+    session.localPort = server.port;
+    session.state = TunnelState.listening;
+    _emit();
+    _startAcceptLoop(session);
+    _armIdle(session);
+  }
+
+  Future<HostFacts> _factsForKubectl(Host host) async {
+    var facts = await _hosts.facts(host.id) ?? HostFacts.undiscovered;
+    if (kubectlFlavor(facts) != KubectlFlavor.none) {
+      return facts;
+    }
+    final discover = _discoverFacts;
+    if (discover != null) {
+      return discover(host);
+    }
+    facts = await _pool.execute(host, const HostFactsProbe());
+    await _hosts.saveFacts(host.id, facts);
+    return facts;
+  }
+
+  Future<TunnelKubectlStart> _defaultStartKubectl(
+    _TunnelSession session,
+    SSHClient client,
+    HostFacts facts,
+  ) async {
+    final cmd = kubectlPortForwardCommand(
+      facts,
+      resource: session.target.remoteHost,
+      port: session.target.remotePort,
+      namespace: session.target.path,
+    );
+    final exec = await client.execute(cmd);
+    session.kubectlSession = exec;
+    final buf = StringBuffer();
+    final found = Completer<int>();
+
+    void consider(List<int> chunk) {
+      buf.write(utf8.decode(chunk, allowMalformed: true));
+      final port = parseKubectlForwardPort(buf.toString());
+      if (port != null && !found.isCompleted) {
+        found.complete(port);
+      }
+    }
+
+    final outSub = exec.stdout.listen(
+      consider,
+      onError: (Object e) {
+        if (!found.isCompleted) found.completeError(e);
+      },
+    );
+    final errSub = exec.stderr.listen(
+      consider,
+      onError: (Object e) {
+        if (!found.isCompleted) found.completeError(e);
+      },
+    );
+    unawaited(
+      exec.done.then((_) {
+        if (!found.isCompleted) {
+          found.completeError(
+            StateError('kubectl port-forward exited before binding'),
+          );
+        }
+      }),
+    );
+
+    try {
+      final hostPort = await found.future.timeout(
+        const Duration(seconds: 20),
+      );
+      return TunnelKubectlStart(
+        hostPort: hostPort,
+        stop: () async {
+          await outSub.cancel();
+          await errSub.cancel();
+          exec.close();
+        },
+      );
+    } catch (e) {
+      await outSub.cancel();
+      await errSub.cancel();
+      exec.close();
+      rethrow;
+    }
+  }
+
   void _startAcceptLoop(_TunnelSession session) {
     final server = session.server;
     if (server == null) return;
@@ -371,8 +687,10 @@ class TunnelManager implements TunnelSessionApi {
       }
       remote = await _openChannel(
         client: client,
-        remoteHost: session.target.remoteHost,
-        remotePort: session.target.remotePort,
+        remoteHost: session.kubectlHostPort != null
+            ? '127.0.0.1'
+            : session.target.remoteHost,
+        remotePort: session.kubectlHostPort ?? session.target.remotePort,
       );
     } catch (e) {
       _releaseInFlight(session, socket);
@@ -598,20 +916,72 @@ class TunnelManager implements TunnelSessionApi {
 
   static String _openTitle(_TunnelSession session) {
     final t = session.target;
-    return 'Open tunnel → ${t.label} (${t.remotePort})';
+    return switch (t.kind) {
+      TunnelKind.dynamic => 'Open SOCKS5 → ${t.label}',
+      TunnelKind.remote => 'Open remote tunnel → ${t.label} (${t.remotePort})',
+      TunnelKind.kubectl =>
+        'Open kubectl forward → ${t.label} (${t.remotePort})',
+      TunnelKind.local => 'Open tunnel → ${t.label} (${t.remotePort})',
+    };
   }
 
   static String _closeTitle(_TunnelSession session, TunnelCloseReason reason) {
     final t = session.target;
-    return 'Close tunnel → ${t.label} (${t.remotePort}) [${reason.value}]';
+    final base = switch (t.kind) {
+      TunnelKind.dynamic => 'Close SOCKS5 → ${t.label}',
+      TunnelKind.remote => 'Close remote tunnel → ${t.label} (${t.remotePort})',
+      TunnelKind.kubectl =>
+        'Close kubectl forward → ${t.label} (${t.remotePort})',
+      TunnelKind.local => 'Close tunnel → ${t.label} (${t.remotePort})',
+    };
+    return '$base [${reason.value}]';
   }
 
   static String _forwardCommand(_TunnelSession session) {
     final t = session.target;
-    return 'ssh -L 127.0.0.1:${session.localPort}:${t.remoteHost}:${t.remotePort}';
+    switch (t.kind) {
+      case TunnelKind.dynamic:
+        return 'ssh -D 127.0.0.1:${session.localPort}';
+      case TunnelKind.remote:
+        return 'ssh -R 127.0.0.1:${session.localPort}:${t.remoteHost}:${t.remotePort}';
+      case TunnelKind.kubectl:
+        final hostPort = session.kubectlHostPort ?? 0;
+        final prefix = session.auditCommand ??
+            'kubectl port-forward --address 127.0.0.1 ${t.remoteHost} :${t.remotePort}';
+        return '$prefix ; ssh -L 127.0.0.1:${session.localPort}:127.0.0.1:$hostPort';
+      case TunnelKind.local:
+        return 'ssh -L 127.0.0.1:${session.localPort}:${t.remoteHost}:${t.remotePort}';
+    }
   }
 
   Future<void> _shutdownSession(_TunnelSession session) async {
+    await session.remoteSub?.cancel();
+    session.remoteSub = null;
+    final remoteCloser = session.remoteCloser;
+    session.remoteCloser = null;
+    if (remoteCloser != null) {
+      try {
+        await remoteCloser();
+      } catch (_) {}
+    }
+    session.remoteForward?.close();
+    session.remoteForward = null;
+    final dyn = session.dynamicForward;
+    session.dynamicForward = null;
+    if (dyn != null) {
+      try {
+        await dyn.close();
+      } catch (_) {}
+    }
+    final stop = session.kubectlStop;
+    session.kubectlStop = null;
+    if (stop != null) {
+      try {
+        await stop();
+      } catch (_) {}
+    }
+    session.kubectlSession?.close();
+    session.kubectlSession = null;
     await session.acceptSub?.cancel();
     session.acceptSub = null;
     for (final local in List<Socket>.from(session.inFlightLocals)) {
@@ -719,6 +1089,14 @@ class _TunnelSession {
   SSHClient? client;
   ServerSocket? server;
   StreamSubscription<Socket>? acceptSub;
+  SSHDynamicForward? dynamicForward;
+  SSHRemoteForward? remoteForward;
+  StreamSubscription<SSHSocket>? remoteSub;
+  Future<void> Function()? remoteCloser;
+  SSHSession? kubectlSession;
+  Future<void> Function()? kubectlStop;
+  int? kubectlHostPort;
+  String? auditCommand;
   final channels = <_LiveChannel>[];
   /// Locals accepted but not yet added to [channels] (openChannel in flight).
   final inFlightLocals = <Socket>{};
