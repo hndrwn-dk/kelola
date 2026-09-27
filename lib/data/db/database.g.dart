@@ -3879,6 +3879,18 @@ class $AppSettingsTable extends AppSettings
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _sessionLogRetentionDaysMeta =
+      const VerificationMeta('sessionLogRetentionDays');
+  @override
+  late final GeneratedColumn<int> sessionLogRetentionDays =
+      GeneratedColumn<int>(
+        'session_log_retention_days',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(14),
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3898,6 +3910,7 @@ class $AppSettingsTable extends AppSettings
     tunnelIdleMinutes,
     snippetLibraryReady,
     appLockTimeoutSec,
+    sessionLogRetentionDays,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4049,6 +4062,15 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('session_log_retention_days')) {
+      context.handle(
+        _sessionLogRetentionDaysMeta,
+        sessionLogRetentionDays.isAcceptableOrUnknown(
+          data['session_log_retention_days']!,
+          _sessionLogRetentionDaysMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4126,6 +4148,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.int,
         data['${effectivePrefix}app_lock_timeout_sec'],
       )!,
+      sessionLogRetentionDays: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}session_log_retention_days'],
+      )!,
     );
   }
 
@@ -4161,6 +4187,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   /// Seconds of background before the inventory re-locks.
   /// `0` off, `-1` immediately, `60` / `300` / `900` otherwise.
   final int appLockTimeoutSec;
+
+  /// Days to keep non-bookmarked session logs. 7 / 14 / 30 / 90.
+  final int sessionLogRetentionDays;
   const AppSettingsRow({
     required this.id,
     this.lastHostId,
@@ -4179,6 +4208,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     required this.tunnelIdleMinutes,
     required this.snippetLibraryReady,
     required this.appLockTimeoutSec,
+    required this.sessionLogRetentionDays,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4222,6 +4252,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     map['tunnel_idle_minutes'] = Variable<int>(tunnelIdleMinutes);
     map['snippet_library_ready'] = Variable<bool>(snippetLibraryReady);
     map['app_lock_timeout_sec'] = Variable<int>(appLockTimeoutSec);
+    map['session_log_retention_days'] = Variable<int>(sessionLogRetentionDays);
     return map;
   }
 
@@ -4266,6 +4297,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       tunnelIdleMinutes: Value(tunnelIdleMinutes),
       snippetLibraryReady: Value(snippetLibraryReady),
       appLockTimeoutSec: Value(appLockTimeoutSec),
+      sessionLogRetentionDays: Value(sessionLogRetentionDays),
     );
   }
 
@@ -4294,6 +4326,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
         json['snippetLibraryReady'],
       ),
       appLockTimeoutSec: serializer.fromJson<int>(json['appLockTimeoutSec']),
+      sessionLogRetentionDays: serializer.fromJson<int>(
+        json['sessionLogRetentionDays'],
+      ),
     );
   }
   @override
@@ -4317,6 +4352,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       'tunnelIdleMinutes': serializer.toJson<int>(tunnelIdleMinutes),
       'snippetLibraryReady': serializer.toJson<bool>(snippetLibraryReady),
       'appLockTimeoutSec': serializer.toJson<int>(appLockTimeoutSec),
+      'sessionLogRetentionDays': serializer.toJson<int>(
+        sessionLogRetentionDays,
+      ),
     };
   }
 
@@ -4338,6 +4376,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     int? tunnelIdleMinutes,
     bool? snippetLibraryReady,
     int? appLockTimeoutSec,
+    int? sessionLogRetentionDays,
   }) => AppSettingsRow(
     id: id ?? this.id,
     lastHostId: lastHostId.present ? lastHostId.value : this.lastHostId,
@@ -4368,6 +4407,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     tunnelIdleMinutes: tunnelIdleMinutes ?? this.tunnelIdleMinutes,
     snippetLibraryReady: snippetLibraryReady ?? this.snippetLibraryReady,
     appLockTimeoutSec: appLockTimeoutSec ?? this.appLockTimeoutSec,
+    sessionLogRetentionDays:
+        sessionLogRetentionDays ?? this.sessionLogRetentionDays,
   );
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
@@ -4416,6 +4457,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       appLockTimeoutSec: data.appLockTimeoutSec.present
           ? data.appLockTimeoutSec.value
           : this.appLockTimeoutSec,
+      sessionLogRetentionDays: data.sessionLogRetentionDays.present
+          ? data.sessionLogRetentionDays.value
+          : this.sessionLogRetentionDays,
     );
   }
 
@@ -4438,7 +4482,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('llmOpenaiModel: $llmOpenaiModel, ')
           ..write('tunnelIdleMinutes: $tunnelIdleMinutes, ')
           ..write('snippetLibraryReady: $snippetLibraryReady, ')
-          ..write('appLockTimeoutSec: $appLockTimeoutSec')
+          ..write('appLockTimeoutSec: $appLockTimeoutSec, ')
+          ..write('sessionLogRetentionDays: $sessionLogRetentionDays')
           ..write(')'))
         .toString();
   }
@@ -4462,6 +4507,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     tunnelIdleMinutes,
     snippetLibraryReady,
     appLockTimeoutSec,
+    sessionLogRetentionDays,
   );
   @override
   bool operator ==(Object other) =>
@@ -4483,7 +4529,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.llmOpenaiModel == this.llmOpenaiModel &&
           other.tunnelIdleMinutes == this.tunnelIdleMinutes &&
           other.snippetLibraryReady == this.snippetLibraryReady &&
-          other.appLockTimeoutSec == this.appLockTimeoutSec);
+          other.appLockTimeoutSec == this.appLockTimeoutSec &&
+          other.sessionLogRetentionDays == this.sessionLogRetentionDays);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
@@ -4504,6 +4551,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<int> tunnelIdleMinutes;
   final Value<bool> snippetLibraryReady;
   final Value<int> appLockTimeoutSec;
+  final Value<int> sessionLogRetentionDays;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.lastHostId = const Value.absent(),
@@ -4522,6 +4570,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.tunnelIdleMinutes = const Value.absent(),
     this.snippetLibraryReady = const Value.absent(),
     this.appLockTimeoutSec = const Value.absent(),
+    this.sessionLogRetentionDays = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -4541,6 +4590,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.tunnelIdleMinutes = const Value.absent(),
     this.snippetLibraryReady = const Value.absent(),
     this.appLockTimeoutSec = const Value.absent(),
+    this.sessionLogRetentionDays = const Value.absent(),
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
@@ -4560,6 +4610,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Expression<int>? tunnelIdleMinutes,
     Expression<bool>? snippetLibraryReady,
     Expression<int>? appLockTimeoutSec,
+    Expression<int>? sessionLogRetentionDays,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4580,6 +4631,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (snippetLibraryReady != null)
         'snippet_library_ready': snippetLibraryReady,
       if (appLockTimeoutSec != null) 'app_lock_timeout_sec': appLockTimeoutSec,
+      if (sessionLogRetentionDays != null)
+        'session_log_retention_days': sessionLogRetentionDays,
     });
   }
 
@@ -4601,6 +4654,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<int>? tunnelIdleMinutes,
     Value<bool>? snippetLibraryReady,
     Value<int>? appLockTimeoutSec,
+    Value<int>? sessionLogRetentionDays,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -4620,6 +4674,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       tunnelIdleMinutes: tunnelIdleMinutes ?? this.tunnelIdleMinutes,
       snippetLibraryReady: snippetLibraryReady ?? this.snippetLibraryReady,
       appLockTimeoutSec: appLockTimeoutSec ?? this.appLockTimeoutSec,
+      sessionLogRetentionDays:
+          sessionLogRetentionDays ?? this.sessionLogRetentionDays,
     );
   }
 
@@ -4677,6 +4733,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     if (appLockTimeoutSec.present) {
       map['app_lock_timeout_sec'] = Variable<int>(appLockTimeoutSec.value);
     }
+    if (sessionLogRetentionDays.present) {
+      map['session_log_retention_days'] = Variable<int>(
+        sessionLogRetentionDays.value,
+      );
+    }
     return map;
   }
 
@@ -4699,7 +4760,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('llmOpenaiModel: $llmOpenaiModel, ')
           ..write('tunnelIdleMinutes: $tunnelIdleMinutes, ')
           ..write('snippetLibraryReady: $snippetLibraryReady, ')
-          ..write('appLockTimeoutSec: $appLockTimeoutSec')
+          ..write('appLockTimeoutSec: $appLockTimeoutSec, ')
+          ..write('sessionLogRetentionDays: $sessionLogRetentionDays')
           ..write(')'))
         .toString();
   }
@@ -7332,6 +7394,1004 @@ class CommandHistoryCompanion extends UpdateCompanion<CommandHistoryRow> {
   }
 }
 
+class $SessionLogsTable extends SessionLogs
+    with TableInfo<$SessionLogsTable, SessionLogRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SessionLogsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('command'),
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bookmarkedMeta = const VerificationMeta(
+    'bookmarked',
+  );
+  @override
+  late final GeneratedColumn<bool> bookmarked = GeneratedColumn<bool>(
+    'bookmarked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("bookmarked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    hostId,
+    kind,
+    title,
+    body,
+    createdAt,
+    bookmarked,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'session_logs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SessionLogRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('bookmarked')) {
+      context.handle(
+        _bookmarkedMeta,
+        bookmarked.isAcceptableOrUnknown(data['bookmarked']!, _bookmarkedMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SessionLogRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SessionLogRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      bookmarked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}bookmarked'],
+      )!,
+    );
+  }
+
+  @override
+  $SessionLogsTable createAlias(String alias) {
+    return $SessionLogsTable(attachedDatabase, alias);
+  }
+}
+
+class SessionLogRow extends DataClass implements Insertable<SessionLogRow> {
+  final String id;
+  final String hostId;
+  final String kind;
+  final String title;
+  final String body;
+  final DateTime createdAt;
+  final bool bookmarked;
+  const SessionLogRow({
+    required this.id,
+    required this.hostId,
+    required this.kind,
+    required this.title,
+    required this.body,
+    required this.createdAt,
+    required this.bookmarked,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['host_id'] = Variable<String>(hostId);
+    map['kind'] = Variable<String>(kind);
+    map['title'] = Variable<String>(title);
+    map['body'] = Variable<String>(body);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['bookmarked'] = Variable<bool>(bookmarked);
+    return map;
+  }
+
+  SessionLogsCompanion toCompanion(bool nullToAbsent) {
+    return SessionLogsCompanion(
+      id: Value(id),
+      hostId: Value(hostId),
+      kind: Value(kind),
+      title: Value(title),
+      body: Value(body),
+      createdAt: Value(createdAt),
+      bookmarked: Value(bookmarked),
+    );
+  }
+
+  factory SessionLogRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SessionLogRow(
+      id: serializer.fromJson<String>(json['id']),
+      hostId: serializer.fromJson<String>(json['hostId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      title: serializer.fromJson<String>(json['title']),
+      body: serializer.fromJson<String>(json['body']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      bookmarked: serializer.fromJson<bool>(json['bookmarked']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'hostId': serializer.toJson<String>(hostId),
+      'kind': serializer.toJson<String>(kind),
+      'title': serializer.toJson<String>(title),
+      'body': serializer.toJson<String>(body),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'bookmarked': serializer.toJson<bool>(bookmarked),
+    };
+  }
+
+  SessionLogRow copyWith({
+    String? id,
+    String? hostId,
+    String? kind,
+    String? title,
+    String? body,
+    DateTime? createdAt,
+    bool? bookmarked,
+  }) => SessionLogRow(
+    id: id ?? this.id,
+    hostId: hostId ?? this.hostId,
+    kind: kind ?? this.kind,
+    title: title ?? this.title,
+    body: body ?? this.body,
+    createdAt: createdAt ?? this.createdAt,
+    bookmarked: bookmarked ?? this.bookmarked,
+  );
+  SessionLogRow copyWithCompanion(SessionLogsCompanion data) {
+    return SessionLogRow(
+      id: data.id.present ? data.id.value : this.id,
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      title: data.title.present ? data.title.value : this.title,
+      body: data.body.present ? data.body.value : this.body,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      bookmarked: data.bookmarked.present
+          ? data.bookmarked.value
+          : this.bookmarked,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SessionLogRow(')
+          ..write('id: $id, ')
+          ..write('hostId: $hostId, ')
+          ..write('kind: $kind, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('bookmarked: $bookmarked')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, hostId, kind, title, body, createdAt, bookmarked);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SessionLogRow &&
+          other.id == this.id &&
+          other.hostId == this.hostId &&
+          other.kind == this.kind &&
+          other.title == this.title &&
+          other.body == this.body &&
+          other.createdAt == this.createdAt &&
+          other.bookmarked == this.bookmarked);
+}
+
+class SessionLogsCompanion extends UpdateCompanion<SessionLogRow> {
+  final Value<String> id;
+  final Value<String> hostId;
+  final Value<String> kind;
+  final Value<String> title;
+  final Value<String> body;
+  final Value<DateTime> createdAt;
+  final Value<bool> bookmarked;
+  final Value<int> rowid;
+  const SessionLogsCompanion({
+    this.id = const Value.absent(),
+    this.hostId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.title = const Value.absent(),
+    this.body = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.bookmarked = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SessionLogsCompanion.insert({
+    required String id,
+    required String hostId,
+    this.kind = const Value.absent(),
+    required String title,
+    required String body,
+    required DateTime createdAt,
+    this.bookmarked = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       hostId = Value(hostId),
+       title = Value(title),
+       body = Value(body),
+       createdAt = Value(createdAt);
+  static Insertable<SessionLogRow> custom({
+    Expression<String>? id,
+    Expression<String>? hostId,
+    Expression<String>? kind,
+    Expression<String>? title,
+    Expression<String>? body,
+    Expression<DateTime>? createdAt,
+    Expression<bool>? bookmarked,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (hostId != null) 'host_id': hostId,
+      if (kind != null) 'kind': kind,
+      if (title != null) 'title': title,
+      if (body != null) 'body': body,
+      if (createdAt != null) 'created_at': createdAt,
+      if (bookmarked != null) 'bookmarked': bookmarked,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SessionLogsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? hostId,
+    Value<String>? kind,
+    Value<String>? title,
+    Value<String>? body,
+    Value<DateTime>? createdAt,
+    Value<bool>? bookmarked,
+    Value<int>? rowid,
+  }) {
+    return SessionLogsCompanion(
+      id: id ?? this.id,
+      hostId: hostId ?? this.hostId,
+      kind: kind ?? this.kind,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      createdAt: createdAt ?? this.createdAt,
+      bookmarked: bookmarked ?? this.bookmarked,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (bookmarked.present) {
+      map['bookmarked'] = Variable<bool>(bookmarked.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SessionLogsCompanion(')
+          ..write('id: $id, ')
+          ..write('hostId: $hostId, ')
+          ..write('kind: $kind, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('bookmarked: $bookmarked, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $JournalBookmarksTable extends JournalBookmarks
+    with TableInfo<$JournalBookmarksTable, JournalBookmarkRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $JournalBookmarksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _unitMeta = const VerificationMeta('unit');
+  @override
+  late final GeneratedColumn<String> unit = GeneratedColumn<String>(
+    'unit',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _queryMeta = const VerificationMeta('query');
+  @override
+  late final GeneratedColumn<String> query = GeneratedColumn<String>(
+    'query',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _scopeMeta = const VerificationMeta('scope');
+  @override
+  late final GeneratedColumn<String> scope = GeneratedColumn<String>(
+    'scope',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('all'),
+  );
+  static const VerificationMeta _priorityMeta = const VerificationMeta(
+    'priority',
+  );
+  @override
+  late final GeneratedColumn<int> priority = GeneratedColumn<int>(
+    'priority',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastHourMeta = const VerificationMeta(
+    'lastHour',
+  );
+  @override
+  late final GeneratedColumn<bool> lastHour = GeneratedColumn<bool>(
+    'last_hour',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("last_hour" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    hostId,
+    label,
+    unit,
+    query,
+    scope,
+    priority,
+    lastHour,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'journal_bookmarks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<JournalBookmarkRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_labelMeta);
+    }
+    if (data.containsKey('unit')) {
+      context.handle(
+        _unitMeta,
+        unit.isAcceptableOrUnknown(data['unit']!, _unitMeta),
+      );
+    }
+    if (data.containsKey('query')) {
+      context.handle(
+        _queryMeta,
+        query.isAcceptableOrUnknown(data['query']!, _queryMeta),
+      );
+    }
+    if (data.containsKey('scope')) {
+      context.handle(
+        _scopeMeta,
+        scope.isAcceptableOrUnknown(data['scope']!, _scopeMeta),
+      );
+    }
+    if (data.containsKey('priority')) {
+      context.handle(
+        _priorityMeta,
+        priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta),
+      );
+    }
+    if (data.containsKey('last_hour')) {
+      context.handle(
+        _lastHourMeta,
+        lastHour.isAcceptableOrUnknown(data['last_hour']!, _lastHourMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JournalBookmarkRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JournalBookmarkRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      )!,
+      unit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}unit'],
+      ),
+      query: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}query'],
+      )!,
+      scope: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scope'],
+      )!,
+      priority: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}priority'],
+      ),
+      lastHour: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}last_hour'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $JournalBookmarksTable createAlias(String alias) {
+    return $JournalBookmarksTable(attachedDatabase, alias);
+  }
+}
+
+class JournalBookmarkRow extends DataClass
+    implements Insertable<JournalBookmarkRow> {
+  final String id;
+  final String hostId;
+  final String label;
+  final String? unit;
+  final String query;
+  final String scope;
+  final int? priority;
+  final bool lastHour;
+  final DateTime createdAt;
+  const JournalBookmarkRow({
+    required this.id,
+    required this.hostId,
+    required this.label,
+    this.unit,
+    required this.query,
+    required this.scope,
+    this.priority,
+    required this.lastHour,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['host_id'] = Variable<String>(hostId);
+    map['label'] = Variable<String>(label);
+    if (!nullToAbsent || unit != null) {
+      map['unit'] = Variable<String>(unit);
+    }
+    map['query'] = Variable<String>(query);
+    map['scope'] = Variable<String>(scope);
+    if (!nullToAbsent || priority != null) {
+      map['priority'] = Variable<int>(priority);
+    }
+    map['last_hour'] = Variable<bool>(lastHour);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  JournalBookmarksCompanion toCompanion(bool nullToAbsent) {
+    return JournalBookmarksCompanion(
+      id: Value(id),
+      hostId: Value(hostId),
+      label: Value(label),
+      unit: unit == null && nullToAbsent ? const Value.absent() : Value(unit),
+      query: Value(query),
+      scope: Value(scope),
+      priority: priority == null && nullToAbsent
+          ? const Value.absent()
+          : Value(priority),
+      lastHour: Value(lastHour),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory JournalBookmarkRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JournalBookmarkRow(
+      id: serializer.fromJson<String>(json['id']),
+      hostId: serializer.fromJson<String>(json['hostId']),
+      label: serializer.fromJson<String>(json['label']),
+      unit: serializer.fromJson<String?>(json['unit']),
+      query: serializer.fromJson<String>(json['query']),
+      scope: serializer.fromJson<String>(json['scope']),
+      priority: serializer.fromJson<int?>(json['priority']),
+      lastHour: serializer.fromJson<bool>(json['lastHour']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'hostId': serializer.toJson<String>(hostId),
+      'label': serializer.toJson<String>(label),
+      'unit': serializer.toJson<String?>(unit),
+      'query': serializer.toJson<String>(query),
+      'scope': serializer.toJson<String>(scope),
+      'priority': serializer.toJson<int?>(priority),
+      'lastHour': serializer.toJson<bool>(lastHour),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  JournalBookmarkRow copyWith({
+    String? id,
+    String? hostId,
+    String? label,
+    Value<String?> unit = const Value.absent(),
+    String? query,
+    String? scope,
+    Value<int?> priority = const Value.absent(),
+    bool? lastHour,
+    DateTime? createdAt,
+  }) => JournalBookmarkRow(
+    id: id ?? this.id,
+    hostId: hostId ?? this.hostId,
+    label: label ?? this.label,
+    unit: unit.present ? unit.value : this.unit,
+    query: query ?? this.query,
+    scope: scope ?? this.scope,
+    priority: priority.present ? priority.value : this.priority,
+    lastHour: lastHour ?? this.lastHour,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  JournalBookmarkRow copyWithCompanion(JournalBookmarksCompanion data) {
+    return JournalBookmarkRow(
+      id: data.id.present ? data.id.value : this.id,
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      label: data.label.present ? data.label.value : this.label,
+      unit: data.unit.present ? data.unit.value : this.unit,
+      query: data.query.present ? data.query.value : this.query,
+      scope: data.scope.present ? data.scope.value : this.scope,
+      priority: data.priority.present ? data.priority.value : this.priority,
+      lastHour: data.lastHour.present ? data.lastHour.value : this.lastHour,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JournalBookmarkRow(')
+          ..write('id: $id, ')
+          ..write('hostId: $hostId, ')
+          ..write('label: $label, ')
+          ..write('unit: $unit, ')
+          ..write('query: $query, ')
+          ..write('scope: $scope, ')
+          ..write('priority: $priority, ')
+          ..write('lastHour: $lastHour, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    hostId,
+    label,
+    unit,
+    query,
+    scope,
+    priority,
+    lastHour,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JournalBookmarkRow &&
+          other.id == this.id &&
+          other.hostId == this.hostId &&
+          other.label == this.label &&
+          other.unit == this.unit &&
+          other.query == this.query &&
+          other.scope == this.scope &&
+          other.priority == this.priority &&
+          other.lastHour == this.lastHour &&
+          other.createdAt == this.createdAt);
+}
+
+class JournalBookmarksCompanion extends UpdateCompanion<JournalBookmarkRow> {
+  final Value<String> id;
+  final Value<String> hostId;
+  final Value<String> label;
+  final Value<String?> unit;
+  final Value<String> query;
+  final Value<String> scope;
+  final Value<int?> priority;
+  final Value<bool> lastHour;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const JournalBookmarksCompanion({
+    this.id = const Value.absent(),
+    this.hostId = const Value.absent(),
+    this.label = const Value.absent(),
+    this.unit = const Value.absent(),
+    this.query = const Value.absent(),
+    this.scope = const Value.absent(),
+    this.priority = const Value.absent(),
+    this.lastHour = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  JournalBookmarksCompanion.insert({
+    required String id,
+    required String hostId,
+    required String label,
+    this.unit = const Value.absent(),
+    this.query = const Value.absent(),
+    this.scope = const Value.absent(),
+    this.priority = const Value.absent(),
+    this.lastHour = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       hostId = Value(hostId),
+       label = Value(label),
+       createdAt = Value(createdAt);
+  static Insertable<JournalBookmarkRow> custom({
+    Expression<String>? id,
+    Expression<String>? hostId,
+    Expression<String>? label,
+    Expression<String>? unit,
+    Expression<String>? query,
+    Expression<String>? scope,
+    Expression<int>? priority,
+    Expression<bool>? lastHour,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (hostId != null) 'host_id': hostId,
+      if (label != null) 'label': label,
+      if (unit != null) 'unit': unit,
+      if (query != null) 'query': query,
+      if (scope != null) 'scope': scope,
+      if (priority != null) 'priority': priority,
+      if (lastHour != null) 'last_hour': lastHour,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  JournalBookmarksCompanion copyWith({
+    Value<String>? id,
+    Value<String>? hostId,
+    Value<String>? label,
+    Value<String?>? unit,
+    Value<String>? query,
+    Value<String>? scope,
+    Value<int?>? priority,
+    Value<bool>? lastHour,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return JournalBookmarksCompanion(
+      id: id ?? this.id,
+      hostId: hostId ?? this.hostId,
+      label: label ?? this.label,
+      unit: unit ?? this.unit,
+      query: query ?? this.query,
+      scope: scope ?? this.scope,
+      priority: priority ?? this.priority,
+      lastHour: lastHour ?? this.lastHour,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (unit.present) {
+      map['unit'] = Variable<String>(unit.value);
+    }
+    if (query.present) {
+      map['query'] = Variable<String>(query.value);
+    }
+    if (scope.present) {
+      map['scope'] = Variable<String>(scope.value);
+    }
+    if (priority.present) {
+      map['priority'] = Variable<int>(priority.value);
+    }
+    if (lastHour.present) {
+      map['last_hour'] = Variable<bool>(lastHour.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JournalBookmarksCompanion(')
+          ..write('id: $id, ')
+          ..write('hostId: $hostId, ')
+          ..write('label: $label, ')
+          ..write('unit: $unit, ')
+          ..write('query: $query, ')
+          ..write('scope: $scope, ')
+          ..write('priority: $priority, ')
+          ..write('lastHour: $lastHour, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$KelolaDatabase extends GeneratedDatabase {
   _$KelolaDatabase(QueryExecutor e) : super(e);
   $KelolaDatabaseManager get managers => $KelolaDatabaseManager(this);
@@ -7350,6 +8410,10 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
   late final $FleetCacheTable fleetCache = $FleetCacheTable(this);
   late final $TunnelTargetsTable tunnelTargets = $TunnelTargetsTable(this);
   late final $CommandHistoryTable commandHistory = $CommandHistoryTable(this);
+  late final $SessionLogsTable sessionLogs = $SessionLogsTable(this);
+  late final $JournalBookmarksTable journalBookmarks = $JournalBookmarksTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -7368,6 +8432,8 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     fleetCache,
     tunnelTargets,
     commandHistory,
+    sessionLogs,
+    journalBookmarks,
   ];
 }
 
@@ -9174,6 +10240,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<int> tunnelIdleMinutes,
       Value<bool> snippetLibraryReady,
       Value<int> appLockTimeoutSec,
+      Value<int> sessionLogRetentionDays,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -9194,6 +10261,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<int> tunnelIdleMinutes,
       Value<bool> snippetLibraryReady,
       Value<int> appLockTimeoutSec,
+      Value<int> sessionLogRetentionDays,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -9287,6 +10355,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<int> get appLockTimeoutSec => $composableBuilder(
     column: $table.appLockTimeoutSec,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sessionLogRetentionDays => $composableBuilder(
+    column: $table.sessionLogRetentionDays,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9384,6 +10457,11 @@ class $$AppSettingsTableOrderingComposer
     column: $table.appLockTimeoutSec,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get sessionLogRetentionDays => $composableBuilder(
+    column: $table.sessionLogRetentionDays,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -9473,6 +10551,11 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.appLockTimeoutSec,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get sessionLogRetentionDays => $composableBuilder(
+    column: $table.sessionLogRetentionDays,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -9523,6 +10606,7 @@ class $$AppSettingsTableTableManager
                 Value<int> tunnelIdleMinutes = const Value.absent(),
                 Value<bool> snippetLibraryReady = const Value.absent(),
                 Value<int> appLockTimeoutSec = const Value.absent(),
+                Value<int> sessionLogRetentionDays = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 lastHostId: lastHostId,
@@ -9541,6 +10625,7 @@ class $$AppSettingsTableTableManager
                 tunnelIdleMinutes: tunnelIdleMinutes,
                 snippetLibraryReady: snippetLibraryReady,
                 appLockTimeoutSec: appLockTimeoutSec,
+                sessionLogRetentionDays: sessionLogRetentionDays,
               ),
           createCompanionCallback:
               ({
@@ -9561,6 +10646,7 @@ class $$AppSettingsTableTableManager
                 Value<int> tunnelIdleMinutes = const Value.absent(),
                 Value<bool> snippetLibraryReady = const Value.absent(),
                 Value<int> appLockTimeoutSec = const Value.absent(),
+                Value<int> sessionLogRetentionDays = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 lastHostId: lastHostId,
@@ -9579,6 +10665,7 @@ class $$AppSettingsTableTableManager
                 tunnelIdleMinutes: tunnelIdleMinutes,
                 snippetLibraryReady: snippetLibraryReady,
                 appLockTimeoutSec: appLockTimeoutSec,
+                sessionLogRetentionDays: sessionLogRetentionDays,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -11024,6 +12111,532 @@ typedef $$CommandHistoryTableProcessedTableManager =
       CommandHistoryRow,
       PrefetchHooks Function()
     >;
+typedef $$SessionLogsTableCreateCompanionBuilder =
+    SessionLogsCompanion Function({
+      required String id,
+      required String hostId,
+      Value<String> kind,
+      required String title,
+      required String body,
+      required DateTime createdAt,
+      Value<bool> bookmarked,
+      Value<int> rowid,
+    });
+typedef $$SessionLogsTableUpdateCompanionBuilder =
+    SessionLogsCompanion Function({
+      Value<String> id,
+      Value<String> hostId,
+      Value<String> kind,
+      Value<String> title,
+      Value<String> body,
+      Value<DateTime> createdAt,
+      Value<bool> bookmarked,
+      Value<int> rowid,
+    });
+
+class $$SessionLogsTableFilterComposer
+    extends Composer<_$KelolaDatabase, $SessionLogsTable> {
+  $$SessionLogsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get bookmarked => $composableBuilder(
+    column: $table.bookmarked,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SessionLogsTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $SessionLogsTable> {
+  $$SessionLogsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get bookmarked => $composableBuilder(
+    column: $table.bookmarked,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SessionLogsTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $SessionLogsTable> {
+  $$SessionLogsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get bookmarked => $composableBuilder(
+    column: $table.bookmarked,
+    builder: (column) => column,
+  );
+}
+
+class $$SessionLogsTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $SessionLogsTable,
+          SessionLogRow,
+          $$SessionLogsTableFilterComposer,
+          $$SessionLogsTableOrderingComposer,
+          $$SessionLogsTableAnnotationComposer,
+          $$SessionLogsTableCreateCompanionBuilder,
+          $$SessionLogsTableUpdateCompanionBuilder,
+          (
+            SessionLogRow,
+            BaseReferences<_$KelolaDatabase, $SessionLogsTable, SessionLogRow>,
+          ),
+          SessionLogRow,
+          PrefetchHooks Function()
+        > {
+  $$SessionLogsTableTableManager(_$KelolaDatabase db, $SessionLogsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SessionLogsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SessionLogsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SessionLogsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> hostId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<bool> bookmarked = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SessionLogsCompanion(
+                id: id,
+                hostId: hostId,
+                kind: kind,
+                title: title,
+                body: body,
+                createdAt: createdAt,
+                bookmarked: bookmarked,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String hostId,
+                Value<String> kind = const Value.absent(),
+                required String title,
+                required String body,
+                required DateTime createdAt,
+                Value<bool> bookmarked = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SessionLogsCompanion.insert(
+                id: id,
+                hostId: hostId,
+                kind: kind,
+                title: title,
+                body: body,
+                createdAt: createdAt,
+                bookmarked: bookmarked,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SessionLogsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $SessionLogsTable,
+      SessionLogRow,
+      $$SessionLogsTableFilterComposer,
+      $$SessionLogsTableOrderingComposer,
+      $$SessionLogsTableAnnotationComposer,
+      $$SessionLogsTableCreateCompanionBuilder,
+      $$SessionLogsTableUpdateCompanionBuilder,
+      (
+        SessionLogRow,
+        BaseReferences<_$KelolaDatabase, $SessionLogsTable, SessionLogRow>,
+      ),
+      SessionLogRow,
+      PrefetchHooks Function()
+    >;
+typedef $$JournalBookmarksTableCreateCompanionBuilder =
+    JournalBookmarksCompanion Function({
+      required String id,
+      required String hostId,
+      required String label,
+      Value<String?> unit,
+      Value<String> query,
+      Value<String> scope,
+      Value<int?> priority,
+      Value<bool> lastHour,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$JournalBookmarksTableUpdateCompanionBuilder =
+    JournalBookmarksCompanion Function({
+      Value<String> id,
+      Value<String> hostId,
+      Value<String> label,
+      Value<String?> unit,
+      Value<String> query,
+      Value<String> scope,
+      Value<int?> priority,
+      Value<bool> lastHour,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$JournalBookmarksTableFilterComposer
+    extends Composer<_$KelolaDatabase, $JournalBookmarksTable> {
+  $$JournalBookmarksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get unit => $composableBuilder(
+    column: $table.unit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get query => $composableBuilder(
+    column: $table.query,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get priority => $composableBuilder(
+    column: $table.priority,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get lastHour => $composableBuilder(
+    column: $table.lastHour,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$JournalBookmarksTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $JournalBookmarksTable> {
+  $$JournalBookmarksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get unit => $composableBuilder(
+    column: $table.unit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get query => $composableBuilder(
+    column: $table.query,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get priority => $composableBuilder(
+    column: $table.priority,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get lastHour => $composableBuilder(
+    column: $table.lastHour,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$JournalBookmarksTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $JournalBookmarksTable> {
+  $$JournalBookmarksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<String> get unit =>
+      $composableBuilder(column: $table.unit, builder: (column) => column);
+
+  GeneratedColumn<String> get query =>
+      $composableBuilder(column: $table.query, builder: (column) => column);
+
+  GeneratedColumn<String> get scope =>
+      $composableBuilder(column: $table.scope, builder: (column) => column);
+
+  GeneratedColumn<int> get priority =>
+      $composableBuilder(column: $table.priority, builder: (column) => column);
+
+  GeneratedColumn<bool> get lastHour =>
+      $composableBuilder(column: $table.lastHour, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$JournalBookmarksTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $JournalBookmarksTable,
+          JournalBookmarkRow,
+          $$JournalBookmarksTableFilterComposer,
+          $$JournalBookmarksTableOrderingComposer,
+          $$JournalBookmarksTableAnnotationComposer,
+          $$JournalBookmarksTableCreateCompanionBuilder,
+          $$JournalBookmarksTableUpdateCompanionBuilder,
+          (
+            JournalBookmarkRow,
+            BaseReferences<
+              _$KelolaDatabase,
+              $JournalBookmarksTable,
+              JournalBookmarkRow
+            >,
+          ),
+          JournalBookmarkRow,
+          PrefetchHooks Function()
+        > {
+  $$JournalBookmarksTableTableManager(
+    _$KelolaDatabase db,
+    $JournalBookmarksTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$JournalBookmarksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$JournalBookmarksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$JournalBookmarksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> hostId = const Value.absent(),
+                Value<String> label = const Value.absent(),
+                Value<String?> unit = const Value.absent(),
+                Value<String> query = const Value.absent(),
+                Value<String> scope = const Value.absent(),
+                Value<int?> priority = const Value.absent(),
+                Value<bool> lastHour = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JournalBookmarksCompanion(
+                id: id,
+                hostId: hostId,
+                label: label,
+                unit: unit,
+                query: query,
+                scope: scope,
+                priority: priority,
+                lastHour: lastHour,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String hostId,
+                required String label,
+                Value<String?> unit = const Value.absent(),
+                Value<String> query = const Value.absent(),
+                Value<String> scope = const Value.absent(),
+                Value<int?> priority = const Value.absent(),
+                Value<bool> lastHour = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => JournalBookmarksCompanion.insert(
+                id: id,
+                hostId: hostId,
+                label: label,
+                unit: unit,
+                query: query,
+                scope: scope,
+                priority: priority,
+                lastHour: lastHour,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$JournalBookmarksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $JournalBookmarksTable,
+      JournalBookmarkRow,
+      $$JournalBookmarksTableFilterComposer,
+      $$JournalBookmarksTableOrderingComposer,
+      $$JournalBookmarksTableAnnotationComposer,
+      $$JournalBookmarksTableCreateCompanionBuilder,
+      $$JournalBookmarksTableUpdateCompanionBuilder,
+      (
+        JournalBookmarkRow,
+        BaseReferences<
+          _$KelolaDatabase,
+          $JournalBookmarksTable,
+          JournalBookmarkRow
+        >,
+      ),
+      JournalBookmarkRow,
+      PrefetchHooks Function()
+    >;
 
 class $KelolaDatabaseManager {
   final _$KelolaDatabase _db;
@@ -11053,4 +12666,8 @@ class $KelolaDatabaseManager {
       $$TunnelTargetsTableTableManager(_db, _db.tunnelTargets);
   $$CommandHistoryTableTableManager get commandHistory =>
       $$CommandHistoryTableTableManager(_db, _db.commandHistory);
+  $$SessionLogsTableTableManager get sessionLogs =>
+      $$SessionLogsTableTableManager(_db, _db.sessionLogs);
+  $$JournalBookmarksTableTableManager get journalBookmarks =>
+      $$JournalBookmarksTableTableManager(_db, _db.journalBookmarks);
 }

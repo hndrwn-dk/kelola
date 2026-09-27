@@ -88,6 +88,7 @@ void main() {
   testWidgets('live chip is enabled and uses JournalLogLine', (tester) async {
     await pumpLogs(tester);
     expect(find.byType(JournalLogLine), findsOneWidget);
+    expect(find.widgetWithText(FilterPill, 'SAVE'), findsOneWidget);
     final live = tester.widget<FilterPill>(
       find.widgetWithText(FilterPill, 'LIVE'),
     );

@@ -62,6 +62,14 @@ final appLockTimeoutProvider = FutureProvider<int>((ref) async {
   }
 });
 
+final sessionLogRetentionProvider = FutureProvider<int>((ref) async {
+  try {
+    return await ref.watch(hostRepositoryProvider).sessionLogRetentionDays();
+  } catch (_) {
+    return 14;
+  }
+});
+
 final appLockAvailableProvider = FutureProvider<bool>((ref) async {
   try {
     return await ref.watch(appLockPortProvider).canAuthenticate();

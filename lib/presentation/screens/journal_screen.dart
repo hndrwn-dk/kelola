@@ -9,6 +9,7 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/keep_awake/keep_awake.dart';
+import 'package:kelola/domain/journal/journal_bookmark.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
 import 'package:kelola/domain/journal/journal_follow.dart';
 import 'package:kelola/domain/journal/journal_view.dart';
@@ -60,6 +61,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
   JournalFollowHandle? _follow;
   final _scroll = ScrollController();
   late final KeepAwake _keepAwake;
+  List<JournalBookmark> _bookmarks = const [];
 
   bool get _journalFiltersEnabled => _hasJournald && !_usedSyslog;
 
@@ -109,6 +111,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
         setState(() => _error = 'Host missing');
         return;
       }
+      unawaited(_reloadBookmarks());
       await ref.read(enrollmentProvider.notifier).ensureKey();
       var facts = await repo.facts(host.id);
       if (!mounted) {
@@ -324,6 +327,63 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
     await _keepAwake.release('follow');
   }
 
+  Future<void> _reloadBookmarks() async {
+    final items = await ref
+        .read(hostRepositoryProvider)
+        .listJournalBookmarks(widget.hostId);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _bookmarks = items);
+  }
+
+  JournalBookmark get _currentFilter {
+    return JournalBookmark(
+      id: '',
+      hostId: widget.hostId,
+      label: '',
+      unit: widget.unit,
+      query: _q,
+      scope: _scope,
+      priority: _priority,
+      lastHour: _lastHour,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    );
+  }
+
+  bool get _currentSaved =>
+      _bookmarks.any((b) => sameJournalBookmark(b, _currentFilter));
+
+  Future<void> _saveBookmark() async {
+    await ref.read(hostRepositoryProvider).saveJournalBookmark(
+          hostId: widget.hostId,
+          unit: widget.unit,
+          query: _q,
+          scope: _scope,
+          priority: _priority,
+          lastHour: _lastHour,
+        );
+    await _reloadBookmarks();
+  }
+
+  void _applyBookmark(JournalBookmark mark) {
+    setState(() {
+      _q = mark.query;
+      _scope = mark.scope;
+      _priority = mark.priority;
+      _lastHour = mark.lastHour;
+      if (mark.query.isNotEmpty) {
+        _searching = true;
+      }
+    });
+    _load(reset: true);
+  }
+
+  Future<void> _dropBookmark(JournalBookmark mark) async {
+    await ref.read(hostRepositoryProvider).deleteJournalBookmark(mark.id);
+    await _reloadBookmarks();
+  }
+
   void _setFilter(VoidCallback change) {
     setState(change);
     _load(reset: true);
@@ -449,8 +509,28 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
                       selected: _live,
                       onTap: _toggleLive,
                     ),
+                    FilterPill(
+                      label: 'save',
+                      selected: _currentSaved,
+                      onTap: _saveBookmark,
+                    ),
                   ],
                 ),
+                if (_bookmarks.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  for (final mark in _bookmarks)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: ServiceRow(
+                        risk: RiskLevel.read,
+                        name: mark.label,
+                        meta: mark.query.isEmpty ? 'bookmark' : mark.query,
+                        pillText: 'drop',
+                        onTap: () => _applyBookmark(mark),
+                        onPillTap: () => _dropBookmark(mark),
+                      ),
+                    ),
+                ],
                 if (_skippedLines > 0) ...[
                   const SizedBox(height: 8),
                   Text(

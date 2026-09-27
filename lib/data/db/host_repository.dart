@@ -12,6 +12,9 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_edit.dart';
 import 'package:kelola/domain/hosts/ssh_config_import.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
+import 'package:kelola/domain/journal/journal_bookmark.dart';
+import 'package:kelola/domain/journal/journal_view.dart';
+import 'package:kelola/domain/session_logs/session_log.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
 import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/domain/snippets/starters.dart';
@@ -181,6 +184,12 @@ class HostRepository {
       await (_db.delete(_db.recents)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(
         _db.commandHistory,
+      )..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(
+        _db.sessionLogs,
+      )..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(
+        _db.journalBookmarks,
       )..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.snippets)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.pins)..where((t) => t.hostId.equals(id))).go();
@@ -371,6 +380,212 @@ class HostRepository {
               ..orderBy([(t) => OrderingTerm.desc(t.usedAt)]))
             .get();
     return filterCommandHistory(rows.map((r) => r.command).toList(), query);
+  }
+
+  Future<String?> recordSessionLog(
+    String hostId, {
+    required String title,
+    required String body,
+    DateTime? now,
+    bool bookmarked = false,
+  }) async {
+    if (!shouldRecordSessionLog(title)) {
+      return null;
+    }
+    final createdAt = now ?? DateTime.now().toUtc();
+    final id = _uuid.v7();
+    await _db
+        .into(_db.sessionLogs)
+        .insert(
+          SessionLogsCompanion.insert(
+            id: id,
+            hostId: hostId,
+            title: title.trim(),
+            body: clipSessionLogBody(body),
+            createdAt: createdAt,
+            bookmarked: Value(bookmarked),
+          ),
+        );
+    await _pruneSessionLogs(hostId, now: createdAt);
+    return id;
+  }
+
+  Future<List<SessionLog>> listSessionLogs(
+    String hostId, {
+    String query = '',
+    DateTime? now,
+  }) async {
+    await _pruneSessionLogs(hostId, now: now ?? DateTime.now().toUtc());
+    return filterSessionLogs(await _sessionLogsForHost(hostId), query);
+  }
+
+  Future<void> setSessionLogBookmarked(String id, bool value) async {
+    await (_db.update(_db.sessionLogs)..where((t) => t.id.equals(id))).write(
+      SessionLogsCompanion(bookmarked: Value(value)),
+    );
+  }
+
+  Future<int> sessionLogRetentionDays() async {
+    final raw =
+        (await _settings())?.sessionLogRetentionDays ??
+        kDefaultSessionLogRetentionDays;
+    return SessionLogRetention.fromDays(raw).days;
+  }
+
+  Future<void> setSessionLogRetentionDays(int days) async {
+    final existing = await _settings();
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
+          _appSettingsWrite(
+            existing,
+            sessionLogRetentionDays: Value(
+              SessionLogRetention.fromDays(days).days,
+            ),
+          ),
+        );
+  }
+
+  Future<List<SessionLog>> _sessionLogsForHost(String hostId) async {
+    final rows = await (_db.select(
+      _db.sessionLogs,
+    )..where((t) => t.hostId.equals(hostId))).get();
+    final logs = rows.map(_toSessionLog).toList();
+    logs.sort((a, b) {
+      if (a.bookmarked != b.bookmarked) {
+        return a.bookmarked ? -1 : 1;
+      }
+      return b.createdAt.compareTo(a.createdAt);
+    });
+    return logs;
+  }
+
+  Future<void> _pruneSessionLogs(
+    String hostId, {
+    required DateTime now,
+  }) async {
+    final current = await _sessionLogsForHost(hostId);
+    final kept = pruneSessionLogs(
+      logs: current,
+      now: now,
+      retentionDays: await sessionLogRetentionDays(),
+    );
+    final keepIds = kept.map((l) => l.id).toSet();
+    for (final log in current) {
+      if (keepIds.contains(log.id)) {
+        continue;
+      }
+      await (_db.delete(_db.sessionLogs)..where((t) => t.id.equals(log.id)))
+          .go();
+    }
+  }
+
+  SessionLog _toSessionLog(SessionLogRow row) {
+    return SessionLog(
+      id: row.id,
+      hostId: row.hostId,
+      kind: row.kind,
+      title: row.title,
+      body: row.body,
+      createdAt: row.createdAt,
+      bookmarked: row.bookmarked,
+    );
+  }
+
+  Future<JournalBookmark> saveJournalBookmark({
+    required String hostId,
+    String? unit,
+    required String query,
+    required JournalScope scope,
+    int? priority,
+    bool lastHour = false,
+    DateTime? now,
+  }) async {
+    final createdAt = now ?? DateTime.now().toUtc();
+    final label = journalBookmarkLabel(
+      unit: unit,
+      query: query,
+      scope: scope,
+      priority: priority,
+      lastHour: lastHour,
+    );
+    final incoming = JournalBookmark(
+      id: 'tmp',
+      hostId: hostId,
+      label: label,
+      unit: unit,
+      query: query.trim(),
+      scope: scope,
+      priority: priority,
+      lastHour: lastHour,
+      createdAt: createdAt,
+    );
+    final existing = await listJournalBookmarks(hostId);
+    for (final row in existing) {
+      if (sameJournalBookmark(row, incoming)) {
+        return row;
+      }
+    }
+    final id = _uuid.v7();
+    await _db
+        .into(_db.journalBookmarks)
+        .insert(
+          JournalBookmarksCompanion.insert(
+            id: id,
+            hostId: hostId,
+            label: label,
+            unit: Value(unit),
+            query: Value(query.trim()),
+            scope: Value(scope.name),
+            priority: Value(priority),
+            lastHour: Value(lastHour),
+            createdAt: createdAt,
+          ),
+        );
+    final all = await listJournalBookmarks(hostId);
+    if (all.length > kJournalBookmarkCap) {
+      for (final extra in all.sublist(kJournalBookmarkCap)) {
+        await deleteJournalBookmark(extra.id);
+      }
+    }
+    return JournalBookmark(
+      id: id,
+      hostId: hostId,
+      label: label,
+      unit: unit,
+      query: query.trim(),
+      scope: scope,
+      priority: priority,
+      lastHour: lastHour,
+      createdAt: createdAt,
+    );
+  }
+
+  Future<List<JournalBookmark>> listJournalBookmarks(String hostId) async {
+    final rows =
+        await (_db.select(_db.journalBookmarks)
+              ..where((t) => t.hostId.equals(hostId))
+              ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+            .get();
+    return rows.map(_toJournalBookmark).toList();
+  }
+
+  Future<void> deleteJournalBookmark(String id) async {
+    await (_db.delete(_db.journalBookmarks)..where((t) => t.id.equals(id))).go();
+  }
+
+  JournalBookmark _toJournalBookmark(JournalBookmarkRow row) {
+    return JournalBookmark(
+      id: row.id,
+      hostId: row.hostId,
+      label: row.label,
+      unit: row.unit,
+      query: row.query,
+      scope: journalScopeFromName(row.scope),
+      priority: row.priority,
+      lastHour: row.lastHour,
+      createdAt: row.createdAt,
+    );
   }
 
   Future<void> setLastHost(String? id) async {
@@ -1091,6 +1306,7 @@ class HostRepository {
     Value<int> tunnelIdleMinutes = const Value.absent(),
     Value<bool> snippetLibraryReady = const Value.absent(),
     Value<int> appLockTimeoutSec = const Value.absent(),
+    Value<int> sessionLogRetentionDays = const Value.absent(),
   }) {
     return AppSettingsCompanion(
       id: const Value(1),
@@ -1133,6 +1349,12 @@ class HostRepository {
       appLockTimeoutSec: appLockTimeoutSec.present
           ? appLockTimeoutSec
           : Value(existing?.appLockTimeoutSec ?? 0),
+      sessionLogRetentionDays: sessionLogRetentionDays.present
+          ? sessionLogRetentionDays
+          : Value(
+              existing?.sessionLogRetentionDays ??
+                  kDefaultSessionLogRetentionDays,
+            ),
     );
   }
 

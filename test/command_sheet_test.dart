@@ -8,6 +8,7 @@ import 'package:kelola/domain/command_history/command_complete.dart';
 import 'package:kelola/domain/command_history/command_history.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/command_runner_probe.dart';
+import 'package:kelola/domain/session_logs/session_log.dart';
 import 'package:kelola/presentation/screens/terminal_sheet.dart';
 import 'package:kelola/providers.dart';
 
@@ -45,6 +46,52 @@ void main() {
     expect(find.textContaining('one command'), findsOneWidget);
     expect(find.text('Propose'), findsOneWidget);
     expect(find.text('History'), findsOneWidget);
+    expect(find.text('Logs'), findsOneWidget);
+  });
+
+  testWidgets('Logs empty copy is per-host and stays in the sheet', (
+    tester,
+  ) async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    await tester.pumpWidget(_sheet(db));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Logs'));
+    await tester.pumpAndSettle();
+    expect(find.text(sessionLogEmptyCopy), findsOneWidget);
+    expect(find.text(commandRunnerEmptyCopy), findsNothing);
+    expect(find.textContaining('search session logs'), findsOneWidget);
+  });
+
+  testWidgets('Logs lists this host and restores the saved body', (
+    tester,
+  ) async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    final repo = HostRepository(db);
+    final host = await repo.insert(
+      alias: 'east-worker-uat',
+      address: '10.0.0.1',
+      port: 22,
+      username: 'hendr',
+    );
+    await repo.recordSessionLog(
+      host.id,
+      title: 'uptime',
+      body: '\$ uptime\nexit 0',
+    );
+
+    await tester.pumpWidget(_sheet(db, host: host));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Logs'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('uptime'), findsOneWidget);
+    await tester.tap(find.text('uptime'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('exit 0'), findsOneWidget);
+    expect(find.text(sessionLogEmptyCopy), findsNothing);
   });
 
   testWidgets('History empty copy is per-host and stays in the sheet', (

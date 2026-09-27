@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kelola/domain/containers/compose_project.dart';
 import 'package:kelola/domain/containers/container_list_parser.dart';
 import 'package:kelola/domain/containers/docker_ps_parser.dart';
 import 'package:kelola/domain/containers/podman_ps_parser.dart';
@@ -13,10 +14,19 @@ void main() {
     expect(row.names, 'plex');
     expect(row.image, 'linuxserver/plex');
     expect(row.composeProject, 'media');
+    expect(row.labels['com.docker.compose.project'], 'media');
     expect(row.publishedPorts, '0.0.0.0:32787\u219232400, [::]:32787\u219232400');
     expect(row.portBindings.map((p) => p.allInterfaces), [true, true]);
     expect(row.status.toLowerCase(), contains('healthy'));
     expect(row.engine, 'docker');
+  });
+
+  test('compose working_dir label survives docker NDJSON Labels string', () {
+    const line =
+        '{"ID":"abc","Names":"plex","Image":"plex","State":"running","Status":"Up","Labels":"com.docker.compose.project=media,com.docker.compose.project.working_dir=/srv/media,com.docker.compose.service=plex"}';
+    final row = parseDockerNdjson(line).single;
+    expect(composeWorkingDir(row.labels), '/srv/media');
+    expect(composeProjectReady(row), isTrue);
   });
 
   test('podman JSON array parser is separate and handles rootless fields', () {

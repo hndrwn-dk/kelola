@@ -4,6 +4,7 @@ import 'package:kelola/app_version.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/app_lock/app_lock_timeout.dart';
+import 'package:kelola/domain/session_logs/session_log.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/providers.dart';
 
@@ -81,6 +82,57 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ref.invalidate(appLockTimeoutProvider);
   }
 
+  Future<void> _pickRetention() async {
+    final c = context.kc;
+    final current = SessionLogRetention.fromDays(
+      ref.read(sessionLogRetentionProvider).asData?.value ??
+          kDefaultSessionLogRetentionDays,
+    );
+    final chosen = await showModalBottomSheet<SessionLogRetention>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < SessionLogRetention.values.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 8),
+                  ServiceRow(
+                    risk: RiskLevel.read,
+                    name: SessionLogRetention.values[i].label,
+                    meta: SessionLogRetention.values[i] == current
+                        ? 'selected'
+                        : 'retention',
+                    onTap: () =>
+                        Navigator.of(ctx).pop(SessionLogRetention.values[i]),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (chosen == null || !mounted) {
+      return;
+    }
+    await ref
+        .read(hostRepositoryProvider)
+        .setSessionLogRetentionDays(chosen.days);
+    ref.invalidate(sessionLogRetentionProvider);
+  }
+
   Future<void> _restore() async {
     final result = await ref.read(entitlementProvider).restore();
     if (!mounted) {
@@ -100,6 +152,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final timeout = ref.watch(appLockTimeoutProvider).asData?.value ?? 0;
+    final retentionDays = ref.watch(sessionLogRetentionProvider).asData?.value ??
+        kDefaultSessionLogRetentionDays;
     final canAuth = ref.watch(appLockAvailableProvider).asData?.value ?? false;
     final lockReady = ref.watch(appLockAvailableProvider).hasValue;
     final c = context.kc;
@@ -163,6 +217,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ? AppLockTimeout.fromSeconds(timeout).label
                           : 'set a device screen lock first',
                   onTap: canAuth ? _pickLockTimeout : null,
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Session logs',
+                  meta: SessionLogRetention.fromDays(retentionDays).label,
+                  onTap: _pickRetention,
                 ),
                 const SizedBox(height: 8),
                 ServiceRow(

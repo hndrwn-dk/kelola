@@ -3,15 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/containers/compose_project.dart';
 import 'package:kelola/domain/containers/container_list_view.dart';
+import 'package:kelola/domain/containers/container_lockout.dart';
 import 'package:kelola/domain/containers/container_row.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/probes/compose_action_probe.dart';
 import 'package:kelola/domain/probes/container_list_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/presentation/destructive_auth.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/screens/container_detail_screen.dart';
 import 'package:kelola/presentation/screens/container_images_screen.dart';
+import 'package:kelola/presentation/widgets/confirm_compose_action.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 import 'package:kelola/providers.dart';
 
@@ -289,6 +295,9 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
               : 'Stack · ${group.label}',
         ),
       );
+      if (group.label != 'STANDALONE') {
+        children.addAll(_stackActions(group));
+      }
       for (final row in group.rows) {
         children.add(_row(row));
       }
@@ -299,6 +308,113 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
       padding: kelolaScrollPadding(context),
       children: children,
     );
+  }
+
+  List<Widget> _stackActions(ContainerStackGroup group) {
+    final dir = composeWorkingDirForProject(group.rows, group.label);
+    if (dir == null || dir.isEmpty) {
+      return [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 6),
+          child: ServiceRow(
+            risk: RiskLevel.read,
+            name: 'Compose',
+            meta: 'no working directory label',
+          ),
+        ),
+      ];
+    }
+    final lockout = group.rows.any(
+      (row) => isSshFrontingContainer(row, sshPort: _host?.port ?? 22),
+    );
+    final engine = group.rows.any((r) => r.engine == 'podman') &&
+            !group.rows.any((r) => r.engine == 'docker')
+        ? 'podman'
+        : 'docker';
+    Widget action(ComposeVerb verb, String name, String meta) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: ServiceRow(
+          risk: composeActionRisk(verb, lockout: lockout),
+          name: name,
+          meta: meta,
+          onTap: _loading
+              ? null
+              : () => _compose(group.label, dir, verb, engine, lockout),
+        ),
+      );
+    }
+
+    return [
+      action(ComposeVerb.up, 'Up', 'mutate · compose up -d'),
+      action(ComposeVerb.restart, 'Restart stack', 'mutate · compose restart'),
+      action(ComposeVerb.pull, 'Pull', 'mutate · compose pull'),
+      action(
+        ComposeVerb.down,
+        'Down',
+        lockout
+            ? 'destructive · will end this session'
+            : 'destructive · type ${group.label}',
+      ),
+    ];
+  }
+
+  Future<void> _compose(
+    String project,
+    String workingDir,
+    ComposeVerb verb,
+    String engine,
+    bool lockout,
+  ) async {
+    final host = _host;
+    if (host == null) {
+      return;
+    }
+    final allowed = await confirmComposeAction(
+      context,
+      hostAlias: host.alias,
+      project: project,
+      verb: verb,
+      lockout: lockout,
+    );
+    if (!allowed || !mounted) {
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await requireDestructivePresence(
+        ref.read(hardwareSignerProvider),
+        risk: composeActionRisk(verb, lockout: lockout),
+        reason: '${verb.name} $project',
+      );
+      if (!mounted) {
+        return;
+      }
+      await runHostProbe(
+        ref: ref,
+        context: context,
+        host: host,
+        probe: ComposeActionProbe(
+          project: project,
+          workingDir: workingDir,
+          verb: verb,
+          engine: engine,
+        ),
+        facts: _facts ?? HostFacts.undiscovered,
+      );
+      await _load();
+    } on ReadOnlyViolation {
+      setState(() => _error = 'This host is read-only.');
+    } catch (e) {
+      setState(() => _error = describeSshError(e));
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
   }
 
   Widget _row(ContainerRow row) {
