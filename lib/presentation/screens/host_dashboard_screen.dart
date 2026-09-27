@@ -639,8 +639,8 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 const SizedBox(width: 7),
                 Expanded(
                   child: ToolTile(
-                    label: 'Workloads',
-                    meta: 'kubectl',
+                    label: 'Kubernetes',
+                    meta: 'cluster',
                     onTap: () => _open((id) => WorkloadsScreen(hostId: id)),
                   ),
                 ),

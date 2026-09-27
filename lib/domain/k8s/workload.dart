@@ -66,6 +66,18 @@ class K8sWorkload {
       health == HealthStatus.failed ||
       health == HealthStatus.warning ||
       (desired > 0 && ready < desired);
+
+  K8sWorkload copyWith({int? ready, int? desired, HealthStatus? health}) {
+    return K8sWorkload(
+      kind: kind,
+      namespace: namespace,
+      name: name,
+      ready: ready ?? this.ready,
+      desired: desired ?? this.desired,
+      phase: phase,
+      health: health ?? this.health,
+    );
+  }
 }
 
 class WorkloadInventory {

@@ -30,3 +30,12 @@ String kubectlTry(HostFacts facts, String args) {
       'kubectl $args 2>/dev/null || sudo -n kubectl $args',
   };
 }
+
+/// Write / logs / exec. Same flavor as [kubectlTry], stderr kept.
+String kubectlRun(HostFacts facts, String args) {
+  return switch (kubectlFlavor(facts)) {
+    KubectlFlavor.none => 'echo ---NO_KUBECTL---; exit 1',
+    KubectlFlavor.k3s => 'sudo -n k3s kubectl $args || k3s kubectl $args',
+    KubectlFlavor.kubectl => 'kubectl $args || sudo -n kubectl $args',
+  };
+}
