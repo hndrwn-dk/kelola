@@ -18,6 +18,7 @@ import 'package:kelola/domain/session_logs/session_log.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
 import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/domain/snippets/starters.dart';
+import 'package:kelola/data/secrets/secret_store.dart';
 import 'package:kelola/domain/llm/provider.dart';
 import 'package:kelola/domain/llm/settings.dart';
 import 'package:kelola/domain/units/service_unit.dart';
@@ -25,9 +26,11 @@ import 'package:kelola/app_version.dart';
 import 'package:uuid/uuid.dart';
 
 class HostRepository {
-  HostRepository(this._db);
+  HostRepository(this._db, {SecretStore? secrets})
+      : _secrets = secrets ?? MemorySecretStore();
 
   final KelolaDatabase _db;
+  final SecretStore _secrets;
   final _uuid = const Uuid();
 
   static const defaultKeyAlias = 'kelola-user';
@@ -609,10 +612,19 @@ class HostRepository {
         .map((row) => row?.lastHostId);
   }
 
-  Future<AppSettingsRow?> _settings() {
-    return (_db.select(
+  Future<AppSettingsRow?> _settings() async {
+    final row = await (_db.select(
       _db.appSettings,
     )..where((t) => t.id.equals(1))).getSingleOrNull();
+    if (row == null) {
+      return null;
+    }
+    if (row.llmOpenaiApiKey == null && row.llmApiKey == null) {
+      return row;
+    }
+    await _openaiApiKey(row);
+    return (_db.select(_db.appSettings)..where((t) => t.id.equals(1)))
+        .getSingleOrNull();
   }
 
   Future<void> saveDeviceKey({
@@ -1251,7 +1263,7 @@ class HostRepository {
       ),
       openaiCompatible: LlmEndpointConfig(
         baseUrl: row?.llmOpenaiBaseUrl,
-        apiKey: row?.llmOpenaiApiKey,
+        apiKey: await _openaiApiKey(row),
         model: row?.llmOpenaiModel,
       ),
     );
@@ -1274,6 +1286,12 @@ class HostRepository {
   }
 
   Future<void> saveLlmSettingsBundle(LlmSettingsBundle bundle) async {
+    final key = bundle.openaiCompatible.apiKey?.trim() ?? '';
+    if (key.isEmpty) {
+      await _secrets.delete(kLlmOpenaiApiKeySecret);
+    } else {
+      await _secrets.write(kLlmOpenaiApiKeySecret, key);
+    }
     final existing = await _settings();
     await _db
         .into(_db.appSettings)
@@ -1284,10 +1302,36 @@ class HostRepository {
             llmOllamaBaseUrl: Value(bundle.ollama.baseUrl),
             llmOllamaModel: Value(bundle.ollama.model),
             llmOpenaiBaseUrl: Value(bundle.openaiCompatible.baseUrl),
-            llmOpenaiApiKey: Value(bundle.openaiCompatible.apiKey),
             llmOpenaiModel: Value(bundle.openaiCompatible.model),
           ),
         );
+    await _wipeSqliteApiKeys();
+  }
+
+  Future<String?> _openaiApiKey(AppSettingsRow? row) async {
+    final stored = await _secrets.read(kLlmOpenaiApiKeySecret);
+    if (stored != null && stored.isNotEmpty) {
+      if (row?.llmOpenaiApiKey != null || row?.llmApiKey != null) {
+        await _wipeSqliteApiKeys();
+      }
+      return stored;
+    }
+    final leftover = row?.llmOpenaiApiKey ?? row?.llmApiKey;
+    if (leftover == null || leftover.isEmpty) {
+      return null;
+    }
+    await _secrets.write(kLlmOpenaiApiKeySecret, leftover);
+    await _wipeSqliteApiKeys();
+    return leftover;
+  }
+
+  Future<void> _wipeSqliteApiKeys() async {
+    await (_db.update(_db.appSettings)..where((t) => t.id.equals(1))).write(
+      const AppSettingsCompanion(
+        llmOpenaiApiKey: Value(null),
+        llmApiKey: Value(null),
+      ),
+    );
   }
 
   /// Upsert app_settings row 1, preserving any field not explicitly overridden.
@@ -1301,7 +1345,6 @@ class HostRepository {
     Value<String?> llmOllamaBaseUrl = const Value.absent(),
     Value<String?> llmOllamaModel = const Value.absent(),
     Value<String?> llmOpenaiBaseUrl = const Value.absent(),
-    Value<String?> llmOpenaiApiKey = const Value.absent(),
     Value<String?> llmOpenaiModel = const Value.absent(),
     Value<int> tunnelIdleMinutes = const Value.absent(),
     Value<bool> snippetLibraryReady = const Value.absent(),
@@ -1322,8 +1365,9 @@ class HostRepository {
           ? llmProvider
           : Value(existing?.llmProvider ?? 'none'),
       // Legacy shared columns: preserve only; new writes go to per-provider cols.
+      // API keys never go back to SQLite — they live in SecretStore.
       llmBaseUrl: Value(existing?.llmBaseUrl),
-      llmApiKey: Value(existing?.llmApiKey),
+      llmApiKey: const Value(null),
       llmModel: Value(existing?.llmModel),
       llmOllamaBaseUrl: llmOllamaBaseUrl.present
           ? llmOllamaBaseUrl
@@ -1334,9 +1378,7 @@ class HostRepository {
       llmOpenaiBaseUrl: llmOpenaiBaseUrl.present
           ? llmOpenaiBaseUrl
           : Value(existing?.llmOpenaiBaseUrl),
-      llmOpenaiApiKey: llmOpenaiApiKey.present
-          ? llmOpenaiApiKey
-          : Value(existing?.llmOpenaiApiKey),
+      llmOpenaiApiKey: const Value(null),
       llmOpenaiModel: llmOpenaiModel.present
           ? llmOpenaiModel
           : Value(existing?.llmOpenaiModel),

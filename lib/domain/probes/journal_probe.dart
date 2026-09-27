@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
@@ -450,18 +448,17 @@ rm -rf "\$td"
   Duration get timeout => const Duration(seconds: 25);
 }
 
-/// What Dart received from the SSH exec (Logs diagnosis). No size cap in
-/// dartssh2 [SSHClient.runWithResult]; JournalProbe timeout is 25s.
+/// Lengths only, and only in debug. Never log journal body to logcat.
 void logJournalProbeReceive({
   required int? exitCode,
   required List<int> stdout,
   required List<int> stderr,
 }) {
-  final decoded = utf8.decode(stdout, allowMalformed: true);
-  final prefix =
-      decoded.length <= 200 ? decoded : decoded.substring(0, 200);
+  if (!kDebugMode) {
+    return;
+  }
   debugPrint(
     'JournalProbe recv exit=$exitCode stdoutLen=${stdout.length} '
-    'stderrLen=${stderr.length} prefix=${jsonEncode(prefix)}',
+    'stderrLen=${stderr.length}',
   );
 }

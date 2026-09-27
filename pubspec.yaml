@@ -25,6 +25,7 @@ dependencies:
   kelola_pro:
     path: packages/kelola_pro
   wakelock_plus: ^1.5.2
+  flutter_secure_storage: ^9.2.4
 
 dev_dependencies:
   flutter_test:

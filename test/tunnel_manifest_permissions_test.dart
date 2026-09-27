@@ -36,6 +36,11 @@ void main() {
     expect(manifest.contains('android.hardware.nfc'), isFalse);
   });
 
+  test('application disables Android Auto Backup', () {
+    expect(manifest, contains('android:allowBackup="false"'));
+    expect(manifest, contains('android:dataExtractionRules='));
+  });
+
   test('TunnelForegroundService is specialUse and not exported', () {
     expect(manifest, contains('android:name=".TunnelForegroundService"'));
     expect(manifest, contains('android:foregroundServiceType="specialUse"'));
