@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
@@ -166,6 +167,53 @@ void main() {
       expect(back.activeProvider, LlmProvider.ollama);
       expect(back.openaiCompatible.baseUrl, 'https://api.example.com/v1');
       expect(back.resolved.model, 'llama3.2:latest');
+    });
+
+    test('openai api key is not written to sqlite', () async {
+      final db = KelolaDatabase.memory();
+      addTearDown(db.close);
+      final repo = HostRepository(db);
+      await repo.saveLlmSettingsBundle(
+        const LlmSettingsBundle().persistEdit(
+          draftProvider: LlmProvider.openaiCompatible,
+          draftConfig: const LlmEndpointConfig(
+            baseUrl: 'https://api.example.com/v1',
+            model: 'gpt-4o-mini',
+            apiKey: 'sk-secret',
+          ),
+        ),
+      );
+
+      final row = await (db.select(db.appSettings)
+            ..where((t) => t.id.equals(1)))
+          .getSingle();
+      expect(row.llmOpenaiApiKey, isNull);
+      expect(row.llmApiKey, isNull);
+      expect(
+        (await repo.loadLlmSettingsBundle()).openaiCompatible.apiKey,
+        'sk-secret',
+      );
+    });
+
+    test('leftover sqlite openai key is migrated and wiped', () async {
+      final db = KelolaDatabase.memory();
+      addTearDown(db.close);
+      await db.into(db.appSettings).insertOnConflictUpdate(
+            const AppSettingsCompanion(
+              id: Value(1),
+              llmOpenaiApiKey: Value('sk-old'),
+            ),
+          );
+      final repo = HostRepository(db);
+      expect(
+        (await repo.loadLlmSettingsBundle()).openaiCompatible.apiKey,
+        'sk-old',
+      );
+      final row = await (db.select(db.appSettings)
+            ..where((t) => t.id.equals(1)))
+          .getSingle();
+      expect(row.llmOpenaiApiKey, isNull);
+      expect(row.llmApiKey, isNull);
     });
   });
 }

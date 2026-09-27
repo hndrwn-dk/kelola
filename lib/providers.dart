@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
 import 'package:kelola/data/db/host_repository.dart';
+import 'package:kelola/data/secrets/flutter_secure_secret_store.dart';
+import 'package:kelola/data/secrets/secret_store.dart';
 import 'package:kelola/data/db/tunnel_repository.dart';
 import 'package:kelola/data/app_lock/app_lock_port.dart';
 import 'package:kelola/data/app_lock/method_channel_app_lock.dart';
@@ -42,8 +44,15 @@ final databaseProvider = Provider<KelolaDatabase>((ref) {
   return db;
 });
 
+final secretStoreProvider = Provider<SecretStore>((ref) {
+  return FlutterSecureSecretStore();
+});
+
 final hostRepositoryProvider = Provider<HostRepository>((ref) {
-  return HostRepository(ref.watch(databaseProvider));
+  return HostRepository(
+    ref.watch(databaseProvider),
+    secrets: ref.watch(secretStoreProvider),
+  );
 });
 
 final hardwareSignerProvider = Provider<HardwareSigner>((ref) {
