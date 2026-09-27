@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/app.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
+import 'package:kelola/domain/command_history/command_complete.dart';
 import 'package:kelola/domain/command_history/command_history.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/command_runner_probe.dart';
@@ -123,5 +124,53 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'zzz');
     await tester.pump();
     expect(find.text(commandHistoryNoMatchCopy), findsOneWidget);
+  });
+
+  testWidgets('typing offers local corpus then fills the field', (
+    tester,
+  ) async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    await tester.pumpWidget(_sheet(db));
+    await tester.pumpAndSettle();
+
+    expect(find.text('journalctl -u'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'journal');
+    await tester.pumpAndSettle();
+
+    expect(find.text('journalctl -u'), findsOneWidget);
+    await tester.tap(find.text('journalctl -u'));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, 'journalctl -u');
+  });
+
+  testWidgets('history prefix ranks above the static corpus', (tester) async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    final repo = HostRepository(db);
+    final host = await repo.insert(
+      alias: 'east-worker-uat',
+      address: '10.0.0.1',
+      port: 22,
+      username: 'hendr',
+    );
+    await repo.recordCommandHistory(host.id, 'journalctl -u kelola-agent');
+
+    await tester.pumpWidget(_sheet(db, host: host));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'journal');
+    await tester.pumpAndSettle();
+
+    expect(find.text('journalctl -u kelola-agent'), findsOneWidget);
+    final texts = tester
+        .widgetList<Text>(find.textContaining('journalctl'))
+        .map((w) => w.data)
+        .toList();
+    expect(texts.first, 'journalctl -u kelola-agent');
+    expect(kCommandCompleteCorpus, contains('journalctl -u'));
   });
 }
