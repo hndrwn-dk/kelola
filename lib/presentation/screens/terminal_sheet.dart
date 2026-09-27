@@ -8,6 +8,7 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/command_history/command_complete.dart';
 import 'package:kelola/domain/command_history/command_history.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/session_logs/session_log.dart';
 import 'package:kelola/domain/keep_awake/keep_awake.dart';
 import 'package:kelola/domain/probes/command_runner_probe.dart';
 import 'package:kelola/presentation/assist_flow.dart';
@@ -42,11 +43,14 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
   final _out = StringBuffer();
   final _input = TextEditingController();
   final _historySearch = TextEditingController();
+  final _logSearch = TextEditingController();
   final _scroll = ScrollController();
   String? _error;
   bool _busy = false;
   bool _historyOpen = false;
+  bool _logsOpen = false;
   List<String> _history = const [];
+  List<SessionLog> _logs = const [];
   List<String> _completeHistory = const [];
   late final KeepAwake _keepAwake;
 
@@ -65,6 +69,7 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     _input.removeListener(_onInputChanged);
     _input.dispose();
     _historySearch.dispose();
+    _logSearch.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -86,6 +91,7 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
       _busy = true;
       _error = null;
       _historyOpen = false;
+      _logsOpen = false;
     });
     try {
       await ref.read(enrollmentProvider.notifier).ensureKey();
@@ -101,17 +107,35 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
       if (!mounted) {
         return;
       }
+      final formatted = formatCommandRun(line, result);
       if (_out.isNotEmpty) {
         _out.write('\n\n');
       }
-      _out.write(formatCommandRun(line, result));
+      _out.write(formatted);
+      await ref.read(hostRepositoryProvider).recordSessionLog(
+            widget.host.id,
+            title: line,
+            body: formatted,
+          );
+      if (!mounted) {
+        return;
+      }
       setState(() {});
       _jump();
     } catch (e) {
       if (!mounted) {
         return;
       }
-      setState(() => _error = describeSshError(e));
+      final message = describeSshError(e);
+      await ref.read(hostRepositoryProvider).recordSessionLog(
+            widget.host.id,
+            title: line,
+            body: message,
+          );
+      if (!mounted) {
+        return;
+      }
+      setState(() => _error = message);
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -238,7 +262,30 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     _historySearch.clear();
     setState(() {
       _historyOpen = true;
+      _logsOpen = false;
       _history = items;
+    });
+  }
+
+  Future<void> _toggleLogs() async {
+    if (_busy) {
+      return;
+    }
+    if (_logsOpen) {
+      setState(() => _logsOpen = false);
+      return;
+    }
+    final items = await ref
+        .read(hostRepositoryProvider)
+        .listSessionLogs(widget.host.id);
+    if (!mounted) {
+      return;
+    }
+    _logSearch.clear();
+    setState(() {
+      _logsOpen = true;
+      _historyOpen = false;
+      _logs = items;
     });
   }
 
@@ -269,7 +316,7 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    final suggestions = (!_historyOpen && !_busy)
+    final suggestions = (!_historyOpen && !_logsOpen && !_busy)
         ? completeCommandLines(query: _input.text, history: _completeHistory)
         : const <String>[];
     return Material(
@@ -307,7 +354,11 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
                   borderRadius: BorderRadius.circular(KelolaRadii.md),
                   border: Border.all(color: c.line),
                 ),
-                child: _historyOpen ? _historyPane(c) : _outputPane(c),
+                child: _historyOpen
+                    ? _historyPane(c)
+                    : _logsOpen
+                        ? _logsPane(c)
+                        : _outputPane(c),
               ),
             ),
             const SizedBox(height: 10),
@@ -362,6 +413,13 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
               name: 'History',
               meta: _historyOpen ? 'close' : 'this host',
               onTap: _busy ? null : _toggleHistory,
+            ),
+            const SizedBox(height: 8),
+            ServiceRow(
+              risk: RiskLevel.read,
+              name: 'Logs',
+              meta: _logsOpen ? 'close' : 'this host',
+              onTap: _busy ? null : _toggleLogs,
             ),
           ],
         ),
@@ -441,5 +499,83 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
         ),
       ],
     );
+  }
+
+  Widget _logsPane(KelolaColors c) {
+    final filtered = filterSessionLogs(_logs, _logSearch.text);
+    final emptyCopy = _logSearch.text.trim().isEmpty
+        ? sessionLogEmptyCopy
+        : sessionLogNoMatchCopy;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _logSearch,
+          style: KelolaType.mono(color: c.text, size: 13),
+          decoration: InputDecoration(
+            hintText: 'search session logs',
+            hintStyle: KelolaType.body(color: c.dim, size: 13),
+            isDense: true,
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: filtered.isEmpty
+              ? Text(
+                  emptyCopy,
+                  style: KelolaType.body(color: c.muted, size: 13),
+                )
+              : ListView.separated(
+                  padding: kelolaScrollPadding(
+                    context,
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    extraBottom: 8,
+                  ),
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
+                  itemBuilder: (context, i) {
+                    final log = filtered[i];
+                    return InkWell(
+                      onTap: () => _pickLog(log),
+                      onLongPress: () => _toggleLogBookmark(log),
+                      child: RiskBand(
+                        risk: RiskLevel.read,
+                        child: Text(
+                          log.bookmarked ? '${log.title} · kept' : log.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: KelolaType.mono(color: c.text, size: 12),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  void _pickLog(SessionLog log) {
+    _out
+      ..clear()
+      ..write(log.body);
+    setState(() => _logsOpen = false);
+    _jump();
+  }
+
+  Future<void> _toggleLogBookmark(SessionLog log) async {
+    await ref
+        .read(hostRepositoryProvider)
+        .setSessionLogBookmarked(log.id, !log.bookmarked);
+    final items = await ref
+        .read(hostRepositoryProvider)
+        .listSessionLogs(widget.host.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _logs = items);
   }
 }

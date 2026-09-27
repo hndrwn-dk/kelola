@@ -20,6 +20,8 @@ part 'database.g.dart';
     FleetCache,
     TunnelTargets,
     CommandHistory,
+    SessionLogs,
+    JournalBookmarks,
   ],
 )
 class KelolaDatabase extends _$KelolaDatabase {
@@ -30,7 +32,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -144,6 +146,19 @@ WHERE id = 1
         await m.addColumn(snippets, snippets.hostId);
         await m.addColumn(snippets, snippets.tag);
         await m.addColumn(snippets, snippets.startup);
+      }
+      if (from < 18) {
+        await m.createTable(sessionLogs);
+        await m.createTable(journalBookmarks);
+        final hasSettings = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' AND name='app_settings'",
+        ).get();
+        if (hasSettings.isNotEmpty) {
+          await m.addColumn(
+            appSettings,
+            appSettings.sessionLogRetentionDays,
+          );
+        }
       }
     },
   );

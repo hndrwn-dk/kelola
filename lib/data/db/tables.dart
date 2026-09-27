@@ -129,6 +129,10 @@ class AppSettings extends Table {
   /// `0` off, `-1` immediately, `60` / `300` / `900` otherwise.
   IntColumn get appLockTimeoutSec => integer().withDefault(const Constant(0))();
 
+  /// Days to keep non-bookmarked session logs. 7 / 14 / 30 / 90.
+  IntColumn get sessionLogRetentionDays =>
+      integer().withDefault(const Constant(14))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
@@ -217,4 +221,34 @@ class CommandHistory extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {hostId, command};
+}
+
+@DataClassName('SessionLogRow')
+class SessionLogs extends Table {
+  TextColumn get id => text()();
+  TextColumn get hostId => text().references(Hosts, #id)();
+  TextColumn get kind => text().withDefault(const Constant('command'))();
+  TextColumn get title => text()();
+  TextColumn get body => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  BoolColumn get bookmarked => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+@DataClassName('JournalBookmarkRow')
+class JournalBookmarks extends Table {
+  TextColumn get id => text()();
+  TextColumn get hostId => text().references(Hosts, #id)();
+  TextColumn get label => text()();
+  TextColumn get unit => text().nullable()();
+  TextColumn get query => text().withDefault(const Constant(''))();
+  TextColumn get scope => text().withDefault(const Constant('all'))();
+  IntColumn get priority => integer().nullable()();
+  BoolColumn get lastHour => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
 }
