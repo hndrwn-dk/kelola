@@ -1,4 +1,5 @@
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:kelola/domain/probes/command_runner_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
@@ -6,14 +7,19 @@ import 'package:kelola/domain/units/lockout.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
 class SnippetProbe extends Probe<CommandRunnerResult> {
-  const SnippetProbe({required this.name, required this.commandLine});
+  const SnippetProbe({
+    required this.name,
+    required this.commandLine,
+    this.env = const {},
+  });
 
   final String name;
   final String commandLine;
+  final Map<String, String> env;
 
   @override
   String command(HostFacts facts) {
-    return 'TERM=dumb /bin/sh -c ${shellSingleQuote(commandLine)}';
+    return 'TERM=dumb /bin/sh -c ${shellSingleQuote(prefixEnvExports(commandLine, env))}';
   }
 
   @override

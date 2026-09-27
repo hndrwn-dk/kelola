@@ -8,6 +8,7 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/containers/container_row.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
+import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_edit.dart';
 import 'package:kelola/domain/hosts/ssh_config_import.dart';
@@ -1645,6 +1646,44 @@ class HostRepository {
       tag: row.tag,
       startup: row.startup,
     );
+  }
+
+  Future<List<EnvBinding>> listEnvBindings() async {
+    final rows = await _db.select(_db.envVars).get();
+    return [
+      for (final row in rows)
+        EnvBinding(
+          id: row.id,
+          scope: EnvScope.values.byName(row.scope),
+          scopeId: row.scopeId,
+          name: row.name,
+          value: row.value,
+        ),
+    ];
+  }
+
+  Future<Map<String, String>> envForHost(Host host) async {
+    return resolveHostEnv(host, await listEnvBindings());
+  }
+
+  Future<void> upsertEnvBinding(EnvBinding binding) {
+    if (!isEnvName(binding.name)) {
+      throw ArgumentError.value(binding.name, 'name');
+    }
+    return _db.into(_db.envVars).insertOnConflictUpdate(
+      EnvVarsCompanion.insert(
+        id: binding.id,
+        scope: binding.scope.name,
+        scopeId: binding.scopeId,
+        name: binding.name,
+        value: binding.value,
+        updatedAt: DateTime.now().toUtc(),
+      ),
+    );
+  }
+
+  Future<void> deleteEnvBinding(String id) {
+    return (_db.delete(_db.envVars)..where((t) => t.id.equals(id))).go();
   }
 }
 

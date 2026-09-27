@@ -1,4 +1,5 @@
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
@@ -20,13 +21,14 @@ class CommandRunnerResult {
 
 /// One-shot SSH exec. Not a PTY, not a login shell, not M9.
 class CommandRunnerProbe extends Probe<CommandRunnerResult> {
-  const CommandRunnerProbe(this.line);
+  const CommandRunnerProbe(this.line, {this.env = const {}});
 
   final String line;
+  final Map<String, String> env;
 
   @override
   String command(HostFacts facts) {
-    return 'TERM=dumb /bin/sh -c ${shellSingleQuote(line)}';
+    return 'TERM=dumb /bin/sh -c ${shellSingleQuote(prefixEnvExports(line, env))}';
   }
 
   @override

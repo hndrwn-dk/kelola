@@ -3,6 +3,7 @@ import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/db/tunnel_repository.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
+import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
 import 'package:kelola/domain/tunnels/tunnel_target.dart';
 import 'package:kelola/domain/vault/vault.dart';
@@ -59,6 +60,7 @@ class VaultStore {
       ...await _keyRecords(device),
       ...await _tunnelRecords(device),
       ...await _prefRecords(device),
+      ...await _envRecords(device),
       ...await _tombstoneRecords(),
     ];
     return packVaultRecords(
@@ -205,6 +207,25 @@ class VaultStore {
     ];
   }
 
+  Future<List<VaultRecord>> _envRecords(String device) async {
+    final rows = await _db.select(_db.envVars).get();
+    return [
+      for (final row in rows)
+        VaultRecord(
+          id: row.id,
+          kind: VaultRecordKind.env,
+          updatedAt: row.updatedAt.toUtc(),
+          deviceId: device,
+          payload: {
+            'scope': row.scope,
+            'scopeId': row.scopeId,
+            'name': row.name,
+            'value': row.value,
+          },
+        ),
+    ];
+  }
+
   Future<List<VaultRecord>> _tombstoneRecords() async {
     final rows = await _db.select(_db.vaultTombstones).get();
     return [
@@ -270,6 +291,22 @@ class VaultStore {
         );
       case VaultRecordKind.pref:
         await _applyPrefs(record.payload);
+      case VaultRecordKind.env:
+        final name = record.payload['name'] as String? ?? '';
+        if (!isEnvName(name)) {
+          return;
+        }
+        await _hosts.upsertEnvBinding(
+          EnvBinding(
+            id: record.id,
+            scope: EnvScope.values.byName(
+              record.payload['scope'] as String? ?? EnvScope.host.name,
+            ),
+            scopeId: record.payload['scopeId'] as String? ?? '',
+            name: name,
+            value: record.payload['value'] as String? ?? '',
+          ),
+        );
       case VaultRecordKind.tombstone:
         break;
     }
@@ -348,6 +385,8 @@ class VaultStore {
             .go();
       case VaultRecordKind.tunnel:
         await _tunnels.delete(record.id);
+      case VaultRecordKind.env:
+        await _hosts.deleteEnvBinding(record.id);
       case VaultRecordKind.pref:
       case VaultRecordKind.tombstone:
         break;

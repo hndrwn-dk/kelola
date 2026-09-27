@@ -9,6 +9,7 @@ import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/vault/vault.dart';
+import 'package:kelola/presentation/host_env/env_bindings_sheet.dart';
 import 'package:kelola/presentation/pro_locked_sheet.dart';
 import 'package:kelola/providers.dart';
 import 'package:share_plus/share_plus.dart';
@@ -876,6 +877,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   name: 'Session logs',
                   meta: SessionLogRetention.fromDays(retentionDays).label,
                   onTap: _pickRetention,
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Environments',
+                  meta: 'tag variables',
+                  onTap: () => showTagEnvironmentsSheet(context: context),
                 ),
                 const SizedBox(height: 8),
                 ServiceRow(

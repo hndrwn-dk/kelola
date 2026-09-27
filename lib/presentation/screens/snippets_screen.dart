@@ -397,6 +397,15 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
     _path = TextEditingController(text: '/');
     _port = TextEditingController();
     _hostAlias = TextEditingController(text: widget.host.alias);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadEnv());
+  }
+
+  Future<void> _loadEnv() async {
+    final env = await ref.read(hostRepositoryProvider).envForHost(widget.host);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _env = env);
   }
 
   @override
@@ -418,10 +427,12 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
   SnippetRender get _render =>
       renderSnippet(widget.snippet.template, _bindings);
 
+  Map<String, String> _env = const {};
+
   /// Preview and execution both use this probe. Null means do not run.
   SnippetProbe? get _probe {
     try {
-      return snippetToProbe(widget.snippet, _bindings);
+      return snippetToProbe(widget.snippet, _bindings, env: _env);
     } on SnippetUnboundException {
       return null;
     }
@@ -836,10 +847,18 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
       _outcomes = const [];
     });
     try {
+      final repo = ref.read(hostRepositoryProvider);
+      final envById = <String, Map<String, String>>{
+        for (final host in _chosen) host.id: await repo.envForHost(host),
+      };
+      if (!mounted) {
+        return;
+      }
       final outcomes = await runSnippetMulti(
         snippet: widget.snippet,
         hosts: _chosen,
         shared: widget.shared,
+        envFor: (host) => envById[host.id] ?? const {},
         execute: <T>(host, probe) async {
           final seam = widget.onExecute;
           if (seam != null) {

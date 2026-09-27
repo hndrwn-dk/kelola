@@ -92,6 +92,8 @@ void main() {
   testWidgets('Settings status follows unlock, not the build token', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     Future<void> pump(Entitlement entitlement) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -129,6 +131,7 @@ void main() {
     );
     expect(find.text('Keys stay on this device'), findsOneWidget);
     expect(find.text('Session logs'), findsOneWidget);
+    expect(find.text('Environments'), findsOneWidget);
     expect(find.text('Fleet watch'), findsOneWidget);
     expect(find.text('Vault'), findsOneWidget);
   });

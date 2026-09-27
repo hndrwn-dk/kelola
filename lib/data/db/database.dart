@@ -24,6 +24,7 @@ part 'database.g.dart';
     JournalBookmarks,
     FleetWatchState,
     VaultTombstones,
+    EnvVars,
   ],
 )
 class KelolaDatabase extends _$KelolaDatabase {
@@ -34,7 +35,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -225,6 +226,9 @@ WHERE id = 1
             await m.addColumn(appSettings, appSettings.vaultIncludeSecrets);
           }
         }
+      }
+      if (from < 22) {
+        await m.createTable(envVars);
       }
     },
   );
