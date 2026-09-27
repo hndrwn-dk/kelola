@@ -8,7 +8,7 @@ Kelola is a Flutter client (Android and iOS) from Tursina Labs. It SSHs in with 
 
 **Not (v1):** a monitoring product, an Ansible replacement, a multi-user team tool, or a cloud account. There is no Tursina backend and no telemetry.
 
-Kelola has **LLM incident assist** (Explain / Summarise / Propose): explicit, redacted, and previewed. It does **not** have terminal autocomplete. The terminal never calls a model.
+Kelola has **LLM incident assist** (Explain / Summarise / Propose): explicit, redacted, and previewed. The Command sheet has **local autocomplete** from per-host history and a static corpus. The terminal never calls a model.
 
 ## How it works
 
@@ -34,7 +34,8 @@ One hardware key per phone, reused for every host. That is intentional.
 | Local audit log (write-before-exec, JSON copy) | Working |
 | Read-only host switch | Enforced at the SSH dispatcher |
 | Fleet health grid (read-only) | Working; Play builds cap free fleet at 3 hosts |
-| Assist (Explain / Summarise / Propose) | Working; no terminal autocomplete |
+| Assist (Explain / Summarise / Propose) | Working; terminal never calls a model |
+| Command history + local autocomplete | Working; no LLM path |
 | Tunnels (SSH local port forward) | Working; Play builds gate behind a one-time unlock |
 | Snippets, home widget, OS shortcuts | Working |
 

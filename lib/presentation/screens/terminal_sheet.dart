@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/command_history/command_complete.dart';
 import 'package:kelola/domain/command_history/command_history.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/keep_awake/keep_awake.dart';
@@ -46,18 +47,22 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
   bool _busy = false;
   bool _historyOpen = false;
   List<String> _history = const [];
+  List<String> _completeHistory = const [];
   late final KeepAwake _keepAwake;
 
   @override
   void initState() {
     super.initState();
     _keepAwake = ref.read(keepAwakeProvider);
+    _input.addListener(_onInputChanged);
     unawaited(_keepAwake.acquire('command'));
+    unawaited(_reloadCompleteHistory());
   }
 
   @override
   void dispose() {
     unawaited(_keepAwake.release('command'));
+    _input.removeListener(_onInputChanged);
     _input.dispose();
     _historySearch.dispose();
     _scroll.dispose();
@@ -72,6 +77,7 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     await ref
         .read(hostRepositoryProvider)
         .recordCommandHistory(widget.host.id, line);
+    unawaited(_reloadCompleteHistory());
     if (!mounted) {
       return;
     }
@@ -236,6 +242,22 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     });
   }
 
+  void _onInputChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _reloadCompleteHistory() async {
+    final items = await ref
+        .read(hostRepositoryProvider)
+        .listCommandHistory(widget.host.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _completeHistory = items);
+  }
+
   void _pickHistory(String line) {
     _input.value = TextEditingValue(
       text: line,
@@ -247,6 +269,9 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
+    final suggestions = (!_historyOpen && !_busy)
+        ? completeCommandLines(query: _input.text, history: _completeHistory)
+        : const <String>[];
     return Material(
       color: c.ink,
       child: Padding(
@@ -297,6 +322,33 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
               ),
               onSubmitted: (_) => _send(),
             ),
+            if (suggestions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 168),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  itemCount: suggestions.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
+                  itemBuilder: (context, i) {
+                    final line = suggestions[i];
+                    return InkWell(
+                      onTap: () => _pickHistory(line),
+                      child: RiskBand(
+                        risk: RiskLevel.read,
+                        child: Text(
+                          line,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: KelolaType.mono(color: c.text, size: 12),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             ServiceRow(
               risk: RiskLevel.read,
