@@ -4,6 +4,7 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:kelola/data/keystore/hardware_signer.dart';
 import 'package:kelola/data/ssh/der_ecdsa.dart';
 import 'package:kelola/data/ssh/openssh_ecdsa.dart';
+import 'package:kelola/domain/ssh/openssh_user_cert.dart';
 
 /// Bridges a hardware-backed P-256 key into dartssh2 via SSHIdentity.custom.
 ///
@@ -15,12 +16,14 @@ class HardwareSshIdentity {
     required this.signer,
     required this.alias,
     required this.publicBlob,
+    this.certificateBlob,
     this.comment = 'kelola',
   });
 
   final HardwareSigner signer;
   final String alias;
   final Uint8List publicBlob;
+  final Uint8List? certificateBlob;
   final String comment;
 
   factory HardwareSshIdentity.fromSpki({
@@ -40,9 +43,10 @@ class HardwareSshIdentity {
   }
 
   SSHIdentity toIdentity() {
+    final cert = certificateBlob;
     return SSHIdentity.custom(
-      type: OpensshEcdsaP256.type,
-      publicKey: SSHRawHostKey(publicBlob),
+      type: cert == null ? OpensshEcdsaP256.type : kOpenSshEcdsaUserCertType,
+      publicKey: SSHRawHostKey(cert ?? publicBlob),
       comment: comment,
       shouldProbe: true,
       signer: (data) async {

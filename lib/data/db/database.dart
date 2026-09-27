@@ -35,7 +35,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -239,6 +239,18 @@ WHERE id = 1
           final names = cols.map((r) => r.read<String>('name')).toSet();
           if (!names.contains('agent_forward')) {
             await m.addColumn(hosts, hosts.agentForward);
+          }
+        }
+      }
+      if (from < 24) {
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='hosts'",
+        ).get();
+        if (tables.isNotEmpty) {
+          final cols = await customSelect('PRAGMA table_info(hosts)').get();
+          final names = cols.map((r) => r.read<String>('name')).toSet();
+          if (!names.contains('ssh_certificate')) {
+            await m.addColumn(hosts, hosts.sshCertificate);
           }
         }
       }

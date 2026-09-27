@@ -5,7 +5,7 @@ import 'package:kelola/data/db/host_repository.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
-  test('schema 23 adds hosts.agent_forward default off', () async {
+  test('schema 24 adds hosts.ssh_certificate', () async {
     final raw = sqlite3.openInMemory();
     raw.execute('''
 CREATE TABLE hosts (
@@ -18,21 +18,20 @@ CREATE TABLE hosts (
   created_at INTEGER NOT NULL
 );
 ''');
-    raw.execute('PRAGMA user_version = 22');
+    raw.execute('PRAGMA user_version = 23');
     final db = KelolaDatabase.connect(NativeDatabase.opened(raw));
     addTearDown(db.close);
     await db.customSelect('SELECT 1').get();
-
     final version = await db.customSelect('PRAGMA user_version').getSingle();
     expect(version.data['user_version'], 24);
     final cols = await db.customSelect('PRAGMA table_info(hosts)').get();
     expect(
-      cols.map((r) => r.read<String>('name')).contains('agent_forward'),
+      cols.map((r) => r.read<String>('name')).contains('ssh_certificate'),
       isTrue,
     );
   });
 
-  test('repository stores agent forward and defaults off', () async {
+  test('repository stores an SSH certificate', () async {
     final db = KelolaDatabase.memory();
     addTearDown(db.close);
     final hosts = HostRepository(db);
@@ -42,8 +41,8 @@ CREATE TABLE hosts (
       port: 22,
       username: 'ops',
     );
-    expect((await hosts.get(host.id))!.agentForward, isFalse);
-    await hosts.setAgentForward(host.id, true);
-    expect((await hosts.get(host.id))!.agentForward, isTrue);
+    expect((await hosts.get(host.id))!.sshCertificate, isNull);
+    await hosts.setSshCertificate(host.id, 'ecdsa-sha2-nistp256-cert-v01@openssh.com AAA=');
+    expect((await hosts.get(host.id))!.sshCertificate, contains('cert-v01'));
   });
 }

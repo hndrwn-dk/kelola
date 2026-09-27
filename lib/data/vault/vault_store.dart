@@ -107,6 +107,7 @@ class VaultStore {
             'sortOrder': row.sortOrder,
             'sudoNeedsPassword': row.sudoNeedsPassword,
             'agentForward': row.agentForward,
+            'sshCertificate': row.sshCertificate,
           },
         ),
     ];
@@ -331,6 +332,7 @@ class VaultStore {
           record.payload['sudoNeedsPassword'] as bool? ?? false,
         ),
         agentForward: Value(record.payload['agentForward'] as bool? ?? false),
+        sshCertificate: Value(record.payload['sshCertificate'] as String?),
         createdAt: now,
         updatedAt: Value(record.updatedAt),
       ),

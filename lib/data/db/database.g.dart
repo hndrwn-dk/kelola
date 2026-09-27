@@ -235,6 +235,17 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _sshCertificateMeta = const VerificationMeta(
+    'sshCertificate',
+  );
+  @override
+  late final GeneratedColumn<String> sshCertificate = GeneratedColumn<String>(
+    'ssh_certificate',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -257,6 +268,7 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
     updatedAt,
     sudoNeedsPassword,
     agentForward,
+    sshCertificate,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -420,6 +432,15 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
         ),
       );
     }
+    if (data.containsKey('ssh_certificate')) {
+      context.handle(
+        _sshCertificateMeta,
+        sshCertificate.isAcceptableOrUnknown(
+          data['ssh_certificate']!,
+          _sshCertificateMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -509,6 +530,10 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
         DriftSqlType.bool,
         data['${effectivePrefix}agent_forward'],
       )!,
+      sshCertificate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ssh_certificate'],
+      ),
     );
   }
 
@@ -539,6 +564,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
   final DateTime? updatedAt;
   final bool sudoNeedsPassword;
   final bool agentForward;
+  final String? sshCertificate;
   const HostRow({
     required this.id,
     required this.alias,
@@ -560,6 +586,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     this.updatedAt,
     required this.sudoNeedsPassword,
     required this.agentForward,
+    this.sshCertificate,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -600,6 +627,9 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     }
     map['sudo_needs_password'] = Variable<bool>(sudoNeedsPassword);
     map['agent_forward'] = Variable<bool>(agentForward);
+    if (!nullToAbsent || sshCertificate != null) {
+      map['ssh_certificate'] = Variable<String>(sshCertificate);
+    }
     return map;
   }
 
@@ -639,6 +669,9 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           : Value(updatedAt),
       sudoNeedsPassword: Value(sudoNeedsPassword),
       agentForward: Value(agentForward),
+      sshCertificate: sshCertificate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sshCertificate),
     );
   }
 
@@ -668,6 +701,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       sudoNeedsPassword: serializer.fromJson<bool>(json['sudoNeedsPassword']),
       agentForward: serializer.fromJson<bool>(json['agentForward']),
+      sshCertificate: serializer.fromJson<String?>(json['sshCertificate']),
     );
   }
   @override
@@ -694,6 +728,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'sudoNeedsPassword': serializer.toJson<bool>(sudoNeedsPassword),
       'agentForward': serializer.toJson<bool>(agentForward),
+      'sshCertificate': serializer.toJson<String?>(sshCertificate),
     };
   }
 
@@ -718,6 +753,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     Value<DateTime?> updatedAt = const Value.absent(),
     bool? sudoNeedsPassword,
     bool? agentForward,
+    Value<String?> sshCertificate = const Value.absent(),
   }) => HostRow(
     id: id ?? this.id,
     alias: alias ?? this.alias,
@@ -743,6 +779,9 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     sudoNeedsPassword: sudoNeedsPassword ?? this.sudoNeedsPassword,
     agentForward: agentForward ?? this.agentForward,
+    sshCertificate: sshCertificate.present
+        ? sshCertificate.value
+        : this.sshCertificate,
   );
   HostRow copyWithCompanion(HostsCompanion data) {
     return HostRow(
@@ -780,6 +819,9 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       agentForward: data.agentForward.present
           ? data.agentForward.value
           : this.agentForward,
+      sshCertificate: data.sshCertificate.present
+          ? data.sshCertificate.value
+          : this.sshCertificate,
     );
   }
 
@@ -805,13 +847,14 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('sudoNeedsPassword: $sudoNeedsPassword, ')
-          ..write('agentForward: $agentForward')
+          ..write('agentForward: $agentForward, ')
+          ..write('sshCertificate: $sshCertificate')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     alias,
     address,
@@ -832,7 +875,8 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     updatedAt,
     sudoNeedsPassword,
     agentForward,
-  );
+    sshCertificate,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -856,7 +900,8 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.sudoNeedsPassword == this.sudoNeedsPassword &&
-          other.agentForward == this.agentForward);
+          other.agentForward == this.agentForward &&
+          other.sshCertificate == this.sshCertificate);
 }
 
 class HostsCompanion extends UpdateCompanion<HostRow> {
@@ -880,6 +925,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
   final Value<DateTime?> updatedAt;
   final Value<bool> sudoNeedsPassword;
   final Value<bool> agentForward;
+  final Value<String?> sshCertificate;
   final Value<int> rowid;
   const HostsCompanion({
     this.id = const Value.absent(),
@@ -902,6 +948,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     this.updatedAt = const Value.absent(),
     this.sudoNeedsPassword = const Value.absent(),
     this.agentForward = const Value.absent(),
+    this.sshCertificate = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HostsCompanion.insert({
@@ -925,6 +972,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     this.updatedAt = const Value.absent(),
     this.sudoNeedsPassword = const Value.absent(),
     this.agentForward = const Value.absent(),
+    this.sshCertificate = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        alias = Value(alias),
@@ -953,6 +1001,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     Expression<DateTime>? updatedAt,
     Expression<bool>? sudoNeedsPassword,
     Expression<bool>? agentForward,
+    Expression<String>? sshCertificate,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -976,6 +1025,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (sudoNeedsPassword != null) 'sudo_needs_password': sudoNeedsPassword,
       if (agentForward != null) 'agent_forward': agentForward,
+      if (sshCertificate != null) 'ssh_certificate': sshCertificate,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1001,6 +1051,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     Value<DateTime?>? updatedAt,
     Value<bool>? sudoNeedsPassword,
     Value<bool>? agentForward,
+    Value<String?>? sshCertificate,
     Value<int>? rowid,
   }) {
     return HostsCompanion(
@@ -1024,6 +1075,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
       updatedAt: updatedAt ?? this.updatedAt,
       sudoNeedsPassword: sudoNeedsPassword ?? this.sudoNeedsPassword,
       agentForward: agentForward ?? this.agentForward,
+      sshCertificate: sshCertificate ?? this.sshCertificate,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1091,6 +1143,9 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     if (agentForward.present) {
       map['agent_forward'] = Variable<bool>(agentForward.value);
     }
+    if (sshCertificate.present) {
+      map['ssh_certificate'] = Variable<String>(sshCertificate.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1120,6 +1175,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
           ..write('updatedAt: $updatedAt, ')
           ..write('sudoNeedsPassword: $sudoNeedsPassword, ')
           ..write('agentForward: $agentForward, ')
+          ..write('sshCertificate: $sshCertificate, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -10105,6 +10161,7 @@ typedef $$HostsTableCreateCompanionBuilder =
       Value<DateTime?> updatedAt,
       Value<bool> sudoNeedsPassword,
       Value<bool> agentForward,
+      Value<String?> sshCertificate,
       Value<int> rowid,
     });
 typedef $$HostsTableUpdateCompanionBuilder =
@@ -10129,6 +10186,7 @@ typedef $$HostsTableUpdateCompanionBuilder =
       Value<DateTime?> updatedAt,
       Value<bool> sudoNeedsPassword,
       Value<bool> agentForward,
+      Value<String?> sshCertificate,
       Value<int> rowid,
     });
 
@@ -10238,6 +10296,11 @@ class $$HostsTableFilterComposer
 
   ColumnFilters<bool> get agentForward => $composableBuilder(
     column: $table.agentForward,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sshCertificate => $composableBuilder(
+    column: $table.sshCertificate,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -10350,6 +10413,11 @@ class $$HostsTableOrderingComposer
     column: $table.agentForward,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get sshCertificate => $composableBuilder(
+    column: $table.sshCertificate,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$HostsTableAnnotationComposer
@@ -10434,6 +10502,11 @@ class $$HostsTableAnnotationComposer
     column: $table.agentForward,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get sshCertificate => $composableBuilder(
+    column: $table.sshCertificate,
+    builder: (column) => column,
+  );
 }
 
 class $$HostsTableTableManager
@@ -10484,6 +10557,7 @@ class $$HostsTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> sudoNeedsPassword = const Value.absent(),
                 Value<bool> agentForward = const Value.absent(),
+                Value<String?> sshCertificate = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HostsCompanion(
                 id: id,
@@ -10506,6 +10580,7 @@ class $$HostsTableTableManager
                 updatedAt: updatedAt,
                 sudoNeedsPassword: sudoNeedsPassword,
                 agentForward: agentForward,
+                sshCertificate: sshCertificate,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -10530,6 +10605,7 @@ class $$HostsTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> sudoNeedsPassword = const Value.absent(),
                 Value<bool> agentForward = const Value.absent(),
+                Value<String?> sshCertificate = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HostsCompanion.insert(
                 id: id,
@@ -10552,6 +10628,7 @@ class $$HostsTableTableManager
                 updatedAt: updatedAt,
                 sudoNeedsPassword: sudoNeedsPassword,
                 agentForward: agentForward,
+                sshCertificate: sshCertificate,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

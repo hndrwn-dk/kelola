@@ -4,6 +4,7 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/ssh/openssh_user_cert.dart';
 import 'package:kelola/presentation/host_env/env_bindings_sheet.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
 import 'package:kelola/providers.dart';
@@ -23,6 +24,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
   final _port = TextEditingController();
   final _user = TextEditingController();
   final _tags = TextEditingController();
+  final _sshCert = TextEditingController();
   Host? _host;
   List<Host> _others = const [];
   String? _jumpHostId;
@@ -43,6 +45,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
     _port.dispose();
     _user.dispose();
     _tags.dispose();
+    _sshCert.dispose();
     super.dispose();
   }
 
@@ -61,6 +64,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
       _port.text = '${host?.port ?? 22}';
       _user.text = host?.username ?? '';
       _tags.text = host?.tags.join(', ') ?? '';
+      _sshCert.text = host?.sshCertificate ?? '';
       _jumpHostId = host?.jumpHostId;
       _readOnly = host?.readOnly ?? false;
       _agentForward = host?.agentForward ?? false;
@@ -154,6 +158,36 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
       return;
     }
     await _saveAlias();
+    final certRaw = _sshCert.text.trim();
+    if (certRaw.isNotEmpty) {
+      try {
+        final cert = parseOpenSshUserCert(certRaw);
+        final blob = ref.read(enrollmentProvider).publicBlob;
+        if (blob == null ||
+            !cert.matchesPublicBlob(blob) ||
+            !cert.isValidAt(DateTime.now().toUtc())) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Certificate does not match this device key.'),
+            ),
+          );
+          return;
+        }
+      } on FormatException catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+        return;
+      }
+    }
+    final certChanged = certRaw != (host.sshCertificate ?? '');
+    await ref.read(hostRepositoryProvider).setSshCertificate(
+          host.id,
+          certRaw.isEmpty ? null : certRaw,
+        );
+    if (certChanged) {
+      await ref.read(sessionPoolProvider).disconnect(host.id);
+    }
     await ref.read(hostRepositoryProvider).setHostTags(
           host.id,
           _tags.text.split(RegExp(r'[,;\s]+')),
@@ -314,6 +348,14 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                     ),
                     const SizedBox(height: 16),
                     HostEnvSection(host: host),
+                    const SizedBox(height: 16),
+                    KelolaInput(
+                      key: const Key('edit-host-ssh-cert'),
+                      label: 'SSH certificate',
+                      controller: _sshCert,
+                      hint: 'ecdsa-sha2-nistp256-cert-v01@openssh.com ...',
+                      mono: true,
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'Jump host',

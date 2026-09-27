@@ -13,7 +13,7 @@ void main() {
     final db = KelolaDatabase.memory();
     addTearDown(db.close);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 23);
+    expect(version.data['user_version'], 24);
     final tables = await db.customSelect(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='vault_tombstones'",
     ).get();
@@ -58,7 +58,7 @@ CREATE TABLE hosts (
     addTearDown(db.close);
     await db.customSelect('SELECT 1').get();
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 23);
+    expect(version.data['user_version'], 24);
     final settings = await db.customSelect(
       'SELECT vault_include_secrets FROM app_settings WHERE id = 1',
     ).getSingle();
