@@ -154,6 +154,9 @@ class Snippets extends Table {
   TextColumn get template => text()();
   BoolColumn get starter => boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime()();
+  TextColumn get hostId => text().nullable()();
+  TextColumn get tag => text().nullable()();
+  BoolColumn get startup => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

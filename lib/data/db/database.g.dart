@@ -5075,6 +5075,39 @@ class $SnippetsTable extends Snippets
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tagMeta = const VerificationMeta('tag');
+  @override
+  late final GeneratedColumn<String> tag = GeneratedColumn<String>(
+    'tag',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _startupMeta = const VerificationMeta(
+    'startup',
+  );
+  @override
+  late final GeneratedColumn<bool> startup = GeneratedColumn<bool>(
+    'startup',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("startup" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -5082,6 +5115,9 @@ class $SnippetsTable extends Snippets
     template,
     starter,
     updatedAt,
+    hostId,
+    tag,
+    startup,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5130,6 +5166,24 @@ class $SnippetsTable extends Snippets
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    }
+    if (data.containsKey('tag')) {
+      context.handle(
+        _tagMeta,
+        tag.isAcceptableOrUnknown(data['tag']!, _tagMeta),
+      );
+    }
+    if (data.containsKey('startup')) {
+      context.handle(
+        _startupMeta,
+        startup.isAcceptableOrUnknown(data['startup']!, _startupMeta),
+      );
+    }
     return context;
   }
 
@@ -5159,6 +5213,18 @@ class $SnippetsTable extends Snippets
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      ),
+      tag: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tag'],
+      ),
+      startup: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}startup'],
+      )!,
     );
   }
 
@@ -5174,12 +5240,18 @@ class SnippetRow extends DataClass implements Insertable<SnippetRow> {
   final String template;
   final bool starter;
   final DateTime updatedAt;
+  final String? hostId;
+  final String? tag;
+  final bool startup;
   const SnippetRow({
     required this.id,
     required this.name,
     required this.template,
     required this.starter,
     required this.updatedAt,
+    this.hostId,
+    this.tag,
+    required this.startup,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5189,6 +5261,13 @@ class SnippetRow extends DataClass implements Insertable<SnippetRow> {
     map['template'] = Variable<String>(template);
     map['starter'] = Variable<bool>(starter);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || hostId != null) {
+      map['host_id'] = Variable<String>(hostId);
+    }
+    if (!nullToAbsent || tag != null) {
+      map['tag'] = Variable<String>(tag);
+    }
+    map['startup'] = Variable<bool>(startup);
     return map;
   }
 
@@ -5199,6 +5278,11 @@ class SnippetRow extends DataClass implements Insertable<SnippetRow> {
       template: Value(template),
       starter: Value(starter),
       updatedAt: Value(updatedAt),
+      hostId: hostId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(hostId),
+      tag: tag == null && nullToAbsent ? const Value.absent() : Value(tag),
+      startup: Value(startup),
     );
   }
 
@@ -5213,6 +5297,9 @@ class SnippetRow extends DataClass implements Insertable<SnippetRow> {
       template: serializer.fromJson<String>(json['template']),
       starter: serializer.fromJson<bool>(json['starter']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      hostId: serializer.fromJson<String?>(json['hostId']),
+      tag: serializer.fromJson<String?>(json['tag']),
+      startup: serializer.fromJson<bool>(json['startup']),
     );
   }
   @override
@@ -5224,6 +5311,9 @@ class SnippetRow extends DataClass implements Insertable<SnippetRow> {
       'template': serializer.toJson<String>(template),
       'starter': serializer.toJson<bool>(starter),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'hostId': serializer.toJson<String?>(hostId),
+      'tag': serializer.toJson<String?>(tag),
+      'startup': serializer.toJson<bool>(startup),
     };
   }
 
@@ -5233,12 +5323,18 @@ class SnippetRow extends DataClass implements Insertable<SnippetRow> {
     String? template,
     bool? starter,
     DateTime? updatedAt,
+    Value<String?> hostId = const Value.absent(),
+    Value<String?> tag = const Value.absent(),
+    bool? startup,
   }) => SnippetRow(
     id: id ?? this.id,
     name: name ?? this.name,
     template: template ?? this.template,
     starter: starter ?? this.starter,
     updatedAt: updatedAt ?? this.updatedAt,
+    hostId: hostId.present ? hostId.value : this.hostId,
+    tag: tag.present ? tag.value : this.tag,
+    startup: startup ?? this.startup,
   );
   SnippetRow copyWithCompanion(SnippetsCompanion data) {
     return SnippetRow(
@@ -5247,6 +5343,9 @@ class SnippetRow extends DataClass implements Insertable<SnippetRow> {
       template: data.template.present ? data.template.value : this.template,
       starter: data.starter.present ? data.starter.value : this.starter,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      tag: data.tag.present ? data.tag.value : this.tag,
+      startup: data.startup.present ? data.startup.value : this.startup,
     );
   }
 
@@ -5257,13 +5356,17 @@ class SnippetRow extends DataClass implements Insertable<SnippetRow> {
           ..write('name: $name, ')
           ..write('template: $template, ')
           ..write('starter: $starter, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('hostId: $hostId, ')
+          ..write('tag: $tag, ')
+          ..write('startup: $startup')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, template, starter, updatedAt);
+  int get hashCode =>
+      Object.hash(id, name, template, starter, updatedAt, hostId, tag, startup);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5272,7 +5375,10 @@ class SnippetRow extends DataClass implements Insertable<SnippetRow> {
           other.name == this.name &&
           other.template == this.template &&
           other.starter == this.starter &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.hostId == this.hostId &&
+          other.tag == this.tag &&
+          other.startup == this.startup);
 }
 
 class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
@@ -5281,6 +5387,9 @@ class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
   final Value<String> template;
   final Value<bool> starter;
   final Value<DateTime> updatedAt;
+  final Value<String?> hostId;
+  final Value<String?> tag;
+  final Value<bool> startup;
   final Value<int> rowid;
   const SnippetsCompanion({
     this.id = const Value.absent(),
@@ -5288,6 +5397,9 @@ class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
     this.template = const Value.absent(),
     this.starter = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.hostId = const Value.absent(),
+    this.tag = const Value.absent(),
+    this.startup = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SnippetsCompanion.insert({
@@ -5296,6 +5408,9 @@ class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
     required String template,
     this.starter = const Value.absent(),
     required DateTime updatedAt,
+    this.hostId = const Value.absent(),
+    this.tag = const Value.absent(),
+    this.startup = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -5307,6 +5422,9 @@ class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
     Expression<String>? template,
     Expression<bool>? starter,
     Expression<DateTime>? updatedAt,
+    Expression<String>? hostId,
+    Expression<String>? tag,
+    Expression<bool>? startup,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5315,6 +5433,9 @@ class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
       if (template != null) 'template': template,
       if (starter != null) 'starter': starter,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (hostId != null) 'host_id': hostId,
+      if (tag != null) 'tag': tag,
+      if (startup != null) 'startup': startup,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5325,6 +5446,9 @@ class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
     Value<String>? template,
     Value<bool>? starter,
     Value<DateTime>? updatedAt,
+    Value<String?>? hostId,
+    Value<String?>? tag,
+    Value<bool>? startup,
     Value<int>? rowid,
   }) {
     return SnippetsCompanion(
@@ -5333,6 +5457,9 @@ class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
       template: template ?? this.template,
       starter: starter ?? this.starter,
       updatedAt: updatedAt ?? this.updatedAt,
+      hostId: hostId ?? this.hostId,
+      tag: tag ?? this.tag,
+      startup: startup ?? this.startup,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5355,6 +5482,15 @@ class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (tag.present) {
+      map['tag'] = Variable<String>(tag.value);
+    }
+    if (startup.present) {
+      map['startup'] = Variable<bool>(startup.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5369,6 +5505,9 @@ class SnippetsCompanion extends UpdateCompanion<SnippetRow> {
           ..write('template: $template, ')
           ..write('starter: $starter, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('hostId: $hostId, ')
+          ..write('tag: $tag, ')
+          ..write('startup: $startup, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9664,6 +9803,9 @@ typedef $$SnippetsTableCreateCompanionBuilder =
       required String template,
       Value<bool> starter,
       required DateTime updatedAt,
+      Value<String?> hostId,
+      Value<String?> tag,
+      Value<bool> startup,
       Value<int> rowid,
     });
 typedef $$SnippetsTableUpdateCompanionBuilder =
@@ -9673,6 +9815,9 @@ typedef $$SnippetsTableUpdateCompanionBuilder =
       Value<String> template,
       Value<bool> starter,
       Value<DateTime> updatedAt,
+      Value<String?> hostId,
+      Value<String?> tag,
+      Value<bool> startup,
       Value<int> rowid,
     });
 
@@ -9707,6 +9852,21 @@ class $$SnippetsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tag => $composableBuilder(
+    column: $table.tag,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get startup => $composableBuilder(
+    column: $table.startup,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9744,6 +9904,21 @@ class $$SnippetsTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tag => $composableBuilder(
+    column: $table.tag,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get startup => $composableBuilder(
+    column: $table.startup,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SnippetsTableAnnotationComposer
@@ -9769,6 +9944,15 @@ class $$SnippetsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get tag =>
+      $composableBuilder(column: $table.tag, builder: (column) => column);
+
+  GeneratedColumn<bool> get startup =>
+      $composableBuilder(column: $table.startup, builder: (column) => column);
 }
 
 class $$SnippetsTableTableManager
@@ -9807,6 +9991,9 @@ class $$SnippetsTableTableManager
                 Value<String> template = const Value.absent(),
                 Value<bool> starter = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> hostId = const Value.absent(),
+                Value<String?> tag = const Value.absent(),
+                Value<bool> startup = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SnippetsCompanion(
                 id: id,
@@ -9814,6 +10001,9 @@ class $$SnippetsTableTableManager
                 template: template,
                 starter: starter,
                 updatedAt: updatedAt,
+                hostId: hostId,
+                tag: tag,
+                startup: startup,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -9823,6 +10013,9 @@ class $$SnippetsTableTableManager
                 required String template,
                 Value<bool> starter = const Value.absent(),
                 required DateTime updatedAt,
+                Value<String?> hostId = const Value.absent(),
+                Value<String?> tag = const Value.absent(),
+                Value<bool> startup = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SnippetsCompanion.insert(
                 id: id,
@@ -9830,6 +10023,9 @@ class $$SnippetsTableTableManager
                 template: template,
                 starter: starter,
                 updatedAt: updatedAt,
+                hostId: hostId,
+                tag: tag,
+                startup: startup,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

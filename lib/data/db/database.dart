@@ -30,7 +30,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -138,6 +138,12 @@ WHERE id = 1
       }
       if (from < 16) {
         await m.createTable(commandHistory);
+      }
+      // from < 6 createTable(snippets) already emits host_id / tag / startup.
+      if (from >= 6 && from < 17) {
+        await m.addColumn(snippets, snippets.hostId);
+        await m.addColumn(snippets, snippets.tag);
+        await m.addColumn(snippets, snippets.startup);
       }
     },
   );

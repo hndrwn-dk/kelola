@@ -35,6 +35,8 @@ import 'package:kelola/presentation/screens/units_screen.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/probes/host_action_probe.dart';
+import 'package:kelola/domain/snippets/snippet.dart';
+import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/domain/tunnels/active_tunnel.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
@@ -151,6 +153,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   String? _error;
   bool _loading = true;
   var _openedDeepLink = false;
+  List<Snippet> _startup = const [];
 
   @override
   void initState() {
@@ -171,6 +174,13 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         return;
       }
       _host = host;
+      final startup = startupSnippetsForHost(
+        await repo.listSnippetsForHost(host),
+        host,
+      );
+      if (mounted) {
+        setState(() => _startup = startup);
+      }
       var facts = await repo.facts(host.id);
       await ref.read(enrollmentProvider.notifier).ensureKey();
       if (!mounted) {
@@ -229,6 +239,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         _dash = dash;
         _pendingUpdates = fleetCache.containsKey(host.id) ? pending : null;
         _host = updated ?? host;
+        _startup = startup;
         _error = dashboardErrorAfterSuccessfulPoll(_error);
       });
     } on HostKeyMismatchException catch (e) {
@@ -245,7 +256,9 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         ),
       );
     } catch (e) {
-      await ref.read(hostRepositoryProvider).updateAttention(
+      await ref
+          .read(hostRepositoryProvider)
+          .updateAttention(
             id: widget.hostId,
             attention: HostAttention.unreachable,
           );
@@ -371,11 +384,11 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 onTap: host == null
                     ? null
                     : () => openHostIncident(
-                          context,
-                          ref,
-                          host,
-                          failedUnitNames: dash.failedUnitNames,
-                        ),
+                        context,
+                        ref,
+                        host,
+                        failedUnitNames: dash.failedUnitNames,
+                      ),
               ),
               const SizedBox(height: 8),
             ] else if (dash != null && dash.diskRootPercent >= 90) ...[
@@ -424,10 +437,8 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                   Expanded(
                     child: InkWell(
                       onTap: () => _open(
-                        (id) => MetricsScreen(
-                          hostId: id,
-                          focus: MetricsFocus.cpu,
-                        ),
+                        (id) =>
+                            MetricsScreen(hostId: id, focus: MetricsFocus.cpu),
                       ),
                       child: StatCard(
                         label: 'CPU',
@@ -641,7 +652,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-                ServiceRow(
+              ServiceRow(
                 risk: RiskLevel.mutate,
                 name: 'Terminal',
                 meta: 'no PTY · audited',
@@ -654,7 +665,23 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 meta: 'templates · never fleet',
                 onTap: () => _open((_) => SnippetsScreen(host: host)),
               ),
-              const SizedBox(height: 6),
+              if (_startup.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                for (final snippet in _startup) ...[
+                  ServiceRow(
+                    risk: RiskLevel.read,
+                    name: snippet.name,
+                    meta: snippetScopeMeta(snippet),
+                    onTap: () => openSnippetRunSheet(
+                      context,
+                      host: host,
+                      snippet: snippet,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+              ] else
+                const SizedBox(height: 6),
               ServiceRow(
                 risk: RiskLevel.mutate,
                 name: 'Flush caches',
@@ -678,8 +705,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                   host,
                   HostVerb.reboot,
                   title: 'Reboot ${host.alias}?',
-                  body:
-                      'The host will reboot. SSH will drop until it comes back.',
+                  body: 'The host will reboot. SSH will drop until it comes back.',
                   confirm: 'Reboot',
                   risk: RiskLevel.destructive,
                 ),
@@ -739,9 +765,8 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   }
 
   Future<void> _open(Widget Function(String hostId) builder) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => builder(widget.hostId)),
-    );
+    await Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => builder(widget.hostId)));
   }
 
   Future<void> _editNote() async {
@@ -798,10 +823,9 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     if (saved == null) {
       return;
     }
-    await ref.read(hostRepositoryProvider).updateNote(
-          host.id,
-          saved.trim().isEmpty ? null : saved.trim(),
-        );
+    await ref
+        .read(hostRepositoryProvider)
+        .updateNote(host.id, saved.trim().isEmpty ? null : saved.trim());
     await _refresh();
   }
 
@@ -811,9 +835,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => EditHostScreen(hostId: host.id),
-      ),
+      MaterialPageRoute<void>(builder: (_) => EditHostScreen(hostId: host.id)),
     );
     final updated = await ref.read(hostRepositoryProvider).get(host.id);
     if (!mounted) {
@@ -827,8 +849,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     if (host == null) {
       return;
     }
-    final pinned =
-        await ref.read(hostRepositoryProvider).pinnedKey(host.id);
+    final pinned = await ref.read(hostRepositoryProvider).pinnedKey(host.id);
     if (!mounted) {
       return;
     }
@@ -841,15 +862,17 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
           connected: ref.read(sessionPoolProvider).hasLiveSession(host.id),
           onEdit: _openEdit,
           onRevealSerial: () {
-            return ref.read(hostRepositoryProvider).recordAudit(
-              hostId: host.id,
-              hostAlias: host.alias,
-              remoteUser: host.username,
-              title: revealedSerialAuditTitle,
-              command: revealedSerialAuditCommand,
-              risk: RiskLevel.read.name,
-              usedSudo: false,
-            );
+            return ref
+                .read(hostRepositoryProvider)
+                .recordAudit(
+                  hostId: host.id,
+                  hostAlias: host.alias,
+                  remoteUser: host.username,
+                  title: revealedSerialAuditTitle,
+                  command: revealedSerialAuditCommand,
+                  risk: RiskLevel.read.name,
+                  usedSudo: false,
+                );
           },
         ),
       ),
@@ -864,10 +887,8 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   Future<void> _openUnits({required bool failedOnly}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => UnitsScreen(
-          hostId: widget.hostId,
-          failedOnly: failedOnly,
-        ),
+        builder: (_) =>
+            UnitsScreen(hostId: widget.hostId, failedOnly: failedOnly),
       ),
     );
     if (mounted) {
@@ -1039,10 +1060,7 @@ class HostDashboardMenuButton extends StatelessWidget {
           const PopupMenuItem(value: 'audit', child: Text('Audit log')),
           PopupMenuItem(
             value: 'delete',
-            child: Text(
-              'Remove host',
-              style: TextStyle(color: c.red),
-            ),
+            child: Text('Remove host', style: TextStyle(color: c.red)),
           ),
         ];
       },

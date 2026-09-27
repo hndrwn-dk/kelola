@@ -9,19 +9,28 @@ class Snippet {
     required this.name,
     required this.template,
     this.starter = false,
+    this.hostId,
+    this.tag,
+    this.startup = false,
   });
 
   final String id;
   final String name;
   final String template;
   final bool starter;
+  final String? hostId;
+  final String? tag;
+  final bool startup;
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'name': name,
-        'template': template,
-        'starter': starter,
-      };
+    'id': id,
+    'name': name,
+    'template': template,
+    'starter': starter,
+    if (hostId != null) 'hostId': hostId,
+    if (tag != null) 'tag': tag,
+    'startup': startup,
+  };
 
   factory Snippet.fromJson(Map<String, dynamic> json) {
     return Snippet(
@@ -29,17 +38,15 @@ class Snippet {
       name: json['name'] as String? ?? '',
       template: json['template'] as String? ?? '',
       starter: json['starter'] as bool? ?? false,
+      hostId: json['hostId'] as String?,
+      tag: json['tag'] as String?,
+      startup: json['startup'] as bool? ?? false,
     );
   }
 }
 
 class SnippetBindings {
-  const SnippetBindings({
-    this.unit,
-    this.path,
-    this.port,
-    this.host,
-  });
+  const SnippetBindings({this.unit, this.path, this.port, this.host});
 
   final String? unit;
   final String? path;
@@ -59,9 +66,7 @@ class SnippetUnboundException implements Exception {
 final _placeholder = RegExp(r'\{\{(unit|path|port|host)\}\}');
 
 Set<String> snippetPlaceholders(String template) {
-  return {
-    for (final m in _placeholder.allMatches(template)) m.group(1)!,
-  };
+  return {for (final m in _placeholder.allMatches(template)) m.group(1)!};
 }
 
 class SnippetRender {
