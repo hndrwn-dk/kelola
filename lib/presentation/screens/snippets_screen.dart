@@ -3,14 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/command_runner_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/snippet_probe.dart';
 import 'package:kelola/domain/snippets/run_snippet.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
+import 'package:kelola/domain/snippets/snippet_multi.dart';
 import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/pro_locked_sheet.dart';
+import 'package:kelola/presentation/widgets/confirm_host_action.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart'
     show KelolaEmpty;
 import 'package:kelola/presentation/widgets/snippet_list_actions.dart';
@@ -434,6 +438,8 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
   Widget build(BuildContext context) {
     final c = context.kc;
     final probe = _probe;
+    final multiUnlocked =
+        ref.watch(entitlementProvider).isUnlocked(ProFeature.snippetMulti);
     return Scaffold(
       backgroundColor: c.ink,
       appBar: KelolaHostAppBar(
@@ -508,6 +514,15 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
                 : '${probe.risk.name} · execute only',
             onTap: _busy || probe == null ? null : () => _run(probe),
           ),
+          const SizedBox(height: 6),
+          ServiceRow(
+            risk: probe?.risk ?? RiskLevel.read,
+            name: 'Run on hosts',
+            meta: multiUnlocked
+                ? 'preview then execute'
+                : 'unlock required',
+            onTap: _busy ? null : () => _openMulti(multiUnlocked),
+          ),
           if (_error != null) ...[
             const SizedBox(height: 12),
             KelolaError(message: _error!, sudoUser: widget.host.username),
@@ -528,6 +543,51 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
           ],
         ],
       ),
+    );
+  }
+
+  Future<void> _openMulti(bool unlocked) async {
+    final entitlement = ref.read(entitlementProvider);
+    if (!unlocked) {
+      await showProLockedSheet(
+        context,
+        title: 'Run on hosts',
+        body: 'Run this snippet on every host it already applies to, '
+            'after a per-host preview. This build keeps multi-exec locked.',
+        onPurchase: () => entitlement.purchase(),
+      );
+      return;
+    }
+    final planned = planSnippetMultiHosts(
+      widget.snippet,
+      await ref.read(hostRepositoryProvider).list(),
+    );
+    if (!mounted) {
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.kc.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: context.kc.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: SizedBox(
+            height: kelolaSheetBodyHeight(ctx),
+            child: _SnippetMultiSheet(
+              snippet: widget.snippet,
+              hosts: planned,
+              shared: _bindings,
+              onExecute: widget.onExecute,
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -622,6 +682,200 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
       },
     );
     return confirmed;
+  }
+}
+
+class _SnippetMultiSheet extends ConsumerStatefulWidget {
+  const _SnippetMultiSheet({
+    required this.snippet,
+    required this.hosts,
+    required this.shared,
+    this.onExecute,
+  });
+
+  final Snippet snippet;
+  final List<Host> hosts;
+  final SnippetBindings shared;
+  final Future<CommandRunnerResult?> Function(SnippetProbe probe)? onExecute;
+
+  @override
+  ConsumerState<_SnippetMultiSheet> createState() => _SnippetMultiSheetState();
+}
+
+class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
+  late Set<String> _selected;
+  List<SnippetMultiOutcome> _outcomes = const [];
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = {for (final host in widget.hosts) host.id};
+  }
+
+  List<Host> get _chosen => [
+        for (final host in widget.hosts)
+          if (_selected.contains(host.id)) host,
+      ];
+
+  List<SnippetMultiPreview> get _previews => previewSnippetMulti(
+        snippet: widget.snippet,
+        hosts: _chosen,
+        shared: widget.shared,
+      );
+
+  bool get _canRun =>
+      _previews.isNotEmpty &&
+      _previews.every((p) => p.commandLine != null);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return ListView(
+      padding: kelolaScrollPadding(context, left: 14, top: 16, right: 14),
+      children: [
+        Text(
+          'Run on hosts',
+          style: KelolaType.display(color: c.text, size: 16),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Preview the resolved command per host, then execute one at a time.',
+          style: KelolaType.body(color: c.muted, size: 13),
+        ),
+        const SizedBox(height: 12),
+        if (widget.hosts.isEmpty)
+          Text(
+            'No hosts match this snippet.',
+            style: KelolaType.body(color: c.muted, size: 13),
+          ),
+        for (final host in widget.hosts) ...[
+          ServiceRow(
+            risk: RiskLevel.read,
+            name: host.alias,
+            meta: _selected.contains(host.id) ? 'selected' : 'not selected',
+            onTap: _busy
+                ? null
+                : () {
+                    setState(() {
+                      if (!_selected.add(host.id)) {
+                        _selected.remove(host.id);
+                      }
+                    });
+                  },
+          ),
+          const SizedBox(height: 6),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          'PREVIEW',
+          style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+        ),
+        const SizedBox(height: 6),
+        for (final preview in _previews) ...[
+          Text(
+            preview.host.alias,
+            style: KelolaType.body(color: c.muted, size: 12),
+          ),
+          const SizedBox(height: 4),
+          RiskBand(
+            risk: RiskLevel.read,
+            child: SelectableText(
+              preview.commandLine ?? widget.snippet.template,
+              style: KelolaType.mono(color: c.text, size: 11),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        ServiceRow(
+          risk: RiskLevel.read,
+          name: 'Run selected',
+          meta: _canRun
+              ? '${_chosen.length} hosts · sequential'
+              : 'fill placeholders',
+          onTap: _busy || !_canRun ? null : _runSelected,
+        ),
+        if (_busy) ...[
+          const SizedBox(height: 12),
+          Text('Running', style: KelolaType.mono(color: c.muted, size: 10.5)),
+        ],
+        for (final outcome in _outcomes) ...[
+          const SizedBox(height: 10),
+          ServiceRow(
+            risk: outcome.status == SnippetMultiStatus.failed
+                ? RiskLevel.destructive
+                : RiskLevel.read,
+            name: outcome.alias,
+            meta: outcome.status.name,
+          ),
+          if (outcome.output != null) ...[
+            const SizedBox(height: 6),
+            RiskBand(
+              risk: RiskLevel.read,
+              child: SelectableText(
+                outcome.output!,
+                style: KelolaType.mono(color: c.muted, size: 10.5),
+              ),
+            ),
+          ],
+          if (outcome.error != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              outcome.error!,
+              style: KelolaType.body(color: c.muted, size: 13),
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Future<void> _runSelected() async {
+    setState(() {
+      _busy = true;
+      _outcomes = const [];
+    });
+    try {
+      final outcomes = await runSnippetMulti(
+        snippet: widget.snippet,
+        hosts: _chosen,
+        shared: widget.shared,
+        execute: <T>(host, probe) async {
+          final seam = widget.onExecute;
+          if (seam != null) {
+            final result = await seam(probe as SnippetProbe);
+            if (result == null) {
+              throw StateError('cancelled');
+            }
+            return result as T;
+          }
+          return runHostProbe<T>(
+            ref: ref,
+            context: context,
+            host: host,
+            probe: probe,
+          );
+        },
+        confirm: (host, probe) => confirmHostAction(
+          context,
+          hostAlias: host.alias,
+          title: 'Run ${probe.name}?',
+          body: probe.risk == RiskLevel.destructive
+              ? 'This will end your session and may make ${host.alias} unreachable.'
+              : 'This changes state on ${host.alias}.',
+          confirmLabel: 'Run',
+          risk: probe.risk,
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() => _outcomes = outcomes);
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
   }
 }
 
