@@ -73,12 +73,17 @@ Future<List<SnippetMultiOutcome>> runSnippetMulti({
   required SnippetBindings shared,
   required SnippetExecute execute,
   required Future<bool> Function(Host host, SnippetProbe probe) confirm,
+  Map<String, String> Function(Host host)? envFor,
 }) async {
   final outcomes = <SnippetMultiOutcome>[];
   for (final host in hosts) {
     late final SnippetProbe probe;
     try {
-      probe = snippetToProbe(snippet, snippetMultiBindings(host, shared));
+      probe = snippetToProbe(
+        snippet,
+        snippetMultiBindings(host, shared),
+        env: envFor?.call(host) ?? const {},
+      );
     } on SnippetUnboundException {
       outcomes.add(
         SnippetMultiOutcome(

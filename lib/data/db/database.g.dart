@@ -9572,6 +9572,408 @@ class VaultTombstonesCompanion extends UpdateCompanion<VaultTombstoneRow> {
   }
 }
 
+class $EnvVarsTable extends EnvVars with TableInfo<$EnvVarsTable, EnvVarRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EnvVarsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scopeMeta = const VerificationMeta('scope');
+  @override
+  late final GeneratedColumn<String> scope = GeneratedColumn<String>(
+    'scope',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scopeIdMeta = const VerificationMeta(
+    'scopeId',
+  );
+  @override
+  late final GeneratedColumn<String> scopeId = GeneratedColumn<String>(
+    'scope_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    scope,
+    scopeId,
+    name,
+    value,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'env_vars';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<EnvVarRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('scope')) {
+      context.handle(
+        _scopeMeta,
+        scope.isAcceptableOrUnknown(data['scope']!, _scopeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_scopeMeta);
+    }
+    if (data.containsKey('scope_id')) {
+      context.handle(
+        _scopeIdMeta,
+        scopeId.isAcceptableOrUnknown(data['scope_id']!, _scopeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_scopeIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  EnvVarRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EnvVarRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      scope: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scope'],
+      )!,
+      scopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scope_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $EnvVarsTable createAlias(String alias) {
+    return $EnvVarsTable(attachedDatabase, alias);
+  }
+}
+
+class EnvVarRow extends DataClass implements Insertable<EnvVarRow> {
+  final String id;
+  final String scope;
+  final String scopeId;
+  final String name;
+  final String value;
+  final DateTime updatedAt;
+  const EnvVarRow({
+    required this.id,
+    required this.scope,
+    required this.scopeId,
+    required this.name,
+    required this.value,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['scope'] = Variable<String>(scope);
+    map['scope_id'] = Variable<String>(scopeId);
+    map['name'] = Variable<String>(name);
+    map['value'] = Variable<String>(value);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  EnvVarsCompanion toCompanion(bool nullToAbsent) {
+    return EnvVarsCompanion(
+      id: Value(id),
+      scope: Value(scope),
+      scopeId: Value(scopeId),
+      name: Value(name),
+      value: Value(value),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory EnvVarRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EnvVarRow(
+      id: serializer.fromJson<String>(json['id']),
+      scope: serializer.fromJson<String>(json['scope']),
+      scopeId: serializer.fromJson<String>(json['scopeId']),
+      name: serializer.fromJson<String>(json['name']),
+      value: serializer.fromJson<String>(json['value']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'scope': serializer.toJson<String>(scope),
+      'scopeId': serializer.toJson<String>(scopeId),
+      'name': serializer.toJson<String>(name),
+      'value': serializer.toJson<String>(value),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  EnvVarRow copyWith({
+    String? id,
+    String? scope,
+    String? scopeId,
+    String? name,
+    String? value,
+    DateTime? updatedAt,
+  }) => EnvVarRow(
+    id: id ?? this.id,
+    scope: scope ?? this.scope,
+    scopeId: scopeId ?? this.scopeId,
+    name: name ?? this.name,
+    value: value ?? this.value,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  EnvVarRow copyWithCompanion(EnvVarsCompanion data) {
+    return EnvVarRow(
+      id: data.id.present ? data.id.value : this.id,
+      scope: data.scope.present ? data.scope.value : this.scope,
+      scopeId: data.scopeId.present ? data.scopeId.value : this.scopeId,
+      name: data.name.present ? data.name.value : this.name,
+      value: data.value.present ? data.value.value : this.value,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EnvVarRow(')
+          ..write('id: $id, ')
+          ..write('scope: $scope, ')
+          ..write('scopeId: $scopeId, ')
+          ..write('name: $name, ')
+          ..write('value: $value, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, scope, scopeId, name, value, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EnvVarRow &&
+          other.id == this.id &&
+          other.scope == this.scope &&
+          other.scopeId == this.scopeId &&
+          other.name == this.name &&
+          other.value == this.value &&
+          other.updatedAt == this.updatedAt);
+}
+
+class EnvVarsCompanion extends UpdateCompanion<EnvVarRow> {
+  final Value<String> id;
+  final Value<String> scope;
+  final Value<String> scopeId;
+  final Value<String> name;
+  final Value<String> value;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const EnvVarsCompanion({
+    this.id = const Value.absent(),
+    this.scope = const Value.absent(),
+    this.scopeId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.value = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EnvVarsCompanion.insert({
+    required String id,
+    required String scope,
+    required String scopeId,
+    required String name,
+    required String value,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       scope = Value(scope),
+       scopeId = Value(scopeId),
+       name = Value(name),
+       value = Value(value),
+       updatedAt = Value(updatedAt);
+  static Insertable<EnvVarRow> custom({
+    Expression<String>? id,
+    Expression<String>? scope,
+    Expression<String>? scopeId,
+    Expression<String>? name,
+    Expression<String>? value,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (scope != null) 'scope': scope,
+      if (scopeId != null) 'scope_id': scopeId,
+      if (name != null) 'name': name,
+      if (value != null) 'value': value,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EnvVarsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? scope,
+    Value<String>? scopeId,
+    Value<String>? name,
+    Value<String>? value,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return EnvVarsCompanion(
+      id: id ?? this.id,
+      scope: scope ?? this.scope,
+      scopeId: scopeId ?? this.scopeId,
+      name: name ?? this.name,
+      value: value ?? this.value,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (scope.present) {
+      map['scope'] = Variable<String>(scope.value);
+    }
+    if (scopeId.present) {
+      map['scope_id'] = Variable<String>(scopeId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EnvVarsCompanion(')
+          ..write('id: $id, ')
+          ..write('scope: $scope, ')
+          ..write('scopeId: $scopeId, ')
+          ..write('name: $name, ')
+          ..write('value: $value, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$KelolaDatabase extends GeneratedDatabase {
   _$KelolaDatabase(QueryExecutor e) : super(e);
   $KelolaDatabaseManager get managers => $KelolaDatabaseManager(this);
@@ -9600,6 +10002,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
   late final $VaultTombstonesTable vaultTombstones = $VaultTombstonesTable(
     this,
   );
+  late final $EnvVarsTable envVars = $EnvVarsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -9622,6 +10025,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     journalBookmarks,
     fleetWatchState,
     vaultTombstones,
+    envVars,
   ];
 }
 
@@ -14415,6 +14819,222 @@ typedef $$VaultTombstonesTableProcessedTableManager =
       VaultTombstoneRow,
       PrefetchHooks Function()
     >;
+typedef $$EnvVarsTableCreateCompanionBuilder =
+    EnvVarsCompanion Function({
+      required String id,
+      required String scope,
+      required String scopeId,
+      required String name,
+      required String value,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$EnvVarsTableUpdateCompanionBuilder =
+    EnvVarsCompanion Function({
+      Value<String> id,
+      Value<String> scope,
+      Value<String> scopeId,
+      Value<String> name,
+      Value<String> value,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$EnvVarsTableFilterComposer
+    extends Composer<_$KelolaDatabase, $EnvVarsTable> {
+  $$EnvVarsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scopeId => $composableBuilder(
+    column: $table.scopeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$EnvVarsTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $EnvVarsTable> {
+  $$EnvVarsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scopeId => $composableBuilder(
+    column: $table.scopeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$EnvVarsTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $EnvVarsTable> {
+  $$EnvVarsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get scope =>
+      $composableBuilder(column: $table.scope, builder: (column) => column);
+
+  GeneratedColumn<String> get scopeId =>
+      $composableBuilder(column: $table.scopeId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$EnvVarsTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $EnvVarsTable,
+          EnvVarRow,
+          $$EnvVarsTableFilterComposer,
+          $$EnvVarsTableOrderingComposer,
+          $$EnvVarsTableAnnotationComposer,
+          $$EnvVarsTableCreateCompanionBuilder,
+          $$EnvVarsTableUpdateCompanionBuilder,
+          (
+            EnvVarRow,
+            BaseReferences<_$KelolaDatabase, $EnvVarsTable, EnvVarRow>,
+          ),
+          EnvVarRow,
+          PrefetchHooks Function()
+        > {
+  $$EnvVarsTableTableManager(_$KelolaDatabase db, $EnvVarsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EnvVarsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EnvVarsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EnvVarsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> scope = const Value.absent(),
+                Value<String> scopeId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> value = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => EnvVarsCompanion(
+                id: id,
+                scope: scope,
+                scopeId: scopeId,
+                name: name,
+                value: value,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String scope,
+                required String scopeId,
+                required String name,
+                required String value,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => EnvVarsCompanion.insert(
+                id: id,
+                scope: scope,
+                scopeId: scopeId,
+                name: name,
+                value: value,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$EnvVarsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $EnvVarsTable,
+      EnvVarRow,
+      $$EnvVarsTableFilterComposer,
+      $$EnvVarsTableOrderingComposer,
+      $$EnvVarsTableAnnotationComposer,
+      $$EnvVarsTableCreateCompanionBuilder,
+      $$EnvVarsTableUpdateCompanionBuilder,
+      (EnvVarRow, BaseReferences<_$KelolaDatabase, $EnvVarsTable, EnvVarRow>),
+      EnvVarRow,
+      PrefetchHooks Function()
+    >;
 
 class $KelolaDatabaseManager {
   final _$KelolaDatabase _db;
@@ -14452,4 +15072,6 @@ class $KelolaDatabaseManager {
       $$FleetWatchStateTableTableManager(_db, _db.fleetWatchState);
   $$VaultTombstonesTableTableManager get vaultTombstones =>
       $$VaultTombstonesTableTableManager(_db, _db.vaultTombstones);
+  $$EnvVarsTableTableManager get envVars =>
+      $$EnvVarsTableTableManager(_db, _db.envVars);
 }

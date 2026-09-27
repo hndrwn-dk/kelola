@@ -124,10 +124,15 @@ String expandSnippetTemplate(String template, SnippetBindings bindings) {
   return line;
 }
 
-SnippetProbe snippetToProbe(Snippet snippet, SnippetBindings bindings) {
+SnippetProbe snippetToProbe(
+  Snippet snippet,
+  SnippetBindings bindings, {
+  Map<String, String> env = const {},
+}) {
   return SnippetProbe(
     name: snippet.name,
     commandLine: expandSnippetTemplate(snippet.template, bindings),
+    env: env,
   );
 }
 

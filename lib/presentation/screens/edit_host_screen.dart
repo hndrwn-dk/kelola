@@ -4,6 +4,7 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/presentation/host_env/env_bindings_sheet.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
 import 'package:kelola/providers.dart';
 
@@ -278,6 +279,8 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                       controller: _tags,
                       hint: 'prod, staging, homelab',
                     ),
+                    const SizedBox(height: 16),
+                    HostEnvSection(host: host),
                     const SizedBox(height: 16),
                     Text(
                       'Jump host',

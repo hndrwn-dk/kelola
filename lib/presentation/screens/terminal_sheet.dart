@@ -98,11 +98,15 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
       if (!mounted) {
         return;
       }
+      final env = await ref.read(hostRepositoryProvider).envForHost(widget.host);
+      if (!mounted) {
+        return;
+      }
       final result = await runHostProbe(
         ref: ref,
         context: context,
         host: widget.host,
-        probe: CommandRunnerProbe(line),
+        probe: CommandRunnerProbe(line, env: env),
       );
       if (!mounted) {
         return;

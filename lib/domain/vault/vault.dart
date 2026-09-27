@@ -8,7 +8,16 @@ const Set<String> kVaultSecretKeys = {
   'publicKeySpkiB64',
 };
 
-enum VaultRecordKind { host, snippet, hostTag, hostKey, tunnel, pref, tombstone }
+enum VaultRecordKind {
+  host,
+  snippet,
+  hostTag,
+  hostKey,
+  tunnel,
+  pref,
+  env,
+  tombstone,
+}
 
 class VaultVersionUnsupported implements Exception {
   VaultVersionUnsupported(this.version);

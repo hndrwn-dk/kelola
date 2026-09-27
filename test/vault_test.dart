@@ -146,4 +146,26 @@ void main() {
     expect(vaultTransportRequiresUnlock(VaultTransportKind.sftp), isTrue);
     expect(kVaultSftpRelPath, '.kelola/vault.age');
   });
+
+  test('env records encode without bumping vault schema', () {
+    final record = VaultRecord(
+      id: 'e1',
+      kind: VaultRecordKind.env,
+      updatedAt: DateTime.utc(2026, 9, 1),
+      deviceId: 'dev-a',
+      payload: const {
+        'scope': 'tag',
+        'scopeId': 'prod',
+        'name': 'ROLE',
+        'value': 'api',
+      },
+    );
+    final json = vaultRecordJson(record);
+    expect(json['kind'], 'env');
+    expect(
+      vaultRecordFromJson(Map<String, Object?>.from(json)).kind,
+      VaultRecordKind.env,
+    );
+    expect(kVaultSchemaVersion, 1);
+  });
 }

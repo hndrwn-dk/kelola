@@ -282,6 +282,19 @@ class JournalBookmarks extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+@DataClassName('EnvVarRow')
+class EnvVars extends Table {
+  TextColumn get id => text()();
+  TextColumn get scope => text()();
+  TextColumn get scopeId => text()();
+  TextColumn get name => text()();
+  TextColumn get value => text()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 @DataClassName('VaultTombstoneRow')
 class VaultTombstones extends Table {
   TextColumn get id => text()();

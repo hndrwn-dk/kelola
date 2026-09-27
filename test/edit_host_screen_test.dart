@@ -35,6 +35,8 @@ void main() {
   }
 
   Future<void> pumpEditor(WidgetTester tester, String hostId) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       ProviderScope(
         overrides: [databaseProvider.overrideWithValue(db)],
