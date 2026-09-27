@@ -194,6 +194,17 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _sudoNeedsPasswordMeta = const VerificationMeta(
     'sudoNeedsPassword',
   );
@@ -228,6 +239,7 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
     attentionAt,
     lastSeenAt,
     createdAt,
+    updatedAt,
     sudoNeedsPassword,
   ];
   @override
@@ -368,6 +380,12 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
     if (data.containsKey('sudo_needs_password')) {
       context.handle(
         _sudoNeedsPasswordMeta,
@@ -454,6 +472,10 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
       sudoNeedsPassword: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}sudo_needs_password'],
@@ -485,6 +507,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
   final DateTime? attentionAt;
   final DateTime? lastSeenAt;
   final DateTime createdAt;
+  final DateTime? updatedAt;
   final bool sudoNeedsPassword;
   const HostRow({
     required this.id,
@@ -504,6 +527,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     this.attentionAt,
     this.lastSeenAt,
     required this.createdAt,
+    this.updatedAt,
     required this.sudoNeedsPassword,
   });
   @override
@@ -540,6 +564,9 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       map['last_seen_at'] = Variable<DateTime>(lastSeenAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
     map['sudo_needs_password'] = Variable<bool>(sudoNeedsPassword);
     return map;
   }
@@ -575,6 +602,9 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           ? const Value.absent()
           : Value(lastSeenAt),
       createdAt: Value(createdAt),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
       sudoNeedsPassword: Value(sudoNeedsPassword),
     );
   }
@@ -602,6 +632,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       attentionAt: serializer.fromJson<DateTime?>(json['attentionAt']),
       lastSeenAt: serializer.fromJson<DateTime?>(json['lastSeenAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       sudoNeedsPassword: serializer.fromJson<bool>(json['sudoNeedsPassword']),
     );
   }
@@ -626,6 +657,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       'attentionAt': serializer.toJson<DateTime?>(attentionAt),
       'lastSeenAt': serializer.toJson<DateTime?>(lastSeenAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'sudoNeedsPassword': serializer.toJson<bool>(sudoNeedsPassword),
     };
   }
@@ -648,6 +680,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     Value<DateTime?> attentionAt = const Value.absent(),
     Value<DateTime?> lastSeenAt = const Value.absent(),
     DateTime? createdAt,
+    Value<DateTime?> updatedAt = const Value.absent(),
     bool? sudoNeedsPassword,
   }) => HostRow(
     id: id ?? this.id,
@@ -671,6 +704,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     attentionAt: attentionAt.present ? attentionAt.value : this.attentionAt,
     lastSeenAt: lastSeenAt.present ? lastSeenAt.value : this.lastSeenAt,
     createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     sudoNeedsPassword: sudoNeedsPassword ?? this.sudoNeedsPassword,
   );
   HostRow copyWithCompanion(HostsCompanion data) {
@@ -702,6 +736,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           ? data.lastSeenAt.value
           : this.lastSeenAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       sudoNeedsPassword: data.sudoNeedsPassword.present
           ? data.sudoNeedsPassword.value
           : this.sudoNeedsPassword,
@@ -728,6 +763,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           ..write('attentionAt: $attentionAt, ')
           ..write('lastSeenAt: $lastSeenAt, ')
           ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('sudoNeedsPassword: $sudoNeedsPassword')
           ..write(')'))
         .toString();
@@ -752,6 +788,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     attentionAt,
     lastSeenAt,
     createdAt,
+    updatedAt,
     sudoNeedsPassword,
   );
   @override
@@ -775,6 +812,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           other.attentionAt == this.attentionAt &&
           other.lastSeenAt == this.lastSeenAt &&
           other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
           other.sudoNeedsPassword == this.sudoNeedsPassword);
 }
 
@@ -796,6 +834,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
   final Value<DateTime?> attentionAt;
   final Value<DateTime?> lastSeenAt;
   final Value<DateTime> createdAt;
+  final Value<DateTime?> updatedAt;
   final Value<bool> sudoNeedsPassword;
   final Value<int> rowid;
   const HostsCompanion({
@@ -816,6 +855,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     this.attentionAt = const Value.absent(),
     this.lastSeenAt = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
     this.sudoNeedsPassword = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -837,6 +877,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     this.attentionAt = const Value.absent(),
     this.lastSeenAt = const Value.absent(),
     required DateTime createdAt,
+    this.updatedAt = const Value.absent(),
     this.sudoNeedsPassword = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -863,6 +904,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     Expression<DateTime>? attentionAt,
     Expression<DateTime>? lastSeenAt,
     Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
     Expression<bool>? sudoNeedsPassword,
     Expression<int>? rowid,
   }) {
@@ -884,6 +926,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
       if (attentionAt != null) 'attention_at': attentionAt,
       if (lastSeenAt != null) 'last_seen_at': lastSeenAt,
       if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
       if (sudoNeedsPassword != null) 'sudo_needs_password': sudoNeedsPassword,
       if (rowid != null) 'rowid': rowid,
     });
@@ -907,6 +950,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     Value<DateTime?>? attentionAt,
     Value<DateTime?>? lastSeenAt,
     Value<DateTime>? createdAt,
+    Value<DateTime?>? updatedAt,
     Value<bool>? sudoNeedsPassword,
     Value<int>? rowid,
   }) {
@@ -928,6 +972,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
       attentionAt: attentionAt ?? this.attentionAt,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       sudoNeedsPassword: sudoNeedsPassword ?? this.sudoNeedsPassword,
       rowid: rowid ?? this.rowid,
     );
@@ -987,6 +1032,9 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     if (sudoNeedsPassword.present) {
       map['sudo_needs_password'] = Variable<bool>(sudoNeedsPassword.value);
     }
@@ -1016,6 +1064,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
           ..write('attentionAt: $attentionAt, ')
           ..write('lastSeenAt: $lastSeenAt, ')
           ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('sudoNeedsPassword: $sudoNeedsPassword, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3976,6 +4025,31 @@ class $AppSettingsTable extends AppSettings
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _vaultIncludeSecretsMeta =
+      const VerificationMeta('vaultIncludeSecrets');
+  @override
+  late final GeneratedColumn<bool> vaultIncludeSecrets = GeneratedColumn<bool>(
+    'vault_include_secrets',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("vault_include_secrets" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4003,6 +4077,8 @@ class $AppSettingsTable extends AppSettings
     fleetWatchContainers,
     fleetWatchReboot,
     fleetWatchLastTickAt,
+    deviceId,
+    vaultIncludeSecrets,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4226,6 +4302,21 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    }
+    if (data.containsKey('vault_include_secrets')) {
+      context.handle(
+        _vaultIncludeSecretsMeta,
+        vaultIncludeSecrets.isAcceptableOrUnknown(
+          data['vault_include_secrets']!,
+          _vaultIncludeSecretsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4335,6 +4426,14 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.dateTime,
         data['${effectivePrefix}fleet_watch_last_tick_at'],
       ),
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      ),
+      vaultIncludeSecrets: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}vault_include_secrets'],
+      )!,
     );
   }
 
@@ -4380,6 +4479,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   final int fleetWatchContainers;
   final bool fleetWatchReboot;
   final DateTime? fleetWatchLastTickAt;
+  final String? deviceId;
+  final bool vaultIncludeSecrets;
   const AppSettingsRow({
     required this.id,
     this.lastHostId,
@@ -4406,6 +4507,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     required this.fleetWatchContainers,
     required this.fleetWatchReboot,
     this.fleetWatchLastTickAt,
+    this.deviceId,
+    required this.vaultIncludeSecrets,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4461,6 +4564,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
         fleetWatchLastTickAt,
       );
     }
+    if (!nullToAbsent || deviceId != null) {
+      map['device_id'] = Variable<String>(deviceId);
+    }
+    map['vault_include_secrets'] = Variable<bool>(vaultIncludeSecrets);
     return map;
   }
 
@@ -4515,6 +4622,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       fleetWatchLastTickAt: fleetWatchLastTickAt == null && nullToAbsent
           ? const Value.absent()
           : Value(fleetWatchLastTickAt),
+      deviceId: deviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deviceId),
+      vaultIncludeSecrets: Value(vaultIncludeSecrets),
     );
   }
 
@@ -4563,6 +4674,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       fleetWatchLastTickAt: serializer.fromJson<DateTime?>(
         json['fleetWatchLastTickAt'],
       ),
+      deviceId: serializer.fromJson<String?>(json['deviceId']),
+      vaultIncludeSecrets: serializer.fromJson<bool>(
+        json['vaultIncludeSecrets'],
+      ),
     );
   }
   @override
@@ -4598,6 +4713,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       'fleetWatchLastTickAt': serializer.toJson<DateTime?>(
         fleetWatchLastTickAt,
       ),
+      'deviceId': serializer.toJson<String?>(deviceId),
+      'vaultIncludeSecrets': serializer.toJson<bool>(vaultIncludeSecrets),
     };
   }
 
@@ -4627,6 +4744,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     int? fleetWatchContainers,
     bool? fleetWatchReboot,
     Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
+    Value<String?> deviceId = const Value.absent(),
+    bool? vaultIncludeSecrets,
   }) => AppSettingsRow(
     id: id ?? this.id,
     lastHostId: lastHostId.present ? lastHostId.value : this.lastHostId,
@@ -4668,6 +4787,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     fleetWatchLastTickAt: fleetWatchLastTickAt.present
         ? fleetWatchLastTickAt.value
         : this.fleetWatchLastTickAt,
+    deviceId: deviceId.present ? deviceId.value : this.deviceId,
+    vaultIncludeSecrets: vaultIncludeSecrets ?? this.vaultIncludeSecrets,
   );
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
@@ -4740,6 +4861,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       fleetWatchLastTickAt: data.fleetWatchLastTickAt.present
           ? data.fleetWatchLastTickAt.value
           : this.fleetWatchLastTickAt,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      vaultIncludeSecrets: data.vaultIncludeSecrets.present
+          ? data.vaultIncludeSecrets.value
+          : this.vaultIncludeSecrets,
     );
   }
 
@@ -4770,7 +4895,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('fleetWatchFailedUnits: $fleetWatchFailedUnits, ')
           ..write('fleetWatchContainers: $fleetWatchContainers, ')
           ..write('fleetWatchReboot: $fleetWatchReboot, ')
-          ..write('fleetWatchLastTickAt: $fleetWatchLastTickAt')
+          ..write('fleetWatchLastTickAt: $fleetWatchLastTickAt, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('vaultIncludeSecrets: $vaultIncludeSecrets')
           ..write(')'))
         .toString();
   }
@@ -4802,6 +4929,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     fleetWatchContainers,
     fleetWatchReboot,
     fleetWatchLastTickAt,
+    deviceId,
+    vaultIncludeSecrets,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -4831,7 +4960,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.fleetWatchFailedUnits == this.fleetWatchFailedUnits &&
           other.fleetWatchContainers == this.fleetWatchContainers &&
           other.fleetWatchReboot == this.fleetWatchReboot &&
-          other.fleetWatchLastTickAt == this.fleetWatchLastTickAt);
+          other.fleetWatchLastTickAt == this.fleetWatchLastTickAt &&
+          other.deviceId == this.deviceId &&
+          other.vaultIncludeSecrets == this.vaultIncludeSecrets);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
@@ -4860,6 +4991,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<int> fleetWatchContainers;
   final Value<bool> fleetWatchReboot;
   final Value<DateTime?> fleetWatchLastTickAt;
+  final Value<String?> deviceId;
+  final Value<bool> vaultIncludeSecrets;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.lastHostId = const Value.absent(),
@@ -4886,6 +5019,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.fleetWatchContainers = const Value.absent(),
     this.fleetWatchReboot = const Value.absent(),
     this.fleetWatchLastTickAt = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.vaultIncludeSecrets = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -4913,6 +5048,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.fleetWatchContainers = const Value.absent(),
     this.fleetWatchReboot = const Value.absent(),
     this.fleetWatchLastTickAt = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.vaultIncludeSecrets = const Value.absent(),
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
@@ -4940,6 +5077,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Expression<int>? fleetWatchContainers,
     Expression<bool>? fleetWatchReboot,
     Expression<DateTime>? fleetWatchLastTickAt,
+    Expression<String>? deviceId,
+    Expression<bool>? vaultIncludeSecrets,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4974,6 +5113,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (fleetWatchReboot != null) 'fleet_watch_reboot': fleetWatchReboot,
       if (fleetWatchLastTickAt != null)
         'fleet_watch_last_tick_at': fleetWatchLastTickAt,
+      if (deviceId != null) 'device_id': deviceId,
+      if (vaultIncludeSecrets != null)
+        'vault_include_secrets': vaultIncludeSecrets,
     });
   }
 
@@ -5003,6 +5145,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<int>? fleetWatchContainers,
     Value<bool>? fleetWatchReboot,
     Value<DateTime?>? fleetWatchLastTickAt,
+    Value<String?>? deviceId,
+    Value<bool>? vaultIncludeSecrets,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -5033,6 +5177,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       fleetWatchContainers: fleetWatchContainers ?? this.fleetWatchContainers,
       fleetWatchReboot: fleetWatchReboot ?? this.fleetWatchReboot,
       fleetWatchLastTickAt: fleetWatchLastTickAt ?? this.fleetWatchLastTickAt,
+      deviceId: deviceId ?? this.deviceId,
+      vaultIncludeSecrets: vaultIncludeSecrets ?? this.vaultIncludeSecrets,
     );
   }
 
@@ -5124,6 +5270,12 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
         fleetWatchLastTickAt.value,
       );
     }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (vaultIncludeSecrets.present) {
+      map['vault_include_secrets'] = Variable<bool>(vaultIncludeSecrets.value);
+    }
     return map;
   }
 
@@ -5154,7 +5306,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('fleetWatchFailedUnits: $fleetWatchFailedUnits, ')
           ..write('fleetWatchContainers: $fleetWatchContainers, ')
           ..write('fleetWatchReboot: $fleetWatchReboot, ')
-          ..write('fleetWatchLastTickAt: $fleetWatchLastTickAt')
+          ..write('fleetWatchLastTickAt: $fleetWatchLastTickAt, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('vaultIncludeSecrets: $vaultIncludeSecrets')
           ..write(')'))
         .toString();
   }
@@ -9109,6 +9263,315 @@ class FleetWatchStateCompanion extends UpdateCompanion<FleetWatchStateRow> {
   }
 }
 
+class $VaultTombstonesTable extends VaultTombstones
+    with TableInfo<$VaultTombstonesTable, VaultTombstoneRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VaultTombstonesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, kind, deletedAt, deviceId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'vault_tombstones';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VaultTombstoneRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deletedAtMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VaultTombstoneRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VaultTombstoneRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+    );
+  }
+
+  @override
+  $VaultTombstonesTable createAlias(String alias) {
+    return $VaultTombstonesTable(attachedDatabase, alias);
+  }
+}
+
+class VaultTombstoneRow extends DataClass
+    implements Insertable<VaultTombstoneRow> {
+  final String id;
+  final String kind;
+  final DateTime deletedAt;
+  final String deviceId;
+  const VaultTombstoneRow({
+    required this.id,
+    required this.kind,
+    required this.deletedAt,
+    required this.deviceId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['kind'] = Variable<String>(kind);
+    map['deleted_at'] = Variable<DateTime>(deletedAt);
+    map['device_id'] = Variable<String>(deviceId);
+    return map;
+  }
+
+  VaultTombstonesCompanion toCompanion(bool nullToAbsent) {
+    return VaultTombstonesCompanion(
+      id: Value(id),
+      kind: Value(kind),
+      deletedAt: Value(deletedAt),
+      deviceId: Value(deviceId),
+    );
+  }
+
+  factory VaultTombstoneRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VaultTombstoneRow(
+      id: serializer.fromJson<String>(json['id']),
+      kind: serializer.fromJson<String>(json['kind']),
+      deletedAt: serializer.fromJson<DateTime>(json['deletedAt']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'kind': serializer.toJson<String>(kind),
+      'deletedAt': serializer.toJson<DateTime>(deletedAt),
+      'deviceId': serializer.toJson<String>(deviceId),
+    };
+  }
+
+  VaultTombstoneRow copyWith({
+    String? id,
+    String? kind,
+    DateTime? deletedAt,
+    String? deviceId,
+  }) => VaultTombstoneRow(
+    id: id ?? this.id,
+    kind: kind ?? this.kind,
+    deletedAt: deletedAt ?? this.deletedAt,
+    deviceId: deviceId ?? this.deviceId,
+  );
+  VaultTombstoneRow copyWithCompanion(VaultTombstonesCompanion data) {
+    return VaultTombstoneRow(
+      id: data.id.present ? data.id.value : this.id,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VaultTombstoneRow(')
+          ..write('id: $id, ')
+          ..write('kind: $kind, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('deviceId: $deviceId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, kind, deletedAt, deviceId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VaultTombstoneRow &&
+          other.id == this.id &&
+          other.kind == this.kind &&
+          other.deletedAt == this.deletedAt &&
+          other.deviceId == this.deviceId);
+}
+
+class VaultTombstonesCompanion extends UpdateCompanion<VaultTombstoneRow> {
+  final Value<String> id;
+  final Value<String> kind;
+  final Value<DateTime> deletedAt;
+  final Value<String> deviceId;
+  final Value<int> rowid;
+  const VaultTombstonesCompanion({
+    this.id = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VaultTombstonesCompanion.insert({
+    required String id,
+    required String kind,
+    required DateTime deletedAt,
+    required String deviceId,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       kind = Value(kind),
+       deletedAt = Value(deletedAt),
+       deviceId = Value(deviceId);
+  static Insertable<VaultTombstoneRow> custom({
+    Expression<String>? id,
+    Expression<String>? kind,
+    Expression<DateTime>? deletedAt,
+    Expression<String>? deviceId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (kind != null) 'kind': kind,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (deviceId != null) 'device_id': deviceId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VaultTombstonesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? kind,
+    Value<DateTime>? deletedAt,
+    Value<String>? deviceId,
+    Value<int>? rowid,
+  }) {
+    return VaultTombstonesCompanion(
+      id: id ?? this.id,
+      kind: kind ?? this.kind,
+      deletedAt: deletedAt ?? this.deletedAt,
+      deviceId: deviceId ?? this.deviceId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VaultTombstonesCompanion(')
+          ..write('id: $id, ')
+          ..write('kind: $kind, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$KelolaDatabase extends GeneratedDatabase {
   _$KelolaDatabase(QueryExecutor e) : super(e);
   $KelolaDatabaseManager get managers => $KelolaDatabaseManager(this);
@@ -9134,6 +9597,9 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
   late final $FleetWatchStateTable fleetWatchState = $FleetWatchStateTable(
     this,
   );
+  late final $VaultTombstonesTable vaultTombstones = $VaultTombstonesTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -9155,6 +9621,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     sessionLogs,
     journalBookmarks,
     fleetWatchState,
+    vaultTombstones,
   ];
 }
 
@@ -9177,6 +9644,7 @@ typedef $$HostsTableCreateCompanionBuilder =
       Value<DateTime?> attentionAt,
       Value<DateTime?> lastSeenAt,
       required DateTime createdAt,
+      Value<DateTime?> updatedAt,
       Value<bool> sudoNeedsPassword,
       Value<int> rowid,
     });
@@ -9199,6 +9667,7 @@ typedef $$HostsTableUpdateCompanionBuilder =
       Value<DateTime?> attentionAt,
       Value<DateTime?> lastSeenAt,
       Value<DateTime> createdAt,
+      Value<DateTime?> updatedAt,
       Value<bool> sudoNeedsPassword,
       Value<int> rowid,
     });
@@ -9294,6 +9763,11 @@ class $$HostsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9397,6 +9871,11 @@ class $$HostsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get sudoNeedsPassword => $composableBuilder(
     column: $table.sudoNeedsPassword,
     builder: (column) => ColumnOrderings(column),
@@ -9473,6 +9952,9 @@ class $$HostsTableAnnotationComposer
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
   GeneratedColumn<bool> get sudoNeedsPassword => $composableBuilder(
     column: $table.sudoNeedsPassword,
     builder: (column) => column,
@@ -9524,6 +10006,7 @@ class $$HostsTableTableManager
                 Value<DateTime?> attentionAt = const Value.absent(),
                 Value<DateTime?> lastSeenAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> sudoNeedsPassword = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HostsCompanion(
@@ -9544,6 +10027,7 @@ class $$HostsTableTableManager
                 attentionAt: attentionAt,
                 lastSeenAt: lastSeenAt,
                 createdAt: createdAt,
+                updatedAt: updatedAt,
                 sudoNeedsPassword: sudoNeedsPassword,
                 rowid: rowid,
               ),
@@ -9566,6 +10050,7 @@ class $$HostsTableTableManager
                 Value<DateTime?> attentionAt = const Value.absent(),
                 Value<DateTime?> lastSeenAt = const Value.absent(),
                 required DateTime createdAt,
+                Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> sudoNeedsPassword = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HostsCompanion.insert(
@@ -9586,6 +10071,7 @@ class $$HostsTableTableManager
                 attentionAt: attentionAt,
                 lastSeenAt: lastSeenAt,
                 createdAt: createdAt,
+                updatedAt: updatedAt,
                 sudoNeedsPassword: sudoNeedsPassword,
                 rowid: rowid,
               ),
@@ -10969,6 +11455,8 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<int> fleetWatchContainers,
       Value<bool> fleetWatchReboot,
       Value<DateTime?> fleetWatchLastTickAt,
+      Value<String?> deviceId,
+      Value<bool> vaultIncludeSecrets,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -10997,6 +11485,8 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<int> fleetWatchContainers,
       Value<bool> fleetWatchReboot,
       Value<DateTime?> fleetWatchLastTickAt,
+      Value<String?> deviceId,
+      Value<bool> vaultIncludeSecrets,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -11130,6 +11620,16 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<DateTime> get fleetWatchLastTickAt => $composableBuilder(
     column: $table.fleetWatchLastTickAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get vaultIncludeSecrets => $composableBuilder(
+    column: $table.vaultIncludeSecrets,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -11267,6 +11767,16 @@ class $$AppSettingsTableOrderingComposer
     column: $table.fleetWatchLastTickAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get vaultIncludeSecrets => $composableBuilder(
+    column: $table.vaultIncludeSecrets,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -11396,6 +11906,14 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.fleetWatchLastTickAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<bool> get vaultIncludeSecrets => $composableBuilder(
+    column: $table.vaultIncludeSecrets,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -11454,6 +11972,8 @@ class $$AppSettingsTableTableManager
                 Value<int> fleetWatchContainers = const Value.absent(),
                 Value<bool> fleetWatchReboot = const Value.absent(),
                 Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
+                Value<String?> deviceId = const Value.absent(),
+                Value<bool> vaultIncludeSecrets = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 lastHostId: lastHostId,
@@ -11480,6 +12000,8 @@ class $$AppSettingsTableTableManager
                 fleetWatchContainers: fleetWatchContainers,
                 fleetWatchReboot: fleetWatchReboot,
                 fleetWatchLastTickAt: fleetWatchLastTickAt,
+                deviceId: deviceId,
+                vaultIncludeSecrets: vaultIncludeSecrets,
               ),
           createCompanionCallback:
               ({
@@ -11508,6 +12030,8 @@ class $$AppSettingsTableTableManager
                 Value<int> fleetWatchContainers = const Value.absent(),
                 Value<bool> fleetWatchReboot = const Value.absent(),
                 Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
+                Value<String?> deviceId = const Value.absent(),
+                Value<bool> vaultIncludeSecrets = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 lastHostId: lastHostId,
@@ -11534,6 +12058,8 @@ class $$AppSettingsTableTableManager
                 fleetWatchContainers: fleetWatchContainers,
                 fleetWatchReboot: fleetWatchReboot,
                 fleetWatchLastTickAt: fleetWatchLastTickAt,
+                deviceId: deviceId,
+                vaultIncludeSecrets: vaultIncludeSecrets,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -13698,6 +14224,197 @@ typedef $$FleetWatchStateTableProcessedTableManager =
       FleetWatchStateRow,
       PrefetchHooks Function()
     >;
+typedef $$VaultTombstonesTableCreateCompanionBuilder =
+    VaultTombstonesCompanion Function({
+      required String id,
+      required String kind,
+      required DateTime deletedAt,
+      required String deviceId,
+      Value<int> rowid,
+    });
+typedef $$VaultTombstonesTableUpdateCompanionBuilder =
+    VaultTombstonesCompanion Function({
+      Value<String> id,
+      Value<String> kind,
+      Value<DateTime> deletedAt,
+      Value<String> deviceId,
+      Value<int> rowid,
+    });
+
+class $$VaultTombstonesTableFilterComposer
+    extends Composer<_$KelolaDatabase, $VaultTombstonesTable> {
+  $$VaultTombstonesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$VaultTombstonesTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $VaultTombstonesTable> {
+  $$VaultTombstonesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$VaultTombstonesTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $VaultTombstonesTable> {
+  $$VaultTombstonesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+}
+
+class $$VaultTombstonesTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $VaultTombstonesTable,
+          VaultTombstoneRow,
+          $$VaultTombstonesTableFilterComposer,
+          $$VaultTombstonesTableOrderingComposer,
+          $$VaultTombstonesTableAnnotationComposer,
+          $$VaultTombstonesTableCreateCompanionBuilder,
+          $$VaultTombstonesTableUpdateCompanionBuilder,
+          (
+            VaultTombstoneRow,
+            BaseReferences<
+              _$KelolaDatabase,
+              $VaultTombstonesTable,
+              VaultTombstoneRow
+            >,
+          ),
+          VaultTombstoneRow,
+          PrefetchHooks Function()
+        > {
+  $$VaultTombstonesTableTableManager(
+    _$KelolaDatabase db,
+    $VaultTombstonesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VaultTombstonesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VaultTombstonesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VaultTombstonesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<DateTime> deletedAt = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VaultTombstonesCompanion(
+                id: id,
+                kind: kind,
+                deletedAt: deletedAt,
+                deviceId: deviceId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String kind,
+                required DateTime deletedAt,
+                required String deviceId,
+                Value<int> rowid = const Value.absent(),
+              }) => VaultTombstonesCompanion.insert(
+                id: id,
+                kind: kind,
+                deletedAt: deletedAt,
+                deviceId: deviceId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$VaultTombstonesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $VaultTombstonesTable,
+      VaultTombstoneRow,
+      $$VaultTombstonesTableFilterComposer,
+      $$VaultTombstonesTableOrderingComposer,
+      $$VaultTombstonesTableAnnotationComposer,
+      $$VaultTombstonesTableCreateCompanionBuilder,
+      $$VaultTombstonesTableUpdateCompanionBuilder,
+      (
+        VaultTombstoneRow,
+        BaseReferences<
+          _$KelolaDatabase,
+          $VaultTombstonesTable,
+          VaultTombstoneRow
+        >,
+      ),
+      VaultTombstoneRow,
+      PrefetchHooks Function()
+    >;
 
 class $KelolaDatabaseManager {
   final _$KelolaDatabase _db;
@@ -13733,4 +14450,6 @@ class $KelolaDatabaseManager {
       $$JournalBookmarksTableTableManager(_db, _db.journalBookmarks);
   $$FleetWatchStateTableTableManager get fleetWatchState =>
       $$FleetWatchStateTableTableManager(_db, _db.fleetWatchState);
+  $$VaultTombstonesTableTableManager get vaultTombstones =>
+      $$VaultTombstonesTableTableManager(_db, _db.vaultTombstones);
 }

@@ -126,6 +126,7 @@ class HostRepository {
             jumpHostId: Value(jumpHostId),
             note: Value(note),
             createdAt: now,
+            updatedAt: Value(now),
           ),
         );
     return (await get(id))!;
@@ -203,6 +204,21 @@ class HostRepository {
       if (last == id) {
         await setLastHost(null);
       }
+      final settings = await _settings();
+      final device = settings?.deviceId ?? _uuid.v7();
+      if (settings?.deviceId == null || settings!.deviceId!.isEmpty) {
+        await _db.into(_db.appSettings).insertOnConflictUpdate(
+          _appSettingsWrite(settings, deviceId: Value(device)),
+        );
+      }
+      await _db.into(_db.vaultTombstones).insertOnConflictUpdate(
+        VaultTombstonesCompanion.insert(
+          id: id,
+          kind: 'host',
+          deletedAt: DateTime.now().toUtc(),
+          deviceId: device,
+        ),
+      );
       await (_db.delete(_db.hosts)..where((t) => t.id.equals(id))).go();
     });
   }
@@ -727,6 +743,7 @@ class HostRepository {
               ? const Value(null)
               : (jumpChanged ? Value(jumpHostId) : const Value.absent()),
           readOnly: roChanged ? Value(readOnly!) : const Value.absent(),
+          updatedAt: Value(DateTime.now().toUtc()),
         ),
       );
       if (addressChanged) {
@@ -1439,6 +1456,8 @@ class HostRepository {
     Value<int> fleetWatchContainers = const Value.absent(),
     Value<bool> fleetWatchReboot = const Value.absent(),
     Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
+    Value<String?> deviceId = const Value.absent(),
+    Value<bool> vaultIncludeSecrets = const Value.absent(),
   }) {
     return AppSettingsCompanion(
       id: const Value(1),
@@ -1507,6 +1526,10 @@ class HostRepository {
       fleetWatchLastTickAt: fleetWatchLastTickAt.present
           ? fleetWatchLastTickAt
           : Value(existing?.fleetWatchLastTickAt),
+      deviceId: deviceId.present ? deviceId : Value(existing?.deviceId),
+      vaultIncludeSecrets: vaultIncludeSecrets.present
+          ? vaultIncludeSecrets
+          : Value(existing?.vaultIncludeSecrets ?? false),
     );
   }
 

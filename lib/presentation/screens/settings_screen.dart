@@ -7,8 +7,11 @@ import 'package:kelola/domain/app_lock/app_lock_timeout.dart';
 import 'package:kelola/domain/session_logs/session_log.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
+import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/vault/vault.dart';
 import 'package:kelola/presentation/pro_locked_sheet.dart';
 import 'package:kelola/providers.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Paid only when unlock says so. The build token (`std` / `ext`) is not this.
 /// Fleet unlimited stands in for the unlock set: tunnels has a single
@@ -295,6 +298,493 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _openVault() async {
+    final c = context.kc;
+    final remote = ref.read(vaultControllerProvider).remoteUnlocked;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Vault',
+                    style: KelolaType.display(color: c.text, size: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Passphrase-sealed blob. File export is free. '
+                    'LAN and the host copy need unlock.',
+                    style: KelolaType.body(color: c.muted, size: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  ServiceRow(
+                    risk: RiskLevel.read,
+                    name: 'Export file',
+                    meta: 'share sealed blob',
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _exportVaultFile();
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                  ServiceRow(
+                    risk: RiskLevel.mutate,
+                    name: 'Import file',
+                    meta: 'paste sealed blob',
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _importVaultFile();
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                  ServiceRow(
+                    risk: RiskLevel.read,
+                    name: 'Remote vault',
+                    meta: remote ? '~/.kelola/vault.age' : 'unlock required',
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _openRemoteVault(remote);
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                  ServiceRow(
+                    risk: RiskLevel.read,
+                    name: 'Pair on LAN',
+                    meta: remote ? 'X25519 handshake' : 'unlock required',
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _openLanVault(remote);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<String?> _askPassphrase(String title) async {
+    final controller = TextEditingController();
+    final c = context.kc;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(title, style: KelolaType.display(color: c.text, size: 16)),
+                const SizedBox(height: 10),
+                KelolaInput(
+                  label: 'passphrase',
+                  controller: controller,
+                ),
+                const SizedBox(height: 10),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Continue',
+                  meta: 'not stored',
+                  onTap: () => Navigator.of(ctx).pop(true),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    final text = controller.text;
+    controller.dispose();
+    if (ok != true || text.isEmpty) {
+      return null;
+    }
+    return text;
+  }
+
+  Future<void> _showDiff(VaultDiff diff) async {
+    if (!mounted) {
+      return;
+    }
+    final c = context.kc;
+    final apply = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Vault diff',
+                  style: KelolaType.display(color: c.text, size: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  diff.summary,
+                  style: KelolaType.body(color: c.muted, size: 13),
+                ),
+                const SizedBox(height: 12),
+                ServiceRow(
+                  risk: RiskLevel.mutate,
+                  name: 'Apply',
+                  meta: 'enroll this device after',
+                  onTap: () => Navigator.of(ctx).pop(true),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (apply == true) {
+      await ref.read(vaultControllerProvider).applyImport(diff);
+    }
+  }
+
+  Future<void> _exportVaultFile() async {
+    final passphrase = await _askPassphrase('Export vault');
+    if (passphrase == null || !mounted) {
+      return;
+    }
+    final blob = await ref.read(vaultControllerProvider).exportSealed(passphrase);
+    await Share.share(blob, subject: 'Kelola vault');
+  }
+
+  Future<void> _importVaultFile() async {
+    final passphrase = await _askPassphrase('Import vault');
+    if (passphrase == null || !mounted) {
+      return;
+    }
+    final paste = TextEditingController();
+    final c = context.kc;
+    final raw = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Paste sealed blob',
+                  style: KelolaType.display(color: c.text, size: 16),
+                ),
+                const SizedBox(height: 10),
+                KelolaInput(label: 'blob', controller: paste, mono: true),
+                const SizedBox(height: 10),
+                ServiceRow(
+                  risk: RiskLevel.mutate,
+                  name: 'Preview',
+                  meta: 'diff before apply',
+                  onTap: () => Navigator.of(ctx).pop(paste.text),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    paste.dispose();
+    if (raw == null || raw.trim().isEmpty || !mounted) {
+      return;
+    }
+    final diff = await ref
+        .read(vaultControllerProvider)
+        .previewImport(raw.trim(), passphrase);
+    await _showDiff(diff);
+  }
+
+  Future<void> _openRemoteVault(bool unlocked) async {
+    if (!unlocked) {
+      await showProLockedSheet(
+        context,
+        title: 'Remote vault',
+        body: 'A passphrase-sealed copy on a host you already administer. '
+            'This build keeps remote vault locked.',
+        onPurchase: () => ref.read(entitlementProvider).purchase(),
+      );
+      return;
+    }
+    final hosts = await ref.read(hostRepositoryProvider).list();
+    if (!mounted) {
+      return;
+    }
+    final c = context.kc;
+    final host = await showModalBottomSheet<Host>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < hosts.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 6),
+                  ServiceRow(
+                    risk: RiskLevel.read,
+                    name: hosts[i].alias,
+                    meta: '~/.kelola/vault.age',
+                    onTap: () => Navigator.of(ctx).pop(hosts[i]),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (host == null || !mounted) {
+      return;
+    }
+    final passphrase = await _askPassphrase('Remote vault');
+    if (passphrase == null || !mounted) {
+      return;
+    }
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: context.kc.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: context.kc.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ServiceRow(
+                  risk: RiskLevel.mutate,
+                  name: 'Push',
+                  meta: host.alias,
+                  onTap: () => Navigator.of(ctx).pop('push'),
+                ),
+                const SizedBox(height: 6),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Pull',
+                  meta: host.alias,
+                  onTap: () => Navigator.of(ctx).pop('pull'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (action == null || !mounted) {
+      return;
+    }
+    final vault = ref.read(vaultControllerProvider);
+    if (action == 'push') {
+      await vault.pushRemote(
+        host: host,
+        passphrase: passphrase,
+        ref: ref,
+        context: context,
+      );
+      return;
+    }
+    await _showDiff(
+      await vault.pullRemote(
+        host: host,
+        passphrase: passphrase,
+        ref: ref,
+        context: context,
+      ),
+    );
+  }
+
+  Future<void> _openLanVault(bool unlocked) async {
+    if (!unlocked) {
+      await showProLockedSheet(
+        context,
+        title: 'Pair on LAN',
+        body: 'Ephemeral X25519 handshake on the local network. '
+            'This build keeps LAN pairing locked.',
+        onPurchase: () => ref.read(entitlementProvider).purchase(),
+      );
+      return;
+    }
+    final c = context.kc;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Offer pair',
+                  meta: 'show token',
+                  onTap: () async {
+                    Navigator.of(ctx).pop();
+                    final token =
+                        await ref.read(vaultControllerProvider).startLanOffer();
+                    if (!mounted) {
+                      return;
+                    }
+                    final passphrase = await _askPassphrase('LAN receive');
+                    if (passphrase == null || !mounted) {
+                      return;
+                    }
+                    await showModalBottomSheet<void>(
+                      context: context,
+                      backgroundColor: context.kc.surface,
+                      builder: (tokenCtx) {
+                        return KelolaSheet(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+                            child: SelectableText(
+                              token,
+                              style: KelolaType.mono(
+                                color: context.kc.text,
+                                size: 11,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                    if (!mounted) {
+                      return;
+                    }
+                    await _showDiff(
+                      await ref
+                          .read(vaultControllerProvider)
+                          .receiveLan(passphrase),
+                    );
+                  },
+                ),
+                const SizedBox(height: 6),
+                ServiceRow(
+                  risk: RiskLevel.mutate,
+                  name: 'Join pair',
+                  meta: 'paste token',
+                  onTap: () async {
+                    Navigator.of(ctx).pop();
+                    final tokenCtrl = TextEditingController();
+                    final token = await showModalBottomSheet<String>(
+                      context: context,
+                      backgroundColor: context.kc.surface,
+                      builder: (joinCtx) {
+                        return KelolaSheet(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                KelolaInput(
+                                  label: 'token',
+                                  controller: tokenCtrl,
+                                  mono: true,
+                                ),
+                                const SizedBox(height: 10),
+                                ServiceRow(
+                                  risk: RiskLevel.mutate,
+                                  name: 'Send',
+                                  meta: 'sealed blob',
+                                  onTap: () =>
+                                      Navigator.of(joinCtx).pop(tokenCtrl.text),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                    tokenCtrl.dispose();
+                    if (token == null || token.trim().isEmpty || !mounted) {
+                      return;
+                    }
+                    final passphrase = await _askPassphrase('LAN send');
+                    if (passphrase == null || !mounted) {
+                      return;
+                    }
+                    await ref
+                        .read(vaultControllerProvider)
+                        .sendLan(token.trim(), passphrase);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _restore() async {
     final result = await ref.read(entitlementProvider).restore();
     if (!mounted) {
@@ -393,6 +883,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   name: 'Fleet watch',
                   meta: paid ? 'roughly hourly' : 'unlock required',
                   onTap: _openFleetWatch,
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Vault',
+                  meta: 'encrypted export',
+                  onTap: _openVault,
                 ),
                 const SizedBox(height: 8),
                 ServiceRow(

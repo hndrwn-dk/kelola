@@ -19,6 +19,7 @@ class Hosts extends Table {
   DateTimeColumn get attentionAt => dateTime().nullable()();
   DateTimeColumn get lastSeenAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
   BoolColumn get sudoNeedsPassword =>
       boolean().withDefault(const Constant(false))();
 
@@ -146,6 +147,9 @@ class AppSettings extends Table {
   BoolColumn get fleetWatchReboot =>
       boolean().withDefault(const Constant(true))();
   DateTimeColumn get fleetWatchLastTickAt => dateTime().nullable()();
+  TextColumn get deviceId => text().nullable()();
+  BoolColumn get vaultIncludeSecrets =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -273,6 +277,17 @@ class JournalBookmarks extends Table {
   IntColumn get priority => integer().nullable()();
   BoolColumn get lastHour => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+@DataClassName('VaultTombstoneRow')
+class VaultTombstones extends Table {
+  TextColumn get id => text()();
+  TextColumn get kind => text()();
+  DateTimeColumn get deletedAt => dateTime()();
+  TextColumn get deviceId => text()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

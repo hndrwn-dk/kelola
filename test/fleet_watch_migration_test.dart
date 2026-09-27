@@ -30,7 +30,7 @@ CREATE TABLE app_settings (
     await db.customSelect('SELECT 1').get();
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 20);
+    expect(version.data['user_version'], 21);
 
     final settings = await db.customSelect(
       'SELECT fleet_watch_enabled, fleet_watch_disk_percent FROM app_settings WHERE id = 1',
