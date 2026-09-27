@@ -714,6 +714,18 @@ class HostRepository {
     );
   }
 
+  Future<void> setSshCertificate(String id, String? value) {
+    final trimmed = value?.trim();
+    return (_db.update(_db.hosts)..where((t) => t.id.equals(id))).write(
+      HostsCompanion(
+        sshCertificate: Value(
+          trimmed == null || trimmed.isEmpty ? null : trimmed,
+        ),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ),
+    );
+  }
+
   /// Local mutate of host identity. Changing [address] deletes the pinned
   /// host key in the same transaction so the next connect must TOFU.
   Future<HostEditResult> updateHost(
@@ -1176,6 +1188,7 @@ class HostRepository {
       osId: osId,
       sudoNeedsPassword: row.sudoNeedsPassword,
       agentForward: row.agentForward,
+      sshCertificate: row.sshCertificate,
       tags: tags,
     );
   }

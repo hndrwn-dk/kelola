@@ -14,7 +14,7 @@ void main() {
     await db.customSelect('SELECT 1').get();
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 23);
+    expect(version.data['user_version'], 24);
     final table = await db.customSelect(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='env_vars'",
     ).get();

@@ -70,6 +70,8 @@ void main() {
     final src = File('lib/data/ssh/session_pool.dart').readAsStringSync();
     expect(src, contains('HardwareSshAgent'));
     expect(src, contains('usePassword || !host.agentForward'));
+    expect(src, contains('_identityFor(host)'));
+    expect(src, contains('certificateBlob'));
   });
 
   test('agent lists the StrongBox identity and signs only that blob', () async {

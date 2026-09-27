@@ -23,6 +23,7 @@ class Hosts extends Table {
   BoolColumn get sudoNeedsPassword =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get agentForward => boolean().withDefault(const Constant(false))();
+  TextColumn get sshCertificate => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

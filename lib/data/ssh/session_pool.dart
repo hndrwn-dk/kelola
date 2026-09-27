@@ -15,6 +15,7 @@ import 'package:kelola/domain/audit/probe_audit_policy.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/ssh/openssh_user_cert.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
 import 'package:kelola/domain/journal/journal_follow.dart';
 import 'package:kelola/domain/journal/journal_view.dart';
@@ -565,13 +566,7 @@ class SshSessionPool {
     // never set onPasswordRequest.
     final List<SSHIdentity>? identities = usePassword
         ? null
-        : [
-            HardwareSshIdentity(
-              signer: _signer,
-              alias: host.keyAlias,
-              publicBlob: _publicBlob(),
-            ).toIdentity(),
-          ];
+        : [_identityFor(host).toIdentity()];
 
     final passwordRequest = onPasswordRequest;
     final FutureOr<String?> Function()? passwordHandler =
@@ -591,13 +586,7 @@ class SshSessionPool {
         onPasswordRequest: passwordHandler,
         agentHandler: usePassword || !host.agentForward
             ? null
-            : HardwareSshAgent(
-                HardwareSshIdentity(
-                  signer: _signer,
-                  alias: host.keyAlias,
-                  publicBlob: _publicBlob(),
-                ),
-              ),
+            : HardwareSshAgent(_identityFor(host)),
       );
     } catch (e) {
       // Mirror execute: changed pins must surface HostKeyMismatchException so
@@ -729,6 +718,31 @@ class SshSessionPool {
       probe,
       facts: facts,
       onUnknownHostKey: onUnknownHostKey,
+    );
+  }
+
+  HardwareSshIdentity _identityFor(Host host) {
+    final publicBlob = _publicBlob();
+    final raw = host.sshCertificate?.trim();
+    if (raw == null || raw.isEmpty) {
+      return HardwareSshIdentity(
+        signer: _signer,
+        alias: host.keyAlias,
+        publicBlob: publicBlob,
+      );
+    }
+    final cert = parseOpenSshUserCert(raw);
+    if (!cert.matchesPublicBlob(publicBlob) ||
+        !cert.isValidAt(DateTime.now().toUtc())) {
+      throw SshUnavailableException(
+        'SSH certificate is not valid for this device key',
+      );
+    }
+    return HardwareSshIdentity(
+      signer: _signer,
+      alias: host.keyAlias,
+      publicBlob: publicBlob,
+      certificateBlob: cert.blob,
     );
   }
 

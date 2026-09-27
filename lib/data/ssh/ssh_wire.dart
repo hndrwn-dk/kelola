@@ -8,6 +8,11 @@ class SshWireWriter {
     _out.add([value & 0xff]);
   }
 
+  void writeUint64(int value) {
+    writeUint32((value >> 32) & 0xffffffff);
+    writeUint32(value & 0xffffffff);
+  }
+
   void writeUint32(int value) {
     _out.add([
       (value >> 24) & 0xff,
@@ -64,6 +69,12 @@ class SshWireReader {
       throw const FormatException('truncated ssh uint8');
     }
     return data[_offset++];
+  }
+
+  int readUint64() {
+    final hi = readUint32();
+    final lo = readUint32();
+    return (hi << 32) | lo;
   }
 
   int readUint32() {
