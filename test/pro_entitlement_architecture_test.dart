@@ -89,6 +89,20 @@ void main() {
     );
   });
 
+  test('isUnlocked(ProFeature.snippetMulti) stays out of snippet domain', () {
+    expect(
+      _occurrenceFiles(
+        p.join(root, 'lib', 'domain', 'snippets'),
+        'isUnlocked(ProFeature.snippetMulti)',
+      ),
+      isEmpty,
+    );
+    expect(
+      _occurrenceFiles(p.join(root, 'lib'), 'isUnlocked(ProFeature.snippetMulti)'),
+      ['lib/presentation/screens/snippets_screen.dart x1'],
+    );
+  });
+
   test('isUnlocked(ProFeature.tunnels) has exactly one production read', () {
     expect(
       _occurrenceFiles(
