@@ -30,6 +30,15 @@ void main() {
   test('schema 15 adds app_lock_timeout_sec default 0', () async {
     final raw = sqlite3.openInMemory();
     raw.execute(_v14AppSettings);
+    raw.execute('''
+CREATE TABLE snippets (
+  id TEXT NOT NULL PRIMARY KEY,
+  name TEXT NOT NULL,
+  template TEXT NOT NULL,
+  starter INTEGER NOT NULL DEFAULT 0 CHECK (starter IN (0, 1)),
+  updated_at INTEGER NOT NULL
+);
+''');
     raw.execute('INSERT INTO app_settings (id) VALUES (1)');
     raw.execute('PRAGMA user_version = 14');
 
@@ -38,7 +47,7 @@ void main() {
     await db.customSelect('SELECT 1').get();
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 16);
+    expect(version.data['user_version'], 17);
 
     final row = await db
         .customSelect(

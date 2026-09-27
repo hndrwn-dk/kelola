@@ -9,6 +9,7 @@ import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/snippet_probe.dart';
 import 'package:kelola/domain/snippets/run_snippet.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
+import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart'
     show KelolaEmpty;
@@ -32,6 +33,7 @@ class SnippetsScreen extends ConsumerStatefulWidget {
 
 class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   List<Snippet> _items = const [];
+  List<Snippet> _visible = const [];
   String? _error;
   String? _notice;
   bool _busy = true;
@@ -49,7 +51,10 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     });
     try {
       final items = await ref.read(hostRepositoryProvider).listSnippets();
-      setState(() => _items = items);
+      setState(() {
+        _items = items;
+        _visible = snippetsForHost(items, widget.host);
+      });
     } catch (e) {
       setState(() => _error = describeSshError(e));
     } finally {
@@ -64,10 +69,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     final c = context.kc;
     return Scaffold(
       backgroundColor: c.ink,
-      appBar: KelolaHostAppBar(
-        hostAlias: widget.host.alias,
-        title: 'Snippets',
-      ),
+      appBar: KelolaHostAppBar(hostAlias: widget.host.alias, title: 'Snippets'),
       body: Column(
         children: [
           if (_busy)
@@ -101,7 +103,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                 ServiceRow(
                   risk: RiskLevel.read,
                   name: 'Export JSON',
-                  meta: '${_items.length} templates',
+                  meta: '${_items.length} in library',
                   onTap: _items.isEmpty ? null : _export,
                 ),
                 const SizedBox(height: 6),
@@ -121,14 +123,14 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                 const SizedBox(height: 12),
                 const SectionSlab('Library'),
                 const SizedBox(height: 6),
-                if (_items.isEmpty && !_busy)
+                if (_visible.isEmpty && !_busy)
                   const Padding(
                     padding: EdgeInsets.only(top: 24),
                     child: KelolaEmpty(
                       body: 'Add a snippet. It will be risk-classified and never auto-run.',
                     ),
                   ),
-                for (final snippet in _items) ...[
+                for (final snippet in _visible) ...[
                   _snippetRow(c, snippet),
                   const SizedBox(height: 6),
                 ],
@@ -157,28 +159,20 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     }
   }
 
-  Future<void> _openRun(Snippet snippet) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.kc.ink,
-      builder: (ctx) => KelolaSheet(
-        child: SizedBox(
-          height: kelolaSheetBodyHeight(ctx),
-          child: _SnippetRunSheet(
-            host: widget.host,
-            snippet: snippet,
-            onExecute: widget.onExecute,
-          ),
-        ),
-      ),
+  Future<void> _openRun(Snippet snippet) {
+    return openSnippetRunSheet(
+      context,
+      host: widget.host,
+      snippet: snippet,
+      onExecute: widget.onExecute,
     );
   }
 
   Future<void> _create() async {
     final created = await _editSnippet(
       context,
-      const Snippet(id: '', name: '', template: ''),
+      host: widget.host,
+      current: const Snippet(id: '', name: '', template: ''),
     );
     if (created == null) {
       return;
@@ -187,6 +181,9 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       id: const Uuid().v7(),
       name: created.name,
       template: created.template,
+      hostId: created.hostId,
+      tag: created.tag,
+      startup: created.startup,
     );
     await ref.read(hostRepositoryProvider).upsertSnippet(saved);
     await _load();
@@ -247,7 +244,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       child: ServiceRow(
         risk: _previewRisk(snippet),
         name: snippet.name,
-        meta: snippet.starter ? 'starter · tap to run' : 'tap to run',
+        meta: snippetScopeMeta(snippet),
         onTap: _busy ? null : () => _openRun(snippet),
         onLongPress: _busy ? null : () => _actions(snippet),
       ),
@@ -268,7 +265,11 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   }
 
   Future<void> _edit(Snippet snippet) async {
-    final edited = await _editSnippet(context, snippet);
+    final edited = await _editSnippet(
+      context,
+      host: widget.host,
+      current: snippet,
+    );
     if (edited == null || !mounted) {
       return;
     }
@@ -280,6 +281,9 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
             name: edited.name,
             template: edited.template,
             starter: false,
+            hostId: edited.hostId,
+            tag: edited.tag,
+            startup: edited.startup,
           ),
         );
     await _load();
@@ -300,8 +304,9 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   }
 
   Future<void> _restore() async {
-    final added =
-        await ref.read(hostRepositoryProvider).restoreStarterSnippets();
+    final added = await ref
+        .read(hostRepositoryProvider)
+        .restoreStarterSnippets();
     await _load();
     if (!mounted) {
       return;
@@ -310,8 +315,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       _notice = added == 0
           ? 'Starter snippets are already in the library.'
           : (added == 1
-              ? 'Restored 1 starter snippet.'
-              : 'Restored $added starter snippets.');
+                ? 'Restored 1 starter snippet.'
+                : 'Restored $added starter snippets.');
     });
   }
 
@@ -330,6 +335,29 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     }
     await _load();
   }
+}
+
+Future<void> openSnippetRunSheet(
+  BuildContext context, {
+  required Host host,
+  required Snippet snippet,
+  Future<CommandRunnerResult?> Function(SnippetProbe probe)? onExecute,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: context.kc.ink,
+    builder: (ctx) => KelolaSheet(
+      child: SizedBox(
+        height: kelolaSheetBodyHeight(ctx),
+        child: _SnippetRunSheet(
+          host: host,
+          snippet: snippet,
+          onExecute: onExecute,
+        ),
+      ),
+    ),
+  );
 }
 
 class _SnippetRunSheet extends ConsumerStatefulWidget {
@@ -598,18 +626,35 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
 }
 
 class _SnippetDraft {
-  const _SnippetDraft({required this.name, required this.template});
+  const _SnippetDraft({
+    required this.name,
+    required this.template,
+    this.hostId,
+    this.tag,
+    this.startup = false,
+  });
 
   final String name;
   final String template;
+  final String? hostId;
+  final String? tag;
+  final bool startup;
 }
 
-Future<Snippet?> _editSnippet(BuildContext context, Snippet current) async {
+enum _SnippetScope { all, host, tag }
+
+Future<Snippet?> _editSnippet(
+  BuildContext context, {
+  required Host host,
+  required Snippet current,
+}) async {
   final draft = await showModalBottomSheet<_SnippetDraft>(
     context: context,
     isScrollControlled: true,
     backgroundColor: context.kc.ink,
-    builder: (ctx) => KelolaSheet(child: _SnippetEditor(current: current)),
+    builder: (ctx) => KelolaSheet(
+      child: _SnippetEditor(host: host, current: current),
+    ),
   );
   if (draft == null) {
     return null;
@@ -622,12 +667,16 @@ Future<Snippet?> _editSnippet(BuildContext context, Snippet current) async {
     name: draft.name,
     template: draft.template,
     starter: current.starter,
+    hostId: draft.hostId,
+    tag: draft.tag,
+    startup: draft.startup,
   );
 }
 
 class _SnippetEditor extends StatefulWidget {
-  const _SnippetEditor({required this.current});
+  const _SnippetEditor({required this.host, required this.current});
 
+  final Host host;
   final Snippet current;
 
   @override
@@ -637,29 +686,65 @@ class _SnippetEditor extends StatefulWidget {
 class _SnippetEditorState extends State<_SnippetEditor> {
   late final TextEditingController _name;
   late final TextEditingController _template;
+  late final TextEditingController _tag;
+  late _SnippetScope _scope;
+  late bool _startup;
 
   @override
   void initState() {
     super.initState();
-    _name = TextEditingController(text: widget.current.name);
-    _template = TextEditingController(text: widget.current.template);
+    final current = widget.current;
+    _name = TextEditingController(text: current.name);
+    _template = TextEditingController(text: current.template);
+    _tag = TextEditingController(text: current.tag ?? '');
+    if (current.hostId != null && current.hostId!.isNotEmpty) {
+      _scope = _SnippetScope.host;
+    } else if ((current.tag ?? '').trim().isNotEmpty) {
+      _scope = _SnippetScope.tag;
+    } else {
+      _scope = _SnippetScope.all;
+    }
+    _startup = current.startup;
   }
 
   @override
   void dispose() {
     _name.dispose();
     _template.dispose();
+    _tag.dispose();
     super.dispose();
   }
 
+  void _cycleScope() {
+    setState(() {
+      _scope = switch (_scope) {
+        _SnippetScope.all => _SnippetScope.host,
+        _SnippetScope.host => _SnippetScope.tag,
+        _SnippetScope.tag => _SnippetScope.all,
+      };
+    });
+  }
+
   void _save() {
+    final tag = _tag.text.trim();
     Navigator.of(context).pop(
-      _SnippetDraft(name: _name.text.trim(), template: _template.text.trim()),
+      _SnippetDraft(
+        name: _name.text.trim(),
+        template: _template.text.trim(),
+        hostId: _scope == _SnippetScope.host ? widget.host.id : null,
+        tag: _scope == _SnippetScope.tag && tag.isNotEmpty ? tag : null,
+        startup: _startup,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final scopeMeta = switch (_scope) {
+      _SnippetScope.all => 'all hosts',
+      _SnippetScope.host => 'this host',
+      _SnippetScope.tag => 'tag',
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
       child: Column(
@@ -673,6 +758,24 @@ class _SnippetEditorState extends State<_SnippetEditor> {
             controller: _template,
             mono: true,
             hint: 'systemctl status {{unit}}',
+          ),
+          const SizedBox(height: 10),
+          ServiceRow(
+            risk: RiskLevel.read,
+            name: 'Scope',
+            meta: scopeMeta,
+            onTap: _cycleScope,
+          ),
+          if (_scope == _SnippetScope.tag) ...[
+            const SizedBox(height: 10),
+            KelolaInput(label: 'Tag', controller: _tag),
+          ],
+          const SizedBox(height: 6),
+          ServiceRow(
+            risk: RiskLevel.read,
+            name: 'Startup',
+            meta: _startup ? 'offer on dashboard' : 'library only',
+            onTap: () => setState(() => _startup = !_startup),
           ),
           const SizedBox(height: 12),
           ServiceRow(

@@ -13,6 +13,7 @@ import 'package:kelola/domain/hosts/host_edit.dart';
 import 'package:kelola/domain/hosts/ssh_config_import.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
+import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/domain/snippets/starters.dart';
 import 'package:kelola/domain/llm/provider.dart';
 import 'package:kelola/domain/llm/settings.dart';
@@ -181,6 +182,7 @@ class HostRepository {
       await (_db.delete(
         _db.commandHistory,
       )..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(_db.snippets)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.pins)..where((t) => t.hostId.equals(id))).go();
       final last = await lastHostId();
       if (last == id) {
@@ -1144,6 +1146,11 @@ class HostRepository {
     return rows.map(_toSnippet).toList();
   }
 
+  Future<List<Snippet>> listSnippetsForHost(Host host) async {
+    final all = await listSnippets();
+    return snippetsForHost(all, host);
+  }
+
   /// Inserts shipped starters that are missing. Never updates an existing
   /// row, so an edited starter stays user-owned.
   Future<int> restoreStarterSnippets() async {
@@ -1164,6 +1171,9 @@ class HostRepository {
               template: Value(starter.template),
               starter: const Value(true),
               updatedAt: Value(now),
+              hostId: Value(starter.hostId),
+              tag: Value(starter.tag),
+              startup: Value(starter.startup),
             ),
           );
       added++;
@@ -1199,6 +1209,9 @@ class HostRepository {
               template: Value(s.template),
               starter: Value(s.starter),
               updatedAt: Value(now),
+              hostId: Value(s.hostId),
+              tag: Value(s.tag),
+              startup: Value(s.startup),
             ),
           );
     }
@@ -1214,6 +1227,9 @@ class HostRepository {
             template: Value(snippet.template),
             starter: Value(snippet.starter),
             updatedAt: Value(DateTime.now().toUtc()),
+            hostId: Value(snippet.hostId),
+            tag: Value(snippet.tag),
+            startup: Value(snippet.startup),
           ),
         );
   }
@@ -1228,6 +1244,9 @@ class HostRepository {
       name: row.name,
       template: row.template,
       starter: row.starter,
+      hostId: row.hostId,
+      tag: row.tag,
+      startup: row.startup,
     );
   }
 }
