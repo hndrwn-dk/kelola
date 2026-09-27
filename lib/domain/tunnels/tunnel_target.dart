@@ -16,6 +16,29 @@ enum TunnelScheme {
   }
 }
 
+enum TunnelKind {
+  local,
+  dynamic,
+  remote,
+  kubectl;
+
+  String get value => name;
+
+  String get pillLabel => switch (this) {
+        TunnelKind.local => 'local',
+        TunnelKind.dynamic => 'socks5',
+        TunnelKind.remote => 'remote',
+        TunnelKind.kubectl => 'kubectl',
+      };
+
+  static TunnelKind parse(String raw) {
+    for (final kind in values) {
+      if (kind.name == raw.trim()) return kind;
+    }
+    return TunnelKind.local;
+  }
+}
+
 class TunnelTarget {
   const TunnelTarget({
     required this.id,
@@ -25,6 +48,7 @@ class TunnelTarget {
     required this.remotePort,
     required this.scheme,
     required this.path,
+    this.kind = TunnelKind.local,
   });
 
   final String id;
@@ -34,4 +58,5 @@ class TunnelTarget {
   final int remotePort;
   final TunnelScheme scheme;
   final String path;
+  final TunnelKind kind;
 }

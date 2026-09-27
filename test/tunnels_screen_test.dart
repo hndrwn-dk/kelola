@@ -138,6 +138,7 @@ TunnelTarget _target({
   String label = 'Cockpit',
   TunnelScheme scheme = TunnelScheme.https,
   int port = 9090,
+  TunnelKind kind = TunnelKind.local,
 }) {
   return TunnelTarget(
     id: id,
@@ -147,6 +148,7 @@ TunnelTarget _target({
     remotePort: port,
     scheme: scheme,
     path: '/',
+    kind: kind,
   );
 }
 
@@ -560,10 +562,51 @@ void main() {
     await tester.pump();
     expect(find.byType(KelolaSheet), findsOneWidget);
     expect(find.text('Add target'), findsWidgets);
+    expect(find.widgetWithText(FilterPill, 'LOCAL'), findsOneWidget);
+    expect(find.widgetWithText(FilterPill, 'SOCKS5'), findsOneWidget);
+    expect(find.widgetWithText(FilterPill, 'REMOTE'), findsOneWidget);
+    expect(find.widgetWithText(FilterPill, 'KUBECTL'), findsOneWidget);
     expect(find.byType(KelolaInput), findsWidgets);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('SOCKS and remote active rows hide Open in browser',
+      (tester) async {
+    final hostId = await seedHost();
+    fakeManager.emit([
+      _tunnel(
+        id: 'socks',
+        target: _target(
+          id: 's',
+          hostId: hostId,
+          label: 'Proxy',
+          kind: TunnelKind.dynamic,
+        ),
+        hostAlias: 'web-01',
+        state: TunnelState.listening,
+        localPort: 1080,
+      ),
+      _tunnel(
+        id: 'remote',
+        target: _target(
+          id: 'r',
+          hostId: hostId,
+          label: 'ssh-in',
+          kind: TunnelKind.remote,
+        ),
+        hostAlias: 'web-01',
+        state: TunnelState.listening,
+        localPort: 22000,
+      ),
+    ]);
+
+    await pumpTunnels(tester, hostId: hostId);
+    expect(find.text('Proxy'), findsOneWidget);
+    expect(find.text('ssh-in'), findsOneWidget);
+    expect(find.text('Open'), findsNothing);
+    expect(find.text('Stop'), findsNWidgets(2));
   });
 
   test('editor onSave path upserts preset target through TunnelRepository', () async {

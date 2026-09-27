@@ -208,6 +208,7 @@ class TunnelTargets extends Table {
   IntColumn get remotePort => integer()();
   TextColumn get scheme => text()(); // 'http' | 'https' — never int enum
   TextColumn get path => text().withDefault(const Constant(''))();
+  TextColumn get kind => text().withDefault(const Constant('local'))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
