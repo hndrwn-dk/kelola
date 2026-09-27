@@ -220,6 +220,21 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _agentForwardMeta = const VerificationMeta(
+    'agentForward',
+  );
+  @override
+  late final GeneratedColumn<bool> agentForward = GeneratedColumn<bool>(
+    'agent_forward',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("agent_forward" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -241,6 +256,7 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
     createdAt,
     updatedAt,
     sudoNeedsPassword,
+    agentForward,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -395,6 +411,15 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
         ),
       );
     }
+    if (data.containsKey('agent_forward')) {
+      context.handle(
+        _agentForwardMeta,
+        agentForward.isAcceptableOrUnknown(
+          data['agent_forward']!,
+          _agentForwardMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -480,6 +505,10 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, HostRow> {
         DriftSqlType.bool,
         data['${effectivePrefix}sudo_needs_password'],
       )!,
+      agentForward: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}agent_forward'],
+      )!,
     );
   }
 
@@ -509,6 +538,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final bool sudoNeedsPassword;
+  final bool agentForward;
   const HostRow({
     required this.id,
     required this.alias,
@@ -529,6 +559,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     required this.createdAt,
     this.updatedAt,
     required this.sudoNeedsPassword,
+    required this.agentForward,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -568,6 +599,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       map['updated_at'] = Variable<DateTime>(updatedAt);
     }
     map['sudo_needs_password'] = Variable<bool>(sudoNeedsPassword);
+    map['agent_forward'] = Variable<bool>(agentForward);
     return map;
   }
 
@@ -606,6 +638,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           ? const Value.absent()
           : Value(updatedAt),
       sudoNeedsPassword: Value(sudoNeedsPassword),
+      agentForward: Value(agentForward),
     );
   }
 
@@ -634,6 +667,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       sudoNeedsPassword: serializer.fromJson<bool>(json['sudoNeedsPassword']),
+      agentForward: serializer.fromJson<bool>(json['agentForward']),
     );
   }
   @override
@@ -659,6 +693,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'sudoNeedsPassword': serializer.toJson<bool>(sudoNeedsPassword),
+      'agentForward': serializer.toJson<bool>(agentForward),
     };
   }
 
@@ -682,6 +717,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     DateTime? createdAt,
     Value<DateTime?> updatedAt = const Value.absent(),
     bool? sudoNeedsPassword,
+    bool? agentForward,
   }) => HostRow(
     id: id ?? this.id,
     alias: alias ?? this.alias,
@@ -706,6 +742,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     sudoNeedsPassword: sudoNeedsPassword ?? this.sudoNeedsPassword,
+    agentForward: agentForward ?? this.agentForward,
   );
   HostRow copyWithCompanion(HostsCompanion data) {
     return HostRow(
@@ -740,6 +777,9 @@ class HostRow extends DataClass implements Insertable<HostRow> {
       sudoNeedsPassword: data.sudoNeedsPassword.present
           ? data.sudoNeedsPassword.value
           : this.sudoNeedsPassword,
+      agentForward: data.agentForward.present
+          ? data.agentForward.value
+          : this.agentForward,
     );
   }
 
@@ -764,7 +804,8 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           ..write('lastSeenAt: $lastSeenAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('sudoNeedsPassword: $sudoNeedsPassword')
+          ..write('sudoNeedsPassword: $sudoNeedsPassword, ')
+          ..write('agentForward: $agentForward')
           ..write(')'))
         .toString();
   }
@@ -790,6 +831,7 @@ class HostRow extends DataClass implements Insertable<HostRow> {
     createdAt,
     updatedAt,
     sudoNeedsPassword,
+    agentForward,
   );
   @override
   bool operator ==(Object other) =>
@@ -813,7 +855,8 @@ class HostRow extends DataClass implements Insertable<HostRow> {
           other.lastSeenAt == this.lastSeenAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.sudoNeedsPassword == this.sudoNeedsPassword);
+          other.sudoNeedsPassword == this.sudoNeedsPassword &&
+          other.agentForward == this.agentForward);
 }
 
 class HostsCompanion extends UpdateCompanion<HostRow> {
@@ -836,6 +879,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
   final Value<DateTime> createdAt;
   final Value<DateTime?> updatedAt;
   final Value<bool> sudoNeedsPassword;
+  final Value<bool> agentForward;
   final Value<int> rowid;
   const HostsCompanion({
     this.id = const Value.absent(),
@@ -857,6 +901,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.sudoNeedsPassword = const Value.absent(),
+    this.agentForward = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HostsCompanion.insert({
@@ -879,6 +924,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     required DateTime createdAt,
     this.updatedAt = const Value.absent(),
     this.sudoNeedsPassword = const Value.absent(),
+    this.agentForward = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        alias = Value(alias),
@@ -906,6 +952,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<bool>? sudoNeedsPassword,
+    Expression<bool>? agentForward,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -928,6 +975,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (sudoNeedsPassword != null) 'sudo_needs_password': sudoNeedsPassword,
+      if (agentForward != null) 'agent_forward': agentForward,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -952,6 +1000,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     Value<DateTime>? createdAt,
     Value<DateTime?>? updatedAt,
     Value<bool>? sudoNeedsPassword,
+    Value<bool>? agentForward,
     Value<int>? rowid,
   }) {
     return HostsCompanion(
@@ -974,6 +1023,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       sudoNeedsPassword: sudoNeedsPassword ?? this.sudoNeedsPassword,
+      agentForward: agentForward ?? this.agentForward,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1038,6 +1088,9 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
     if (sudoNeedsPassword.present) {
       map['sudo_needs_password'] = Variable<bool>(sudoNeedsPassword.value);
     }
+    if (agentForward.present) {
+      map['agent_forward'] = Variable<bool>(agentForward.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1066,6 +1119,7 @@ class HostsCompanion extends UpdateCompanion<HostRow> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('sudoNeedsPassword: $sudoNeedsPassword, ')
+          ..write('agentForward: $agentForward, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -10050,6 +10104,7 @@ typedef $$HostsTableCreateCompanionBuilder =
       required DateTime createdAt,
       Value<DateTime?> updatedAt,
       Value<bool> sudoNeedsPassword,
+      Value<bool> agentForward,
       Value<int> rowid,
     });
 typedef $$HostsTableUpdateCompanionBuilder =
@@ -10073,6 +10128,7 @@ typedef $$HostsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime?> updatedAt,
       Value<bool> sudoNeedsPassword,
+      Value<bool> agentForward,
       Value<int> rowid,
     });
 
@@ -10177,6 +10233,11 @@ class $$HostsTableFilterComposer
 
   ColumnFilters<bool> get sudoNeedsPassword => $composableBuilder(
     column: $table.sudoNeedsPassword,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get agentForward => $composableBuilder(
+    column: $table.agentForward,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -10284,6 +10345,11 @@ class $$HostsTableOrderingComposer
     column: $table.sudoNeedsPassword,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get agentForward => $composableBuilder(
+    column: $table.agentForward,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$HostsTableAnnotationComposer
@@ -10363,6 +10429,11 @@ class $$HostsTableAnnotationComposer
     column: $table.sudoNeedsPassword,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get agentForward => $composableBuilder(
+    column: $table.agentForward,
+    builder: (column) => column,
+  );
 }
 
 class $$HostsTableTableManager
@@ -10412,6 +10483,7 @@ class $$HostsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> sudoNeedsPassword = const Value.absent(),
+                Value<bool> agentForward = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HostsCompanion(
                 id: id,
@@ -10433,6 +10505,7 @@ class $$HostsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 sudoNeedsPassword: sudoNeedsPassword,
+                agentForward: agentForward,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -10456,6 +10529,7 @@ class $$HostsTableTableManager
                 required DateTime createdAt,
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> sudoNeedsPassword = const Value.absent(),
+                Value<bool> agentForward = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HostsCompanion.insert(
                 id: id,
@@ -10477,6 +10551,7 @@ class $$HostsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 sudoNeedsPassword: sudoNeedsPassword,
+                agentForward: agentForward,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

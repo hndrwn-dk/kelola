@@ -21,6 +21,7 @@ class Host {
     this.prettyName,
     this.osId,
     this.sudoNeedsPassword = false,
+    this.agentForward = false,
     this.tags = const [],
   });
 
@@ -43,6 +44,7 @@ class Host {
   final String? prettyName;
   final String? osId;
   final bool sudoNeedsPassword;
+  final bool agentForward;
   final List<String> tags;
 
   /// Last dashboard snapshot older than this is labelled stale, never current.

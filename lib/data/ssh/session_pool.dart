@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/keystore/hardware_signer.dart';
+import 'package:kelola/data/ssh/hardware_agent.dart';
 import 'package:kelola/data/ssh/hardware_identity.dart';
 import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/kelola_algorithms.dart';
@@ -588,6 +589,15 @@ class SshSessionPool {
         identities: identities,
         onVerifyHostKey: verifyHostKey,
         onPasswordRequest: passwordHandler,
+        agentHandler: usePassword || !host.agentForward
+            ? null
+            : HardwareSshAgent(
+                HardwareSshIdentity(
+                  signer: _signer,
+                  alias: host.keyAlias,
+                  publicBlob: _publicBlob(),
+                ),
+              ),
       );
     } catch (e) {
       // Mirror execute: changed pins must surface HostKeyMismatchException so
@@ -616,6 +626,7 @@ class SshSessionPool {
     required Future<bool> Function(String type, Uint8List fingerprint)
     onVerifyHostKey,
     FutureOr<String?> Function()? onPasswordRequest,
+    SSHAgentHandler? agentHandler,
   }) async {
     final client = SSHClient(
       socket,
@@ -625,6 +636,7 @@ class SshSessionPool {
       keepAliveInterval: const Duration(seconds: 30),
       onVerifyHostKey: onVerifyHostKey,
       onPasswordRequest: onPasswordRequest,
+      agentHandler: agentHandler,
       // dartssh2 only surfaces methodsLeft on Userauth_Failure traces, not on
       // SSHAuthFailError — capture them for password-bootstrap classification.
       printTrace: onPasswordRequest == null ? null : considerAuthTrace,

@@ -271,6 +271,7 @@ class _StubAuthPool extends SshSessionPool {
     required Future<bool> Function(String type, Uint8List fingerprint)
         onVerifyHostKey,
     FutureOr<String?> Function()? onPasswordRequest,
+    SSHAgentHandler? agentHandler,
   }) async {
     final client = SSHClient(socket, username: username);
     await client.close();
@@ -305,6 +306,7 @@ class _MismatchAbortPool extends SshSessionPool {
     required Future<bool> Function(String type, Uint8List fingerprint)
         onVerifyHostKey,
     FutureOr<String?> Function()? onPasswordRequest,
+    SSHAgentHandler? agentHandler,
   }) async {
     final accepted = await onVerifyHostKey(
       'ssh-ed25519',
@@ -348,6 +350,7 @@ class _GateDrivePool extends SshSessionPool {
     required Future<bool> Function(String type, Uint8List fingerprint)
         onVerifyHostKey,
     FutureOr<String?> Function()? onPasswordRequest,
+    SSHAgentHandler? agentHandler,
   }) async {
     expect(onPasswordRequest, isNotNull);
     final pending = Future.sync(onPasswordRequest!);

@@ -22,6 +22,7 @@ class Hosts extends Table {
   DateTimeColumn get updatedAt => dateTime().nullable()();
   BoolColumn get sudoNeedsPassword =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get agentForward => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

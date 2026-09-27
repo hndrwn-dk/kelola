@@ -6,7 +6,7 @@ import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
-  test('schema 22 creates env_vars', () async {
+  test('schema 22 creates env_vars and reaches current version', () async {
     final raw = sqlite3.openInMemory();
     raw.execute('PRAGMA user_version = 21');
     final db = KelolaDatabase.connect(NativeDatabase.opened(raw));
@@ -14,7 +14,7 @@ void main() {
     await db.customSelect('SELECT 1').get();
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 22);
+    expect(version.data['user_version'], 23);
     final table = await db.customSelect(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='env_vars'",
     ).get();

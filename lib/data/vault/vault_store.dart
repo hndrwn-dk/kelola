@@ -106,6 +106,7 @@ class VaultStore {
             'note': row.note,
             'sortOrder': row.sortOrder,
             'sudoNeedsPassword': row.sudoNeedsPassword,
+            'agentForward': row.agentForward,
           },
         ),
     ];
@@ -329,6 +330,7 @@ class VaultStore {
         sudoNeedsPassword: Value(
           record.payload['sudoNeedsPassword'] as bool? ?? false,
         ),
+        agentForward: Value(record.payload['agentForward'] as bool? ?? false),
         createdAt: now,
         updatedAt: Value(record.updatedAt),
       ),
