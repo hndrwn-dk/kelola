@@ -38,6 +38,7 @@ One hardware key per phone, reused for every host. That is intentional.
 | Command history + local autocomplete | Working; no LLM path |
 | Tunnels (SSH local port forward) | Working; Play builds gate behind a one-time unlock |
 | Snippets, home widget, OS shortcuts | Working |
+| Kubernetes workloads (read) | Working; kubectl/k3s on the host, no kubeconfig on the phone |
 
 
 ## Screenshots

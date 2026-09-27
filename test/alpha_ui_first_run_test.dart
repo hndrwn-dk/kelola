@@ -176,7 +176,7 @@ void main() {
     expect(
       File('lib/presentation/screens/host_dashboard_screen.dart')
           .readAsStringSync(),
-      isNot(contains("label: 'Workloads'")),
+      contains("label: 'Workloads'"),
     );
   });
 
