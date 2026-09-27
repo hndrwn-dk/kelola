@@ -5,6 +5,7 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/deep_link.dart';
 import 'package:kelola/presentation/kelola_link_open.dart';
 import 'package:kelola/presentation/app_lock_gate.dart';
+import 'package:kelola/presentation/fleet/fleet_watch_resume.dart';
 import 'package:kelola/presentation/screens/boot_gate.dart';
 import 'package:kelola/presentation/theme/kelola_theme.dart' as legacy;
 import 'package:kelola/providers.dart';
@@ -101,9 +102,11 @@ class _KelolaAppState extends State<KelolaApp> {
         themeMode: ThemeMode.dark,
         home: widget.home ?? const BootGate(),
         builder: (context, child) {
-          return AppLockGate(
-            onUnlockedLink: _openUnlockedLink,
-            child: child ?? const SizedBox.shrink(),
+          return FleetWatchResume(
+            child: AppLockGate(
+              onUnlockedLink: _openUnlockedLink,
+              child: child ?? const SizedBox.shrink(),
+            ),
           );
         },
       ),

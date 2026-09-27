@@ -133,6 +133,20 @@ class AppSettings extends Table {
   IntColumn get sessionLogRetentionDays =>
       integer().withDefault(const Constant(14))();
 
+  BoolColumn get fleetWatchEnabled =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get fleetWatchDiskPercent =>
+      integer().withDefault(const Constant(90))();
+  IntColumn get fleetWatchMemPercent =>
+      integer().withDefault(const Constant(90))();
+  IntColumn get fleetWatchFailedUnits =>
+      integer().withDefault(const Constant(1))();
+  IntColumn get fleetWatchContainers =>
+      integer().withDefault(const Constant(1))();
+  BoolColumn get fleetWatchReboot =>
+      boolean().withDefault(const Constant(true))();
+  DateTimeColumn get fleetWatchLastTickAt => dateTime().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
@@ -236,6 +250,16 @@ class SessionLogs extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {id};
+}
+
+@DataClassName('FleetWatchStateRow')
+class FleetWatchState extends Table {
+  TextColumn get hostId => text().references(Hosts, #id)();
+  TextColumn get fingerprint => text()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {hostId};
 }
 
 @DataClassName('JournalBookmarkRow')

@@ -3891,6 +3891,91 @@ class $AppSettingsTable extends AppSettings
         requiredDuringInsert: false,
         defaultValue: const Constant(14),
       );
+  static const VerificationMeta _fleetWatchEnabledMeta = const VerificationMeta(
+    'fleetWatchEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> fleetWatchEnabled = GeneratedColumn<bool>(
+    'fleet_watch_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("fleet_watch_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _fleetWatchDiskPercentMeta =
+      const VerificationMeta('fleetWatchDiskPercent');
+  @override
+  late final GeneratedColumn<int> fleetWatchDiskPercent = GeneratedColumn<int>(
+    'fleet_watch_disk_percent',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(90),
+  );
+  static const VerificationMeta _fleetWatchMemPercentMeta =
+      const VerificationMeta('fleetWatchMemPercent');
+  @override
+  late final GeneratedColumn<int> fleetWatchMemPercent = GeneratedColumn<int>(
+    'fleet_watch_mem_percent',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(90),
+  );
+  static const VerificationMeta _fleetWatchFailedUnitsMeta =
+      const VerificationMeta('fleetWatchFailedUnits');
+  @override
+  late final GeneratedColumn<int> fleetWatchFailedUnits = GeneratedColumn<int>(
+    'fleet_watch_failed_units',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _fleetWatchContainersMeta =
+      const VerificationMeta('fleetWatchContainers');
+  @override
+  late final GeneratedColumn<int> fleetWatchContainers = GeneratedColumn<int>(
+    'fleet_watch_containers',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _fleetWatchRebootMeta = const VerificationMeta(
+    'fleetWatchReboot',
+  );
+  @override
+  late final GeneratedColumn<bool> fleetWatchReboot = GeneratedColumn<bool>(
+    'fleet_watch_reboot',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("fleet_watch_reboot" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _fleetWatchLastTickAtMeta =
+      const VerificationMeta('fleetWatchLastTickAt');
+  @override
+  late final GeneratedColumn<DateTime> fleetWatchLastTickAt =
+      GeneratedColumn<DateTime>(
+        'fleet_watch_last_tick_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3911,6 +3996,13 @@ class $AppSettingsTable extends AppSettings
     snippetLibraryReady,
     appLockTimeoutSec,
     sessionLogRetentionDays,
+    fleetWatchEnabled,
+    fleetWatchDiskPercent,
+    fleetWatchMemPercent,
+    fleetWatchFailedUnits,
+    fleetWatchContainers,
+    fleetWatchReboot,
+    fleetWatchLastTickAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4071,6 +4163,69 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('fleet_watch_enabled')) {
+      context.handle(
+        _fleetWatchEnabledMeta,
+        fleetWatchEnabled.isAcceptableOrUnknown(
+          data['fleet_watch_enabled']!,
+          _fleetWatchEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fleet_watch_disk_percent')) {
+      context.handle(
+        _fleetWatchDiskPercentMeta,
+        fleetWatchDiskPercent.isAcceptableOrUnknown(
+          data['fleet_watch_disk_percent']!,
+          _fleetWatchDiskPercentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fleet_watch_mem_percent')) {
+      context.handle(
+        _fleetWatchMemPercentMeta,
+        fleetWatchMemPercent.isAcceptableOrUnknown(
+          data['fleet_watch_mem_percent']!,
+          _fleetWatchMemPercentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fleet_watch_failed_units')) {
+      context.handle(
+        _fleetWatchFailedUnitsMeta,
+        fleetWatchFailedUnits.isAcceptableOrUnknown(
+          data['fleet_watch_failed_units']!,
+          _fleetWatchFailedUnitsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fleet_watch_containers')) {
+      context.handle(
+        _fleetWatchContainersMeta,
+        fleetWatchContainers.isAcceptableOrUnknown(
+          data['fleet_watch_containers']!,
+          _fleetWatchContainersMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fleet_watch_reboot')) {
+      context.handle(
+        _fleetWatchRebootMeta,
+        fleetWatchReboot.isAcceptableOrUnknown(
+          data['fleet_watch_reboot']!,
+          _fleetWatchRebootMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fleet_watch_last_tick_at')) {
+      context.handle(
+        _fleetWatchLastTickAtMeta,
+        fleetWatchLastTickAt.isAcceptableOrUnknown(
+          data['fleet_watch_last_tick_at']!,
+          _fleetWatchLastTickAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4152,6 +4307,34 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.int,
         data['${effectivePrefix}session_log_retention_days'],
       )!,
+      fleetWatchEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}fleet_watch_enabled'],
+      )!,
+      fleetWatchDiskPercent: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fleet_watch_disk_percent'],
+      )!,
+      fleetWatchMemPercent: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fleet_watch_mem_percent'],
+      )!,
+      fleetWatchFailedUnits: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fleet_watch_failed_units'],
+      )!,
+      fleetWatchContainers: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fleet_watch_containers'],
+      )!,
+      fleetWatchReboot: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}fleet_watch_reboot'],
+      )!,
+      fleetWatchLastTickAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}fleet_watch_last_tick_at'],
+      ),
     );
   }
 
@@ -4190,6 +4373,13 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
 
   /// Days to keep non-bookmarked session logs. 7 / 14 / 30 / 90.
   final int sessionLogRetentionDays;
+  final bool fleetWatchEnabled;
+  final int fleetWatchDiskPercent;
+  final int fleetWatchMemPercent;
+  final int fleetWatchFailedUnits;
+  final int fleetWatchContainers;
+  final bool fleetWatchReboot;
+  final DateTime? fleetWatchLastTickAt;
   const AppSettingsRow({
     required this.id,
     this.lastHostId,
@@ -4209,6 +4399,13 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     required this.snippetLibraryReady,
     required this.appLockTimeoutSec,
     required this.sessionLogRetentionDays,
+    required this.fleetWatchEnabled,
+    required this.fleetWatchDiskPercent,
+    required this.fleetWatchMemPercent,
+    required this.fleetWatchFailedUnits,
+    required this.fleetWatchContainers,
+    required this.fleetWatchReboot,
+    this.fleetWatchLastTickAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4253,6 +4450,17 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     map['snippet_library_ready'] = Variable<bool>(snippetLibraryReady);
     map['app_lock_timeout_sec'] = Variable<int>(appLockTimeoutSec);
     map['session_log_retention_days'] = Variable<int>(sessionLogRetentionDays);
+    map['fleet_watch_enabled'] = Variable<bool>(fleetWatchEnabled);
+    map['fleet_watch_disk_percent'] = Variable<int>(fleetWatchDiskPercent);
+    map['fleet_watch_mem_percent'] = Variable<int>(fleetWatchMemPercent);
+    map['fleet_watch_failed_units'] = Variable<int>(fleetWatchFailedUnits);
+    map['fleet_watch_containers'] = Variable<int>(fleetWatchContainers);
+    map['fleet_watch_reboot'] = Variable<bool>(fleetWatchReboot);
+    if (!nullToAbsent || fleetWatchLastTickAt != null) {
+      map['fleet_watch_last_tick_at'] = Variable<DateTime>(
+        fleetWatchLastTickAt,
+      );
+    }
     return map;
   }
 
@@ -4298,6 +4506,15 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       snippetLibraryReady: Value(snippetLibraryReady),
       appLockTimeoutSec: Value(appLockTimeoutSec),
       sessionLogRetentionDays: Value(sessionLogRetentionDays),
+      fleetWatchEnabled: Value(fleetWatchEnabled),
+      fleetWatchDiskPercent: Value(fleetWatchDiskPercent),
+      fleetWatchMemPercent: Value(fleetWatchMemPercent),
+      fleetWatchFailedUnits: Value(fleetWatchFailedUnits),
+      fleetWatchContainers: Value(fleetWatchContainers),
+      fleetWatchReboot: Value(fleetWatchReboot),
+      fleetWatchLastTickAt: fleetWatchLastTickAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fleetWatchLastTickAt),
     );
   }
 
@@ -4329,6 +4546,23 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       sessionLogRetentionDays: serializer.fromJson<int>(
         json['sessionLogRetentionDays'],
       ),
+      fleetWatchEnabled: serializer.fromJson<bool>(json['fleetWatchEnabled']),
+      fleetWatchDiskPercent: serializer.fromJson<int>(
+        json['fleetWatchDiskPercent'],
+      ),
+      fleetWatchMemPercent: serializer.fromJson<int>(
+        json['fleetWatchMemPercent'],
+      ),
+      fleetWatchFailedUnits: serializer.fromJson<int>(
+        json['fleetWatchFailedUnits'],
+      ),
+      fleetWatchContainers: serializer.fromJson<int>(
+        json['fleetWatchContainers'],
+      ),
+      fleetWatchReboot: serializer.fromJson<bool>(json['fleetWatchReboot']),
+      fleetWatchLastTickAt: serializer.fromJson<DateTime?>(
+        json['fleetWatchLastTickAt'],
+      ),
     );
   }
   @override
@@ -4355,6 +4589,15 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       'sessionLogRetentionDays': serializer.toJson<int>(
         sessionLogRetentionDays,
       ),
+      'fleetWatchEnabled': serializer.toJson<bool>(fleetWatchEnabled),
+      'fleetWatchDiskPercent': serializer.toJson<int>(fleetWatchDiskPercent),
+      'fleetWatchMemPercent': serializer.toJson<int>(fleetWatchMemPercent),
+      'fleetWatchFailedUnits': serializer.toJson<int>(fleetWatchFailedUnits),
+      'fleetWatchContainers': serializer.toJson<int>(fleetWatchContainers),
+      'fleetWatchReboot': serializer.toJson<bool>(fleetWatchReboot),
+      'fleetWatchLastTickAt': serializer.toJson<DateTime?>(
+        fleetWatchLastTickAt,
+      ),
     };
   }
 
@@ -4377,6 +4620,13 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     bool? snippetLibraryReady,
     int? appLockTimeoutSec,
     int? sessionLogRetentionDays,
+    bool? fleetWatchEnabled,
+    int? fleetWatchDiskPercent,
+    int? fleetWatchMemPercent,
+    int? fleetWatchFailedUnits,
+    int? fleetWatchContainers,
+    bool? fleetWatchReboot,
+    Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
   }) => AppSettingsRow(
     id: id ?? this.id,
     lastHostId: lastHostId.present ? lastHostId.value : this.lastHostId,
@@ -4409,6 +4659,15 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     appLockTimeoutSec: appLockTimeoutSec ?? this.appLockTimeoutSec,
     sessionLogRetentionDays:
         sessionLogRetentionDays ?? this.sessionLogRetentionDays,
+    fleetWatchEnabled: fleetWatchEnabled ?? this.fleetWatchEnabled,
+    fleetWatchDiskPercent: fleetWatchDiskPercent ?? this.fleetWatchDiskPercent,
+    fleetWatchMemPercent: fleetWatchMemPercent ?? this.fleetWatchMemPercent,
+    fleetWatchFailedUnits: fleetWatchFailedUnits ?? this.fleetWatchFailedUnits,
+    fleetWatchContainers: fleetWatchContainers ?? this.fleetWatchContainers,
+    fleetWatchReboot: fleetWatchReboot ?? this.fleetWatchReboot,
+    fleetWatchLastTickAt: fleetWatchLastTickAt.present
+        ? fleetWatchLastTickAt.value
+        : this.fleetWatchLastTickAt,
   );
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
@@ -4460,6 +4719,27 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       sessionLogRetentionDays: data.sessionLogRetentionDays.present
           ? data.sessionLogRetentionDays.value
           : this.sessionLogRetentionDays,
+      fleetWatchEnabled: data.fleetWatchEnabled.present
+          ? data.fleetWatchEnabled.value
+          : this.fleetWatchEnabled,
+      fleetWatchDiskPercent: data.fleetWatchDiskPercent.present
+          ? data.fleetWatchDiskPercent.value
+          : this.fleetWatchDiskPercent,
+      fleetWatchMemPercent: data.fleetWatchMemPercent.present
+          ? data.fleetWatchMemPercent.value
+          : this.fleetWatchMemPercent,
+      fleetWatchFailedUnits: data.fleetWatchFailedUnits.present
+          ? data.fleetWatchFailedUnits.value
+          : this.fleetWatchFailedUnits,
+      fleetWatchContainers: data.fleetWatchContainers.present
+          ? data.fleetWatchContainers.value
+          : this.fleetWatchContainers,
+      fleetWatchReboot: data.fleetWatchReboot.present
+          ? data.fleetWatchReboot.value
+          : this.fleetWatchReboot,
+      fleetWatchLastTickAt: data.fleetWatchLastTickAt.present
+          ? data.fleetWatchLastTickAt.value
+          : this.fleetWatchLastTickAt,
     );
   }
 
@@ -4483,13 +4763,20 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('tunnelIdleMinutes: $tunnelIdleMinutes, ')
           ..write('snippetLibraryReady: $snippetLibraryReady, ')
           ..write('appLockTimeoutSec: $appLockTimeoutSec, ')
-          ..write('sessionLogRetentionDays: $sessionLogRetentionDays')
+          ..write('sessionLogRetentionDays: $sessionLogRetentionDays, ')
+          ..write('fleetWatchEnabled: $fleetWatchEnabled, ')
+          ..write('fleetWatchDiskPercent: $fleetWatchDiskPercent, ')
+          ..write('fleetWatchMemPercent: $fleetWatchMemPercent, ')
+          ..write('fleetWatchFailedUnits: $fleetWatchFailedUnits, ')
+          ..write('fleetWatchContainers: $fleetWatchContainers, ')
+          ..write('fleetWatchReboot: $fleetWatchReboot, ')
+          ..write('fleetWatchLastTickAt: $fleetWatchLastTickAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     lastHostId,
     publicKeySpkiB64,
@@ -4508,7 +4795,14 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     snippetLibraryReady,
     appLockTimeoutSec,
     sessionLogRetentionDays,
-  );
+    fleetWatchEnabled,
+    fleetWatchDiskPercent,
+    fleetWatchMemPercent,
+    fleetWatchFailedUnits,
+    fleetWatchContainers,
+    fleetWatchReboot,
+    fleetWatchLastTickAt,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4530,7 +4824,14 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.tunnelIdleMinutes == this.tunnelIdleMinutes &&
           other.snippetLibraryReady == this.snippetLibraryReady &&
           other.appLockTimeoutSec == this.appLockTimeoutSec &&
-          other.sessionLogRetentionDays == this.sessionLogRetentionDays);
+          other.sessionLogRetentionDays == this.sessionLogRetentionDays &&
+          other.fleetWatchEnabled == this.fleetWatchEnabled &&
+          other.fleetWatchDiskPercent == this.fleetWatchDiskPercent &&
+          other.fleetWatchMemPercent == this.fleetWatchMemPercent &&
+          other.fleetWatchFailedUnits == this.fleetWatchFailedUnits &&
+          other.fleetWatchContainers == this.fleetWatchContainers &&
+          other.fleetWatchReboot == this.fleetWatchReboot &&
+          other.fleetWatchLastTickAt == this.fleetWatchLastTickAt);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
@@ -4552,6 +4853,13 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<bool> snippetLibraryReady;
   final Value<int> appLockTimeoutSec;
   final Value<int> sessionLogRetentionDays;
+  final Value<bool> fleetWatchEnabled;
+  final Value<int> fleetWatchDiskPercent;
+  final Value<int> fleetWatchMemPercent;
+  final Value<int> fleetWatchFailedUnits;
+  final Value<int> fleetWatchContainers;
+  final Value<bool> fleetWatchReboot;
+  final Value<DateTime?> fleetWatchLastTickAt;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.lastHostId = const Value.absent(),
@@ -4571,6 +4879,13 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.snippetLibraryReady = const Value.absent(),
     this.appLockTimeoutSec = const Value.absent(),
     this.sessionLogRetentionDays = const Value.absent(),
+    this.fleetWatchEnabled = const Value.absent(),
+    this.fleetWatchDiskPercent = const Value.absent(),
+    this.fleetWatchMemPercent = const Value.absent(),
+    this.fleetWatchFailedUnits = const Value.absent(),
+    this.fleetWatchContainers = const Value.absent(),
+    this.fleetWatchReboot = const Value.absent(),
+    this.fleetWatchLastTickAt = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -4591,6 +4906,13 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.snippetLibraryReady = const Value.absent(),
     this.appLockTimeoutSec = const Value.absent(),
     this.sessionLogRetentionDays = const Value.absent(),
+    this.fleetWatchEnabled = const Value.absent(),
+    this.fleetWatchDiskPercent = const Value.absent(),
+    this.fleetWatchMemPercent = const Value.absent(),
+    this.fleetWatchFailedUnits = const Value.absent(),
+    this.fleetWatchContainers = const Value.absent(),
+    this.fleetWatchReboot = const Value.absent(),
+    this.fleetWatchLastTickAt = const Value.absent(),
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
@@ -4611,6 +4933,13 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Expression<bool>? snippetLibraryReady,
     Expression<int>? appLockTimeoutSec,
     Expression<int>? sessionLogRetentionDays,
+    Expression<bool>? fleetWatchEnabled,
+    Expression<int>? fleetWatchDiskPercent,
+    Expression<int>? fleetWatchMemPercent,
+    Expression<int>? fleetWatchFailedUnits,
+    Expression<int>? fleetWatchContainers,
+    Expression<bool>? fleetWatchReboot,
+    Expression<DateTime>? fleetWatchLastTickAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4633,6 +4962,18 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (appLockTimeoutSec != null) 'app_lock_timeout_sec': appLockTimeoutSec,
       if (sessionLogRetentionDays != null)
         'session_log_retention_days': sessionLogRetentionDays,
+      if (fleetWatchEnabled != null) 'fleet_watch_enabled': fleetWatchEnabled,
+      if (fleetWatchDiskPercent != null)
+        'fleet_watch_disk_percent': fleetWatchDiskPercent,
+      if (fleetWatchMemPercent != null)
+        'fleet_watch_mem_percent': fleetWatchMemPercent,
+      if (fleetWatchFailedUnits != null)
+        'fleet_watch_failed_units': fleetWatchFailedUnits,
+      if (fleetWatchContainers != null)
+        'fleet_watch_containers': fleetWatchContainers,
+      if (fleetWatchReboot != null) 'fleet_watch_reboot': fleetWatchReboot,
+      if (fleetWatchLastTickAt != null)
+        'fleet_watch_last_tick_at': fleetWatchLastTickAt,
     });
   }
 
@@ -4655,6 +4996,13 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<bool>? snippetLibraryReady,
     Value<int>? appLockTimeoutSec,
     Value<int>? sessionLogRetentionDays,
+    Value<bool>? fleetWatchEnabled,
+    Value<int>? fleetWatchDiskPercent,
+    Value<int>? fleetWatchMemPercent,
+    Value<int>? fleetWatchFailedUnits,
+    Value<int>? fleetWatchContainers,
+    Value<bool>? fleetWatchReboot,
+    Value<DateTime?>? fleetWatchLastTickAt,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -4676,6 +5024,15 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       appLockTimeoutSec: appLockTimeoutSec ?? this.appLockTimeoutSec,
       sessionLogRetentionDays:
           sessionLogRetentionDays ?? this.sessionLogRetentionDays,
+      fleetWatchEnabled: fleetWatchEnabled ?? this.fleetWatchEnabled,
+      fleetWatchDiskPercent:
+          fleetWatchDiskPercent ?? this.fleetWatchDiskPercent,
+      fleetWatchMemPercent: fleetWatchMemPercent ?? this.fleetWatchMemPercent,
+      fleetWatchFailedUnits:
+          fleetWatchFailedUnits ?? this.fleetWatchFailedUnits,
+      fleetWatchContainers: fleetWatchContainers ?? this.fleetWatchContainers,
+      fleetWatchReboot: fleetWatchReboot ?? this.fleetWatchReboot,
+      fleetWatchLastTickAt: fleetWatchLastTickAt ?? this.fleetWatchLastTickAt,
     );
   }
 
@@ -4738,6 +5095,35 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
         sessionLogRetentionDays.value,
       );
     }
+    if (fleetWatchEnabled.present) {
+      map['fleet_watch_enabled'] = Variable<bool>(fleetWatchEnabled.value);
+    }
+    if (fleetWatchDiskPercent.present) {
+      map['fleet_watch_disk_percent'] = Variable<int>(
+        fleetWatchDiskPercent.value,
+      );
+    }
+    if (fleetWatchMemPercent.present) {
+      map['fleet_watch_mem_percent'] = Variable<int>(
+        fleetWatchMemPercent.value,
+      );
+    }
+    if (fleetWatchFailedUnits.present) {
+      map['fleet_watch_failed_units'] = Variable<int>(
+        fleetWatchFailedUnits.value,
+      );
+    }
+    if (fleetWatchContainers.present) {
+      map['fleet_watch_containers'] = Variable<int>(fleetWatchContainers.value);
+    }
+    if (fleetWatchReboot.present) {
+      map['fleet_watch_reboot'] = Variable<bool>(fleetWatchReboot.value);
+    }
+    if (fleetWatchLastTickAt.present) {
+      map['fleet_watch_last_tick_at'] = Variable<DateTime>(
+        fleetWatchLastTickAt.value,
+      );
+    }
     return map;
   }
 
@@ -4761,7 +5147,14 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('tunnelIdleMinutes: $tunnelIdleMinutes, ')
           ..write('snippetLibraryReady: $snippetLibraryReady, ')
           ..write('appLockTimeoutSec: $appLockTimeoutSec, ')
-          ..write('sessionLogRetentionDays: $sessionLogRetentionDays')
+          ..write('sessionLogRetentionDays: $sessionLogRetentionDays, ')
+          ..write('fleetWatchEnabled: $fleetWatchEnabled, ')
+          ..write('fleetWatchDiskPercent: $fleetWatchDiskPercent, ')
+          ..write('fleetWatchMemPercent: $fleetWatchMemPercent, ')
+          ..write('fleetWatchFailedUnits: $fleetWatchFailedUnits, ')
+          ..write('fleetWatchContainers: $fleetWatchContainers, ')
+          ..write('fleetWatchReboot: $fleetWatchReboot, ')
+          ..write('fleetWatchLastTickAt: $fleetWatchLastTickAt')
           ..write(')'))
         .toString();
   }
@@ -8443,6 +8836,279 @@ class JournalBookmarksCompanion extends UpdateCompanion<JournalBookmarkRow> {
   }
 }
 
+class $FleetWatchStateTable extends FleetWatchState
+    with TableInfo<$FleetWatchStateTable, FleetWatchStateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FleetWatchStateTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fingerprintMeta = const VerificationMeta(
+    'fingerprint',
+  );
+  @override
+  late final GeneratedColumn<String> fingerprint = GeneratedColumn<String>(
+    'fingerprint',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [hostId, fingerprint, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'fleet_watch_state';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FleetWatchStateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('fingerprint')) {
+      context.handle(
+        _fingerprintMeta,
+        fingerprint.isAcceptableOrUnknown(
+          data['fingerprint']!,
+          _fingerprintMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_fingerprintMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {hostId};
+  @override
+  FleetWatchStateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FleetWatchStateRow(
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      fingerprint: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}fingerprint'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FleetWatchStateTable createAlias(String alias) {
+    return $FleetWatchStateTable(attachedDatabase, alias);
+  }
+}
+
+class FleetWatchStateRow extends DataClass
+    implements Insertable<FleetWatchStateRow> {
+  final String hostId;
+  final String fingerprint;
+  final DateTime updatedAt;
+  const FleetWatchStateRow({
+    required this.hostId,
+    required this.fingerprint,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['host_id'] = Variable<String>(hostId);
+    map['fingerprint'] = Variable<String>(fingerprint);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  FleetWatchStateCompanion toCompanion(bool nullToAbsent) {
+    return FleetWatchStateCompanion(
+      hostId: Value(hostId),
+      fingerprint: Value(fingerprint),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory FleetWatchStateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FleetWatchStateRow(
+      hostId: serializer.fromJson<String>(json['hostId']),
+      fingerprint: serializer.fromJson<String>(json['fingerprint']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'hostId': serializer.toJson<String>(hostId),
+      'fingerprint': serializer.toJson<String>(fingerprint),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  FleetWatchStateRow copyWith({
+    String? hostId,
+    String? fingerprint,
+    DateTime? updatedAt,
+  }) => FleetWatchStateRow(
+    hostId: hostId ?? this.hostId,
+    fingerprint: fingerprint ?? this.fingerprint,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  FleetWatchStateRow copyWithCompanion(FleetWatchStateCompanion data) {
+    return FleetWatchStateRow(
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      fingerprint: data.fingerprint.present
+          ? data.fingerprint.value
+          : this.fingerprint,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FleetWatchStateRow(')
+          ..write('hostId: $hostId, ')
+          ..write('fingerprint: $fingerprint, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(hostId, fingerprint, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FleetWatchStateRow &&
+          other.hostId == this.hostId &&
+          other.fingerprint == this.fingerprint &&
+          other.updatedAt == this.updatedAt);
+}
+
+class FleetWatchStateCompanion extends UpdateCompanion<FleetWatchStateRow> {
+  final Value<String> hostId;
+  final Value<String> fingerprint;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const FleetWatchStateCompanion({
+    this.hostId = const Value.absent(),
+    this.fingerprint = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FleetWatchStateCompanion.insert({
+    required String hostId,
+    required String fingerprint,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : hostId = Value(hostId),
+       fingerprint = Value(fingerprint),
+       updatedAt = Value(updatedAt);
+  static Insertable<FleetWatchStateRow> custom({
+    Expression<String>? hostId,
+    Expression<String>? fingerprint,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (hostId != null) 'host_id': hostId,
+      if (fingerprint != null) 'fingerprint': fingerprint,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FleetWatchStateCompanion copyWith({
+    Value<String>? hostId,
+    Value<String>? fingerprint,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return FleetWatchStateCompanion(
+      hostId: hostId ?? this.hostId,
+      fingerprint: fingerprint ?? this.fingerprint,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (fingerprint.present) {
+      map['fingerprint'] = Variable<String>(fingerprint.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FleetWatchStateCompanion(')
+          ..write('hostId: $hostId, ')
+          ..write('fingerprint: $fingerprint, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$KelolaDatabase extends GeneratedDatabase {
   _$KelolaDatabase(QueryExecutor e) : super(e);
   $KelolaDatabaseManager get managers => $KelolaDatabaseManager(this);
@@ -8465,6 +9131,9 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
   late final $JournalBookmarksTable journalBookmarks = $JournalBookmarksTable(
     this,
   );
+  late final $FleetWatchStateTable fleetWatchState = $FleetWatchStateTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8485,6 +9154,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     commandHistory,
     sessionLogs,
     journalBookmarks,
+    fleetWatchState,
   ];
 }
 
@@ -10292,6 +10962,13 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<bool> snippetLibraryReady,
       Value<int> appLockTimeoutSec,
       Value<int> sessionLogRetentionDays,
+      Value<bool> fleetWatchEnabled,
+      Value<int> fleetWatchDiskPercent,
+      Value<int> fleetWatchMemPercent,
+      Value<int> fleetWatchFailedUnits,
+      Value<int> fleetWatchContainers,
+      Value<bool> fleetWatchReboot,
+      Value<DateTime?> fleetWatchLastTickAt,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -10313,6 +10990,13 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<bool> snippetLibraryReady,
       Value<int> appLockTimeoutSec,
       Value<int> sessionLogRetentionDays,
+      Value<bool> fleetWatchEnabled,
+      Value<int> fleetWatchDiskPercent,
+      Value<int> fleetWatchMemPercent,
+      Value<int> fleetWatchFailedUnits,
+      Value<int> fleetWatchContainers,
+      Value<bool> fleetWatchReboot,
+      Value<DateTime?> fleetWatchLastTickAt,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -10411,6 +11095,41 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<int> get sessionLogRetentionDays => $composableBuilder(
     column: $table.sessionLogRetentionDays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get fleetWatchEnabled => $composableBuilder(
+    column: $table.fleetWatchEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fleetWatchDiskPercent => $composableBuilder(
+    column: $table.fleetWatchDiskPercent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fleetWatchMemPercent => $composableBuilder(
+    column: $table.fleetWatchMemPercent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fleetWatchFailedUnits => $composableBuilder(
+    column: $table.fleetWatchFailedUnits,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fleetWatchContainers => $composableBuilder(
+    column: $table.fleetWatchContainers,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get fleetWatchReboot => $composableBuilder(
+    column: $table.fleetWatchReboot,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get fleetWatchLastTickAt => $composableBuilder(
+    column: $table.fleetWatchLastTickAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -10513,6 +11232,41 @@ class $$AppSettingsTableOrderingComposer
     column: $table.sessionLogRetentionDays,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get fleetWatchEnabled => $composableBuilder(
+    column: $table.fleetWatchEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fleetWatchDiskPercent => $composableBuilder(
+    column: $table.fleetWatchDiskPercent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fleetWatchMemPercent => $composableBuilder(
+    column: $table.fleetWatchMemPercent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fleetWatchFailedUnits => $composableBuilder(
+    column: $table.fleetWatchFailedUnits,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fleetWatchContainers => $composableBuilder(
+    column: $table.fleetWatchContainers,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get fleetWatchReboot => $composableBuilder(
+    column: $table.fleetWatchReboot,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get fleetWatchLastTickAt => $composableBuilder(
+    column: $table.fleetWatchLastTickAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -10607,6 +11361,41 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.sessionLogRetentionDays,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get fleetWatchEnabled => $composableBuilder(
+    column: $table.fleetWatchEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get fleetWatchDiskPercent => $composableBuilder(
+    column: $table.fleetWatchDiskPercent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get fleetWatchMemPercent => $composableBuilder(
+    column: $table.fleetWatchMemPercent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get fleetWatchFailedUnits => $composableBuilder(
+    column: $table.fleetWatchFailedUnits,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get fleetWatchContainers => $composableBuilder(
+    column: $table.fleetWatchContainers,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get fleetWatchReboot => $composableBuilder(
+    column: $table.fleetWatchReboot,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get fleetWatchLastTickAt => $composableBuilder(
+    column: $table.fleetWatchLastTickAt,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -10658,6 +11447,13 @@ class $$AppSettingsTableTableManager
                 Value<bool> snippetLibraryReady = const Value.absent(),
                 Value<int> appLockTimeoutSec = const Value.absent(),
                 Value<int> sessionLogRetentionDays = const Value.absent(),
+                Value<bool> fleetWatchEnabled = const Value.absent(),
+                Value<int> fleetWatchDiskPercent = const Value.absent(),
+                Value<int> fleetWatchMemPercent = const Value.absent(),
+                Value<int> fleetWatchFailedUnits = const Value.absent(),
+                Value<int> fleetWatchContainers = const Value.absent(),
+                Value<bool> fleetWatchReboot = const Value.absent(),
+                Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 lastHostId: lastHostId,
@@ -10677,6 +11473,13 @@ class $$AppSettingsTableTableManager
                 snippetLibraryReady: snippetLibraryReady,
                 appLockTimeoutSec: appLockTimeoutSec,
                 sessionLogRetentionDays: sessionLogRetentionDays,
+                fleetWatchEnabled: fleetWatchEnabled,
+                fleetWatchDiskPercent: fleetWatchDiskPercent,
+                fleetWatchMemPercent: fleetWatchMemPercent,
+                fleetWatchFailedUnits: fleetWatchFailedUnits,
+                fleetWatchContainers: fleetWatchContainers,
+                fleetWatchReboot: fleetWatchReboot,
+                fleetWatchLastTickAt: fleetWatchLastTickAt,
               ),
           createCompanionCallback:
               ({
@@ -10698,6 +11501,13 @@ class $$AppSettingsTableTableManager
                 Value<bool> snippetLibraryReady = const Value.absent(),
                 Value<int> appLockTimeoutSec = const Value.absent(),
                 Value<int> sessionLogRetentionDays = const Value.absent(),
+                Value<bool> fleetWatchEnabled = const Value.absent(),
+                Value<int> fleetWatchDiskPercent = const Value.absent(),
+                Value<int> fleetWatchMemPercent = const Value.absent(),
+                Value<int> fleetWatchFailedUnits = const Value.absent(),
+                Value<int> fleetWatchContainers = const Value.absent(),
+                Value<bool> fleetWatchReboot = const Value.absent(),
+                Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 lastHostId: lastHostId,
@@ -10717,6 +11527,13 @@ class $$AppSettingsTableTableManager
                 snippetLibraryReady: snippetLibraryReady,
                 appLockTimeoutSec: appLockTimeoutSec,
                 sessionLogRetentionDays: sessionLogRetentionDays,
+                fleetWatchEnabled: fleetWatchEnabled,
+                fleetWatchDiskPercent: fleetWatchDiskPercent,
+                fleetWatchMemPercent: fleetWatchMemPercent,
+                fleetWatchFailedUnits: fleetWatchFailedUnits,
+                fleetWatchContainers: fleetWatchContainers,
+                fleetWatchReboot: fleetWatchReboot,
+                fleetWatchLastTickAt: fleetWatchLastTickAt,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -12707,6 +13524,180 @@ typedef $$JournalBookmarksTableProcessedTableManager =
       JournalBookmarkRow,
       PrefetchHooks Function()
     >;
+typedef $$FleetWatchStateTableCreateCompanionBuilder =
+    FleetWatchStateCompanion Function({
+      required String hostId,
+      required String fingerprint,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$FleetWatchStateTableUpdateCompanionBuilder =
+    FleetWatchStateCompanion Function({
+      Value<String> hostId,
+      Value<String> fingerprint,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$FleetWatchStateTableFilterComposer
+    extends Composer<_$KelolaDatabase, $FleetWatchStateTable> {
+  $$FleetWatchStateTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fingerprint => $composableBuilder(
+    column: $table.fingerprint,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FleetWatchStateTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $FleetWatchStateTable> {
+  $$FleetWatchStateTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fingerprint => $composableBuilder(
+    column: $table.fingerprint,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FleetWatchStateTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $FleetWatchStateTable> {
+  $$FleetWatchStateTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get fingerprint => $composableBuilder(
+    column: $table.fingerprint,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$FleetWatchStateTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $FleetWatchStateTable,
+          FleetWatchStateRow,
+          $$FleetWatchStateTableFilterComposer,
+          $$FleetWatchStateTableOrderingComposer,
+          $$FleetWatchStateTableAnnotationComposer,
+          $$FleetWatchStateTableCreateCompanionBuilder,
+          $$FleetWatchStateTableUpdateCompanionBuilder,
+          (
+            FleetWatchStateRow,
+            BaseReferences<
+              _$KelolaDatabase,
+              $FleetWatchStateTable,
+              FleetWatchStateRow
+            >,
+          ),
+          FleetWatchStateRow,
+          PrefetchHooks Function()
+        > {
+  $$FleetWatchStateTableTableManager(
+    _$KelolaDatabase db,
+    $FleetWatchStateTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FleetWatchStateTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FleetWatchStateTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FleetWatchStateTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> hostId = const Value.absent(),
+                Value<String> fingerprint = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FleetWatchStateCompanion(
+                hostId: hostId,
+                fingerprint: fingerprint,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String hostId,
+                required String fingerprint,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => FleetWatchStateCompanion.insert(
+                hostId: hostId,
+                fingerprint: fingerprint,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FleetWatchStateTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $FleetWatchStateTable,
+      FleetWatchStateRow,
+      $$FleetWatchStateTableFilterComposer,
+      $$FleetWatchStateTableOrderingComposer,
+      $$FleetWatchStateTableAnnotationComposer,
+      $$FleetWatchStateTableCreateCompanionBuilder,
+      $$FleetWatchStateTableUpdateCompanionBuilder,
+      (
+        FleetWatchStateRow,
+        BaseReferences<
+          _$KelolaDatabase,
+          $FleetWatchStateTable,
+          FleetWatchStateRow
+        >,
+      ),
+      FleetWatchStateRow,
+      PrefetchHooks Function()
+    >;
 
 class $KelolaDatabaseManager {
   final _$KelolaDatabase _db;
@@ -12740,4 +13731,6 @@ class $KelolaDatabaseManager {
       $$SessionLogsTableTableManager(_db, _db.sessionLogs);
   $$JournalBookmarksTableTableManager get journalBookmarks =>
       $$JournalBookmarksTableTableManager(_db, _db.journalBookmarks);
+  $$FleetWatchStateTableTableManager get fleetWatchState =>
+      $$FleetWatchStateTableTableManager(_db, _db.fleetWatchState);
 }

@@ -268,6 +268,24 @@ class FleetHostHealth {
   }
 }
 
+class FleetWatchThresholds {
+  const FleetWatchThresholds({
+    this.diskPercent = FleetHostHealth.diskHighThreshold,
+    this.memPercent = FleetHostHealth.memHighThreshold,
+    this.failedUnits = 1,
+    this.containers = 1,
+    this.reboot = true,
+  });
+
+  static const defaults = FleetWatchThresholds();
+
+  final int diskPercent;
+  final int memPercent;
+  final int failedUnits;
+  final int containers;
+  final bool reboot;
+}
+
 /// Load as core-normalized percent when [nprocCores] is known; else raw loadavg.
 String formatFleetLoad(double load1, int? nprocCores) {
   if (nprocCores == null || nprocCores <= 0) {
@@ -329,7 +347,10 @@ HostAttention attentionFromFleetHealth(FleetHostHealth health) {
 }
 
 /// One verdict for tile + sheet. Issues cover every non-healthy severity.
-FleetAssessment assessFleetHost(FleetHostHealth health) {
+FleetAssessment assessFleetHost(
+  FleetHostHealth health, {
+  FleetWatchThresholds thresholds = const FleetWatchThresholds(),
+}) {
   final issues = <FleetIssue>[];
 
   if (!health.reachable) {
@@ -341,7 +362,7 @@ FleetAssessment assessFleetHost(FleetHostHealth health) {
       ),
     );
   }
-  if (health.reachable && health.failedUnitCount > 0) {
+  if (health.reachable && health.failedUnitCount >= thresholds.failedUnits) {
     issues.add(
       FleetIssue(
         kind: FleetIssueKind.failedUnit,
@@ -350,7 +371,8 @@ FleetAssessment assessFleetHost(FleetHostHealth health) {
       ),
     );
   }
-  if (health.reachable && health.containerTroubleCount > 0) {
+  if (health.reachable &&
+      health.containerTroubleCount >= thresholds.containers) {
     issues.add(
       FleetIssue(
         kind: FleetIssueKind.badContainer,
@@ -360,10 +382,10 @@ FleetAssessment assessFleetHost(FleetHostHealth health) {
     );
   }
   if (health.reachable &&
-      ((health.diskRootPercent ?? 0) >= FleetHostHealth.diskHighThreshold ||
+      ((health.diskRootPercent ?? 0) >= thresholds.diskPercent ||
           health.highDiskMounts.isNotEmpty)) {
     final mounts = [
-      if ((health.diskRootPercent ?? 0) >= FleetHostHealth.diskHighThreshold)
+      if ((health.diskRootPercent ?? 0) >= thresholds.diskPercent)
         '/:${health.diskRootPercent}%',
       ...health.highDiskMounts,
     ].join(' · ');
@@ -385,8 +407,7 @@ FleetAssessment assessFleetHost(FleetHostHealth health) {
       ),
     );
   }
-  if (health.reachable &&
-      health.memPercent >= FleetHostHealth.memHighThreshold) {
+  if (health.reachable && health.memPercent >= thresholds.memPercent) {
     issues.add(
       FleetIssue(
         kind: FleetIssueKind.memHigh,
@@ -413,7 +434,7 @@ FleetAssessment assessFleetHost(FleetHostHealth health) {
       ),
     );
   }
-  if (health.reachable && health.rebootRequired) {
+  if (health.reachable && thresholds.reboot && health.rebootRequired) {
     issues.add(
       const FleetIssue(
         kind: FleetIssueKind.rebootRequired,
