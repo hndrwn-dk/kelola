@@ -9,6 +9,7 @@ void main() {
     expect(entitlement.isUnlocked(ProFeature.fleetUnlimited), isTrue);
     expect(entitlement.isUnlocked(ProFeature.fleetWatch), isTrue);
     expect(entitlement.isUnlocked(ProFeature.snippetMulti), isTrue);
+    expect(entitlement.isUnlocked(ProFeature.vaultSync), isTrue);
     expect(entitlement.sourceLabel, 'std');
     expect(await entitlement.purchase(), ProPurchaseResult.unavailable);
     expect(await entitlement.restore(), ProPurchaseResult.unavailable);

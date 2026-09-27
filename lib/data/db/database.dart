@@ -23,6 +23,7 @@ part 'database.g.dart';
     SessionLogs,
     JournalBookmarks,
     FleetWatchState,
+    VaultTombstones,
   ],
 )
 class KelolaDatabase extends _$KelolaDatabase {
@@ -33,7 +34,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -193,6 +194,35 @@ WHERE id = 1
             await m.addColumn(appSettings, appSettings.fleetWatchContainers);
             await m.addColumn(appSettings, appSettings.fleetWatchReboot);
             await m.addColumn(appSettings, appSettings.fleetWatchLastTickAt);
+          }
+        }
+      }
+      if (from < 21) {
+        await m.createTable(vaultTombstones);
+        final hasHosts = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' AND name='hosts'",
+        ).get();
+        if (hasHosts.isNotEmpty) {
+          final hostCols = await customSelect('PRAGMA table_info(hosts)').get();
+          final hostNames = hostCols.map((r) => r.read<String>('name')).toSet();
+          if (!hostNames.contains('updated_at')) {
+            await m.addColumn(hosts, hosts.updatedAt);
+            await customStatement(
+              'UPDATE hosts SET updated_at = created_at WHERE updated_at IS NULL',
+            );
+          }
+        }
+        final hasSettings = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' AND name='app_settings'",
+        ).get();
+        if (hasSettings.isNotEmpty) {
+          final cols = await customSelect(
+            'PRAGMA table_info(app_settings)',
+          ).get();
+          final names = cols.map((r) => r.read<String>('name')).toSet();
+          if (!names.contains('device_id')) {
+            await m.addColumn(appSettings, appSettings.deviceId);
+            await m.addColumn(appSettings, appSettings.vaultIncludeSecrets);
           }
         }
       }

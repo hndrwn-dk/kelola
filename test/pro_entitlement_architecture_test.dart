@@ -89,6 +89,20 @@ void main() {
     );
   });
 
+  test('isUnlocked(ProFeature.vaultSync) stays out of vault domain', () {
+    expect(
+      _occurrenceFiles(
+        p.join(root, 'lib', 'domain', 'vault'),
+        'isUnlocked(ProFeature.vaultSync)',
+      ),
+      isEmpty,
+    );
+    expect(
+      _occurrenceFiles(p.join(root, 'lib'), 'isUnlocked(ProFeature.vaultSync)'),
+      ['lib/presentation/vault/vault_controller.dart x5'],
+    );
+  });
+
   test('isUnlocked(ProFeature.snippetMulti) stays out of snippet domain', () {
     expect(
       _occurrenceFiles(

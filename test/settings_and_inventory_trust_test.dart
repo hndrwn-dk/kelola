@@ -130,6 +130,7 @@ void main() {
     expect(find.text('Keys stay on this device'), findsOneWidget);
     expect(find.text('Session logs'), findsOneWidget);
     expect(find.text('Fleet watch'), findsOneWidget);
+    expect(find.text('Vault'), findsOneWidget);
   });
 
   testWidgets('Hosts opens Settings; build token lives on Version row', (
