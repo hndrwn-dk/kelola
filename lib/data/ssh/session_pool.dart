@@ -15,6 +15,7 @@ import 'package:kelola/domain/audit/probe_audit_policy.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/domain/ssh/openssh_user_cert.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
 import 'package:kelola/domain/journal/journal_follow.dart';
@@ -492,6 +493,11 @@ class SshSessionPool {
     UnknownHostKeyHandler? onUnknownHostKey,
   }) async {
     if (host.jumpHostId != null) {
+      if (visiting.length > kMaxJumpHops) {
+        throw SshUnavailableException(
+          'Jump host chain longer than $kMaxJumpHops hops',
+        );
+      }
       final jump = await _repository.get(host.jumpHostId!);
       if (jump == null) {
         throw SshUnavailableException('Jump host missing for ${host.alias}');

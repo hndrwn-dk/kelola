@@ -11,6 +11,7 @@ import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_edit.dart';
+import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/domain/hosts/ssh_config_import.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
 import 'package:kelola/domain/journal/journal_bookmark.dart';
@@ -229,24 +230,60 @@ class HostRepository {
     final existing = await list();
     var created = 0;
     final byAlias = {for (final h in existing) h.alias: h};
+    final createdIds = <String>{};
 
     for (final item in imported) {
       if (byAlias.containsKey(item.alias)) {
         continue;
-      }
-      String? jumpId;
-      if (item.proxyJump != null) {
-        jumpId = byAlias[item.proxyJump!]?.id;
       }
       final host = await insert(
         alias: item.alias,
         address: item.address,
         port: item.port,
         username: item.username,
-        jumpHostId: jumpId,
       );
       byAlias[host.alias] = host;
+      createdIds.add(host.id);
       created++;
+    }
+
+    Map<String, Host> byId() => {for (final h in byAlias.values) h.id: h};
+
+    Future<void> setJump(Host host, String jumpAlias) async {
+      final jump = byAlias[jumpAlias];
+      if (jump == null) {
+        return;
+      }
+      if (wouldCycle(host.id, jump.id, byId())) {
+        return;
+      }
+      await updateHost(host.id, jumpHostId: jump.id);
+      byAlias[host.alias] = (await get(host.id)) ?? host;
+    }
+
+    for (final item in imported) {
+      final host = byAlias[item.alias];
+      if (host == null || !createdIds.contains(host.id)) {
+        continue;
+      }
+      if (item.proxyJumps.isEmpty) {
+        continue;
+      }
+      await setJump(host, item.proxyJumps.last);
+    }
+
+    for (final item in imported) {
+      final hops = item.proxyJumps;
+      for (var i = hops.length - 1; i >= 1; i--) {
+        final hop = byAlias[hops[i]];
+        if (hop == null || !createdIds.contains(hop.id)) {
+          continue;
+        }
+        if (hop.jumpHostId != null) {
+          continue;
+        }
+        await setJump(hop, hops[i - 1]);
+      }
     }
     return created;
   }

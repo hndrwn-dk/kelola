@@ -13,6 +13,7 @@ class HostDetailsScreen extends StatefulWidget {
   const HostDetailsScreen({
     super.key,
     required this.host,
+    this.jumpVia,
     required this.facts,
     this.pinnedKey,
     this.connected = false,
@@ -21,6 +22,7 @@ class HostDetailsScreen extends StatefulWidget {
   });
 
   final Host host;
+  final String? jumpVia;
   final HostFacts facts;
   final PinnedHostKey? pinnedKey;
   final bool connected;
@@ -71,6 +73,11 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
           FactGroup(
             heading: 'System',
             entries: [
+              if (widget.jumpVia != null && widget.jumpVia!.isNotEmpty)
+                FactEntry(
+                  label: 'Jump',
+                  value: widget.jumpVia!,
+                ),
               FactEntry(
                 label: 'OS',
                 value: os.isEmpty ? 'unknown' : os,

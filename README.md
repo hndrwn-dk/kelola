@@ -25,7 +25,7 @@ One hardware key per phone, reused for every host. That is intentional.
 | Area | Status |
 |---|---|
 | Hardware SSH identity (StrongBox / Secure Enclave) | Working on physical Android |
-| Host inventory, notes, recents, search, ssh_config import | Working |
+| Host inventory, notes, recents, search, ssh_config import, jump host | Working |
 | Enrollment QR + TOFU host-key pinning | Working |
 | HostFacts + dashboard | Working against Ubuntu/OpenSSH |
 | systemd units (list/detail/start/stop/restart) | Working; OpenRC lists without crashing |
@@ -65,6 +65,13 @@ One hardware key per phone, reused for every host. That is intentional.
 | `systemd-journal` group (optional) | Sudo-free log reads, later milestone |
 
 From the phone, use the host's **LAN or public IP**. `10.0.2.2` is emulator-only.
+
+If the phone cannot route to the host, pick another inventory host as the
+**jump host** (OpenSSH `ProxyJump`). The phone SSHs to the jump and opens a
+TCP pipe to the real host — the jump does not hold the key. A VPS or a
+forwarded port is enough. An OS-level Tailscale or WireGuard app on the
+phone also works; Kelola uses those system routes. Kelola does not install
+a VPN.
 
 ## Run
 

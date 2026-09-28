@@ -4,6 +4,7 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/domain/ssh/openssh_user_cert.dart';
 import 'package:kelola/presentation/host_env/env_bindings_sheet.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
@@ -31,6 +32,27 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
   bool _readOnly = false;
   bool _agentForward = false;
   bool _loading = true;
+
+  Map<String, Host> get _jumpById {
+    final byId = {for (final h in _others) h.id: h};
+    final host = _host;
+    if (host != null) {
+      byId[host.id] = host.withJumpHostId(_jumpHostId);
+    }
+    return byId;
+  }
+
+  String? get _jumpViaPreview {
+    final host = _host;
+    if (host == null) {
+      return null;
+    }
+    final chain = resolveProposedJump(host, _jumpHostId, _jumpById);
+    if (!chain.isOk) {
+      return null;
+    }
+    return chain.viaLabel;
+  }
 
   @override
   void initState() {
@@ -375,11 +397,20 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                           FilterPill(
                             label: other.alias,
                             selected: _jumpHostId == other.id,
+                            enabled: !wouldCycle(host.id, other.id, _jumpById),
                             onTap: () =>
                                 setState(() => _jumpHostId = other.id),
                           ),
                       ],
                     ),
+                    if (_jumpViaPreview != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _jumpViaPreview!,
+                        key: const Key('edit-host-jump-via'),
+                        style: KelolaType.body(color: c.dim, size: 12),
+                      ),
+                    ],
                     const SizedBox(height: 18),
                     Row(
                       children: [

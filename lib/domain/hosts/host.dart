@@ -98,6 +98,33 @@ class Host {
     return '$address:$port';
   }
 
+  Host withJumpHostId(String? jumpHostId) {
+    return Host(
+      id: id,
+      alias: alias,
+      address: address,
+      port: port,
+      username: username,
+      keyAlias: keyAlias,
+      jumpHostId: jumpHostId,
+      readOnly: readOnly,
+      sortOrder: sortOrder,
+      note: note,
+      lastRttMs: lastRttMs,
+      attention: attention,
+      failedUnitCount: failedUnitCount,
+      diskRootPercent: diskRootPercent,
+      attentionAt: attentionAt,
+      lastSeenAt: lastSeenAt,
+      prettyName: prettyName,
+      osId: osId,
+      sudoNeedsPassword: sudoNeedsPassword,
+      agentForward: agentForward,
+      sshCertificate: sshCertificate,
+      tags: tags,
+    );
+  }
+
   String get subtitle {
     if (attention == HostAttention.unreachable) {
       final seen = lastSeenAt == null ? 'never' : ageLabel(lastSeenAt!);
@@ -135,12 +162,17 @@ class ImportedSshHost {
     required this.address,
     required this.port,
     required this.username,
-    this.proxyJump,
+    this.proxyJumps = const [],
   });
 
   final String alias;
   final String address;
   final int port;
   final String username;
-  final String? proxyJump;
+
+  /// Outermost first, matching OpenSSH `ProxyJump a,b`.
+  final List<String> proxyJumps;
+
+  /// Immediate hop — last name in [proxyJumps].
+  String? get proxyJump => proxyJumps.isEmpty ? null : proxyJumps.last;
 }
