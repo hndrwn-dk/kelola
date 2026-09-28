@@ -204,8 +204,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final readOnly = _host?.readOnly ?? false;
     final transfer = _transfer;
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: 'Files',

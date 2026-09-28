@@ -127,8 +127,7 @@ class _WorkloadsScreenState extends ConsumerState<WorkloadsScreen> {
   Widget build(BuildContext context) {
     final c = context.kc;
     final ns = workloadNamespaces(_inv.rows);
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: 'Kubernetes',

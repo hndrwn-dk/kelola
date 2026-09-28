@@ -411,8 +411,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
             syslog: _usedSyslog,
           );
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: 'Logs',

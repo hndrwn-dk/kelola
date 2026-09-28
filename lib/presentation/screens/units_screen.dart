@@ -161,8 +161,7 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
     final counts = UnitListCounts.from(result?.units ?? const <ServiceUnit>[]);
     final kicker = result == null ? null : unitListKicker(counts);
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: 'Services',

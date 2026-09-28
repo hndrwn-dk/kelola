@@ -177,8 +177,7 @@ class _MetricsScreenState extends ConsumerState<MetricsScreen> {
         : (cpuFocus ? snap.topCpu : snap.topMem);
     final cores = _facts?.nprocCores;
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: 'Metrics',

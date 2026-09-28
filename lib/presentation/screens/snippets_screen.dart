@@ -71,8 +71,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(hostAlias: widget.host.alias, title: 'Snippets'),
       body: Column(
         children: [
@@ -451,8 +450,7 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
     final probe = _probe;
     final multiUnlocked =
         ref.watch(entitlementProvider).isUnlocked(ProFeature.snippetMulti);
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: widget.host.alias,
         title: widget.snippet.name,

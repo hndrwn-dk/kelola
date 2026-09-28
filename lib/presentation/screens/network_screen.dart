@@ -165,8 +165,7 @@ class _NetworkScreenState extends ConsumerState<NetworkScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: 'Network',

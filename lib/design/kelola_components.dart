@@ -2353,9 +2353,9 @@ class AuditInsightRow extends StatelessWidget {
   }
 }
 
-/// Cast-technique atmosphere for Hosts chrome only: amber wash + three
-/// 1px concentric arcs from outside the top-right corner. Clipped,
-/// not hit-tested, sits behind trays and rows.
+/// App chrome atmosphere: amber wash + three 1px concentric arcs from
+/// outside the top-right corner. Clipped, not hit-tested, sits behind
+/// trays and rows. Mount only via [KelolaWashScaffold] / [KelolaPage].
 class HostsChromeAccent extends StatelessWidget {
   const HostsChromeAccent({super.key});
 

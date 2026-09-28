@@ -118,8 +118,7 @@ class _WorkloadYamlScreenState extends ConsumerState<WorkloadYamlScreen> {
   Widget build(BuildContext context) {
     final c = context.kc;
     final readOnly = widget.host.readOnly;
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: widget.host.alias,
         title: widget.workload.title,

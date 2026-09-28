@@ -117,8 +117,7 @@ class _ProcessesScreenState extends ConsumerState<ProcessesScreen> {
     final c = context.kc;
     final visible = _visible;
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: 'Processes',

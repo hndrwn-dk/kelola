@@ -262,8 +262,7 @@ class _WorkloadDetailScreenState extends ConsumerState<WorkloadDetailScreen> {
   Widget build(BuildContext context) {
     final c = context.kc;
     final row = _row;
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: widget.host.alias,
         title: row.title,

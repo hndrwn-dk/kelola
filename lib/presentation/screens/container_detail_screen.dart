@@ -128,8 +128,7 @@ class _ContainerDetailScreenState extends ConsumerState<ContainerDetailScreen> {
     final detail = _detail;
     final row = widget.row;
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: widget.host.alias,
         title: row.title,
