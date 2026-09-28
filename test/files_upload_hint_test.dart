@@ -84,19 +84,19 @@ void main() {
     await pumpFiles(tester);
 
     expect(find.text(filesEmptyUploadHint), findsNothing);
+    expect(find.text(filesPickFromPhoneLabel), findsNothing);
     expect(find.byType(KelolaError), findsNothing);
   });
 
   testWidgets(
-    'upload with empty transfer dir shows a neutral tip, not KelolaError',
+    'upload with empty transfer dir offers pick from this phone',
     (tester) async {
       await pumpFiles(tester);
       await pressUpload(tester);
 
-      expect(find.text(filesEmptyUploadHint), findsOneWidget);
+      expect(find.text(filesPickFromPhoneLabel), findsOneWidget);
+      expect(find.text(filesEmptyUploadHint), findsNothing);
       expect(find.byType(KelolaError), findsNothing);
-      final tip = tester.widget<Text>(find.text(filesEmptyUploadHint));
-      expect(tip.style!.color, isNot(KelolaColors.dark.red));
     },
   );
 }

@@ -186,6 +186,17 @@ ThemeData buildKelolaDarkTheme() {
         side: BorderSide(color: c.line),
       ),
     ),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: c.surface2,
+      contentTextStyle: KelolaType.body(color: c.text, size: 13),
+      actionTextColor: c.amber,
+      behavior: SnackBarBehavior.floating,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(KelolaRadii.md),
+        side: BorderSide(color: c.line),
+      ),
+    ),
   );
 }
 

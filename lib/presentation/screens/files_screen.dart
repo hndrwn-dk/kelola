@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
@@ -25,9 +26,13 @@ import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty
 import 'package:kelola/providers.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Shown only after Upload when kelola-transfers has no files. Not an error.
+/// Kept for older tests; Upload now offers [filesPickFromPhoneLabel].
 const filesEmptyUploadHint =
     'Download a file first. Uploads read from kelola-transfers on this phone.';
+
+const filesPickFromPhoneLabel = 'Pick from this phone';
+
+const _pickFromPhone = Object();
 
 class _Transfer {
   _Transfer({required this.label});
@@ -60,6 +65,7 @@ class FilesScreen extends ConsumerStatefulWidget {
     required this.hostId,
     this.initialPath = '.',
     this.transferDocumentsDir,
+    this.pickPhoneFile,
   });
 
   final String hostId;
@@ -68,6 +74,9 @@ class FilesScreen extends ConsumerStatefulWidget {
   /// When set, uploads/downloads use this directory instead of the app
   /// documents folder. Tests inject an empty temp dir here.
   final Directory? transferDocumentsDir;
+
+  /// Tests inject a local file. Production uses the system document picker.
+  final Future<File?> Function()? pickPhoneFile;
 
   @override
   ConsumerState<FilesScreen> createState() => _FilesScreenState();
@@ -525,6 +534,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       final c = context.kc;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: c.surface2,
           content: Text(
             dest.path,
             style: KelolaType.mono(color: c.text, size: 11),
@@ -641,6 +651,22 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     await _load();
   }
 
+  Future<File?> _pickPhoneFile() async {
+    final inject = widget.pickPhoneFile;
+    if (inject != null) {
+      return inject();
+    }
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: false,
+    );
+    final path = result?.files.single.path;
+    if (path == null || path.isEmpty) {
+      return null;
+    }
+    return File(path);
+  }
+
   Future<void> _upload() async {
     final host = _host;
     if (host == null) {
@@ -655,15 +681,8 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (!mounted) {
       return;
     }
-    if (files.isEmpty) {
-      setState(() {
-        _error = null;
-        _uploadHint = filesEmptyUploadHint;
-      });
-      return;
-    }
     setState(() => _uploadHint = null);
-    final chosen = await showModalBottomSheet<File>(
+    final picked = await showModalBottomSheet<Object>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
@@ -673,6 +692,15 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
             child: ListView(
               shrinkWrap: true,
               children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: ServiceRow(
+                    risk: RiskLevel.mutate,
+                    name: filesPickFromPhoneLabel,
+                    meta: 'Photos, Downloads, and files on this phone',
+                    onTap: () => Navigator.pop(ctx, _pickFromPhone),
+                  ),
+                ),
                 for (final f in files)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
@@ -689,10 +717,22 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
         );
       },
     );
+    if (!mounted || picked == null) {
+      return;
+    }
+    final File? chosen;
+    if (identical(picked, _pickFromPhone)) {
+      chosen = await _pickPhoneFile();
+    } else if (picked is File) {
+      chosen = picked;
+    } else {
+      chosen = null;
+    }
     if (chosen == null || !mounted) {
       return;
     }
-    final name = chosen.uri.pathSegments.last;
+    final file = chosen;
+    final name = file.uri.pathSegments.last;
     final remote = joinSftpPath(_path, name);
     final ok = await confirmFileMutate(
       context,
@@ -708,7 +748,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final xfer = _Transfer(label: 'Upload $name');
     setState(() => _holdTransfer(xfer));
     await _run(
-      SftpUploadProbe(localPath: chosen.path, remotePath: remote),
+      SftpUploadProbe(localPath: file.path, remotePath: remote),
       cancel: xfer.cancel,
       onProgress: (done, total) {
         if (!mounted) {
@@ -716,7 +756,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
         }
         setState(() {
           xfer.done = done;
-          xfer.total = total ?? chosen.lengthSync();
+          xfer.total = total ?? file.lengthSync();
         });
       },
     );
