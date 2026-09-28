@@ -23,5 +23,11 @@ void main() {
         File('lib/presentation/tunnels_keep_awake.dart').readAsStringSync();
     expect(tunnels, contains("acquire('tunnels')"));
     expect(tunnels, contains("release('tunnels')"));
+
+    final pty =
+        File('lib/presentation/screens/pty_terminal_screen.dart')
+            .readAsStringSync();
+    expect(pty, contains("acquire('pty')"));
+    expect(pty, contains("release('pty')"));
   });
 }

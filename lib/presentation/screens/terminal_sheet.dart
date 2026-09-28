@@ -332,7 +332,7 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
           children: [
             KelolaHostIdentity(
               hostAlias: widget.host.alias,
-              title: 'Terminal',
+              title: 'Command',
               contextLine: 'NO PTY',
             ),
             const SizedBox(height: 10),
