@@ -21,6 +21,8 @@ import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/domain/probes/workload_logs_probe.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
+import 'package:kelola/domain/probes/workload_yaml_probe.dart';
+import 'package:kelola/presentation/screens/workload_yaml_screen.dart';
 import 'package:kelola/presentation/screens/workload_detail_screen.dart';
 import 'package:kelola/presentation/screens/workloads_screen.dart';
 import 'package:kelola/providers.dart';
@@ -168,10 +170,21 @@ void main() {
     ]);
     expect(pool.scopes, everyElement(ProbeScope.host));
     expect(find.text('Exec'), findsNothing);
+    expect(find.text('YAML'), findsOneWidget);
     expect(find.text('Logs'), findsOneWidget);
     expect(find.text('Restart'), findsOneWidget);
     expect(find.text('Scale up'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.ensureVisible(find.text('YAML'));
+    await tester.tap(find.text('YAML'));
+    await tester.pump();
+    await tester.pump();
+    expect(pool.probes.whereType<WorkloadYamlGetProbe>(), hasLength(1));
+    expect(find.byType(WorkloadYamlScreen), findsOneWidget);
+    expect(find.text('Apply'), findsOneWidget);
   });
 
   testWidgets('pod detail offers exec and logs, not rollout restart',
@@ -204,6 +217,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    expect(find.text('YAML'), findsOneWidget);
     expect(find.text('Exec'), findsOneWidget);
     expect(find.text('Logs'), findsOneWidget);
     expect(find.text('Restart'), findsNothing);
@@ -231,13 +245,17 @@ void main() {
         .readAsStringSync();
     final exec = File('lib/domain/probes/workload_exec_probe.dart')
         .readAsStringSync();
+    final yaml = File('lib/domain/probes/workload_yaml_probe.dart')
+        .readAsStringSync();
     final confirm = File(
       'lib/presentation/widgets/confirm_workload_action.dart',
     ).readAsStringSync();
     expect(list, contains('HostFactsProbe'));
     expect(detail, contains('confirmWorkloadAction'));
+    expect(detail, contains('WorkloadYamlGetProbe'));
     expect(confirm, contains('DestructiveConfirmSheet'));
-    for (final src in [list, detail, probes, action, logs, exec, confirm]) {
+    expect(confirm, contains('confirmWorkloadYamlApply'));
+    for (final src in [list, detail, probes, action, logs, exec, yaml, confirm]) {
       expect(src, isNot(contains('command -v')));
       expect(src, isNot(contains('ProbeScope.fleet')));
     }
@@ -264,6 +282,7 @@ class _WorkloadPool extends SshSessionPool {
   List<K8sEvent> events = const [];
   List<K8sTopRow> top = const [];
   String logs = '';
+  String yaml = 'kind: Deployment\nmetadata:\n  name: web\n  namespace: prod\n';
   final probes = <Probe<dynamic>>[];
   final scopes = <ProbeScope>[];
 
@@ -293,6 +312,15 @@ class _WorkloadPool extends SshSessionPool {
     }
     if (probe is WorkloadLogsProbe) {
       return logs as T;
+    }
+    if (probe is WorkloadYamlGetProbe) {
+      return yaml as T;
+    }
+    if (probe is WorkloadYamlDiffProbe) {
+      return '--- current\n+++ next' as T;
+    }
+    if (probe is WorkloadYamlApplyProbe) {
+      return 'applied' as T;
     }
     throw StateError('unexpected ${probe.runtimeType}');
   }

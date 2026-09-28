@@ -11,6 +11,8 @@ import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/workload_action_probe.dart';
 import 'package:kelola/domain/probes/workload_logs_probe.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
+import 'package:kelola/domain/probes/workload_yaml_probe.dart';
+import 'package:kelola/presentation/screens/workload_yaml_screen.dart';
 import 'package:kelola/presentation/destructive_auth.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/screens/workload_exec_sheet.dart';
@@ -156,6 +158,43 @@ class _WorkloadDetailScreenState extends ConsumerState<WorkloadDetailScreen> {
       setState(() => _logs = logs);
     } catch (e) {
       setState(() => _error = describeSshError(e));
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _openYaml() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final yaml = await runHostProbe(
+        ref: ref,
+        context: context,
+        host: widget.host,
+        probe: WorkloadYamlGetProbe(workload: _row),
+        facts: widget.facts,
+      );
+      if (!mounted) {
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => WorkloadYamlScreen(
+            host: widget.host,
+            facts: widget.facts,
+            workload: _row,
+            initialYaml: yaml,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = describeSshError(e));
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -310,6 +349,15 @@ class _WorkloadDetailScreenState extends ConsumerState<WorkloadDetailScreen> {
                   ],
                   const SectionSlab('Actions'),
                   const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: ServiceRow(
+                      risk: RiskLevel.read,
+                      name: 'YAML',
+                      meta: 'read · then guarded apply',
+                      onTap: _busy ? null : _openYaml,
+                    ),
+                  ),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: ServiceRow(

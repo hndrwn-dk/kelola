@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
@@ -52,6 +54,12 @@ String kubectlPortForwardCommand(
   final nsArg = ns.isEmpty ? '' : '-n ${shellSingleQuote(ns)} ';
   final res = shellSingleQuote(resource);
   return 'LC_ALL=C ${kubectlRun(facts, '${nsArg}port-forward --address 127.0.0.1 $res :$port')}';
+}
+
+/// Pipe YAML on stdin. Base64 avoids a heredoc colliding with the document.
+String kubectlStdin(HostFacts facts, String args, String yaml) {
+  final b64 = base64Encode(utf8.encode(yaml));
+  return 'printf %s ${shellSingleQuote(b64)} | base64 -d | ${kubectlRun(facts, args)}';
 }
 
 int? parseKubectlForwardPort(String stdout) {
