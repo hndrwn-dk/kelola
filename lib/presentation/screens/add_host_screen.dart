@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/presentation/screens/enrollment_screen.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
@@ -24,6 +26,39 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
   String? _addressError;
   String? _userError;
   String? _formError;
+  List<Host> _others = const [];
+  String? _jumpHostId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOthers();
+  }
+
+  bool _jumpWouldBeTooLong(String jumpId) {
+    const placeholder = Host(
+      id: '_new',
+      alias: 'new',
+      address: '0.0.0.0',
+      port: 22,
+      username: 'ops',
+      keyAlias: 'kelola',
+    );
+    return resolveProposedJump(
+          placeholder,
+          jumpId,
+          {for (final h in _others) h.id: h},
+        ).kind ==
+        JumpChainKind.tooLong;
+  }
+
+  Future<void> _loadOthers() async {
+    final all = await ref.read(hostRepositoryProvider).list();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _others = all);
+  }
 
   @override
   void dispose() {
@@ -68,8 +103,15 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
           address: address,
           port: port,
           username: user,
+          jumpHostId: _jumpHostId,
         );
     await ref.read(enrollmentProvider.notifier).ensureKey();
+    if (!mounted) {
+      return;
+    }
+    final byId = {
+      for (final h in await ref.read(hostRepositoryProvider).list()) h.id: h,
+    };
     if (!mounted) {
       return;
     }
@@ -78,6 +120,7 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
         builder: (_) => EnrollmentScreen(
           hostId: host.id,
           hostAlias: host.alias,
+          jumpVia: jumpViaLabel(host, byId),
         ),
       ),
     );
@@ -120,13 +163,20 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
       title: 'Add host',
       kicker: 'SSH ONLY · NO AGENT',
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: kelolaScrollPadding(
+          context,
+          left: 16,
+          top: 16,
+          right: 16,
+          extraBottom: 16,
+        ),
         children: [
           if (_formError != null) ...[
             KelolaError(message: _formError!),
             const SizedBox(height: 14),
           ],
           KelolaField(
+            key: const Key('add-host-alias'),
             label: 'Name',
             controller: _alias,
             hint: 'nas-01',
@@ -134,6 +184,7 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
           ),
           const SizedBox(height: 14),
           KelolaField(
+            key: const Key('add-host-address'),
             label: 'Address',
             controller: _address,
             hint: '192.168.1.24',
@@ -154,6 +205,7 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: KelolaField(
+                  key: const Key('add-host-user'),
                   label: 'User',
                   controller: _user,
                   hint: 'not root',
@@ -162,6 +214,32 @@ class _AddHostScreenState extends ConsumerState<AddHostScreen> {
               ),
             ],
           ),
+          if (_others.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Jump host',
+              style: KelolaType.body(color: c.muted, size: 12),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 5,
+              runSpacing: 5,
+              children: [
+                FilterPill(
+                  label: 'None',
+                  selected: _jumpHostId == null,
+                  onTap: () => setState(() => _jumpHostId = null),
+                ),
+                for (final other in _others)
+                  FilterPill(
+                    label: other.alias,
+                    selected: _jumpHostId == other.id,
+                    enabled: !_jumpWouldBeTooLong(other.id),
+                    onTap: () => setState(() => _jumpHostId = other.id),
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _save,

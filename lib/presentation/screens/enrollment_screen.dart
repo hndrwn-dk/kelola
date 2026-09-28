@@ -19,10 +19,12 @@ class EnrollmentScreen extends ConsumerStatefulWidget {
     super.key,
     required this.hostId,
     this.hostAlias,
+    this.jumpVia,
   });
 
   final String hostId;
   final String? hostAlias;
+  final String? jumpVia;
 
   @override
   ConsumerState<EnrollmentScreen> createState() => _EnrollmentScreenState();
@@ -181,8 +183,12 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
         ),
         children: [
           Text(
-            'Installing this key needs existing access to the host — '
-            'another SSH session, a web console, or physical access.',
+            widget.jumpVia == null
+                ? 'Installing this key needs existing access to the host — '
+                    'another SSH session, a web console, or physical access.'
+                : 'This host is reached through ${widget.jumpVia!.replaceFirst('via ', '')}. '
+                    'Install the key on this host — the jump only relays TCP. '
+                    'Test connection already uses the jump.',
             style: KelolaType.body(color: c.muted, size: 13),
           ),
           const SizedBox(height: 18),

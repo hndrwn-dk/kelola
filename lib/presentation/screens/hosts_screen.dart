@@ -9,6 +9,7 @@ import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/domain/hosts/host_inventory_view.dart';
 import 'package:kelola/domain/hosts/pooled_run.dart';
 import 'package:kelola/domain/hosts/stable_host_inventory.dart';
@@ -434,6 +435,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   view.needsAttention,
                   plan,
                   selected,
+                  list,
                 ),
                 if (displayed.unmonitored.isNotEmpty) ...[
                   HostGroupTray(
@@ -442,7 +444,13 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                       children: [
                         for (var i = 0; i < displayed.unmonitored.length; i++) ...[
                           if (i > 0) const SizedBox(height: 8),
-                          _hostRow(c, displayed.unmonitored[i], plan, selected),
+                          _hostRow(
+                            c,
+                            displayed.unmonitored[i],
+                            plan,
+                            selected,
+                            list,
+                          ),
                         ],
                       ],
                     ),
@@ -455,6 +463,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   view.healthy,
                   plan,
                   selected,
+                  list,
                 ),
                 ..._groupBlock(
                   c,
@@ -462,6 +471,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   view.notChecked,
                   plan,
                   selected,
+                  list,
                 ),
                 ..._utilityTrail(plan),
               ]),
@@ -478,6 +488,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     List<Host> hosts,
     FleetProbePlan plan,
     Set<String> selected,
+    List<Host> inventory,
   ) {
     if (hosts.isEmpty) {
       return const [];
@@ -502,7 +513,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                 padding: EdgeInsets.only(
                   bottom: i == hosts.length - 1 ? 0 : 8,
                 ),
-                child: _hostRow(c, hosts[i], plan, selected),
+                child: _hostRow(c, hosts[i], plan, selected, inventory),
               );
             },
           )
@@ -510,7 +521,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             children: [
               for (var i = 0; i < hosts.length; i++) ...[
                 if (i > 0) const SizedBox(height: 8),
-                _hostRow(c, hosts[i], plan, selected),
+                _hostRow(c, hosts[i], plan, selected, inventory),
               ],
             ],
           );
@@ -528,10 +539,17 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     Host host,
     FleetProbePlan plan,
     Set<String> selected,
+    List<Host> inventory,
   ) {
     final unmonitored = !plan.isMonitored(host.id);
     final health = unmonitored ? HealthStatus.unknown : _health(host);
     final pill = unmonitored ? 'not monitored' : incidentChipLabel(host);
+    final byId = {for (final h in inventory) h.id: h};
+    final via = jumpViaLabel(host, byId);
+    final meta = appendVia(
+      unmonitored ? host.endpoint : host.subtitle,
+      via,
+    );
     final metrics = hostInventoryMetricsLine(
       host: host,
       monitored: !unmonitored,
@@ -593,7 +611,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             status: health,
             leading: OsIcon.forOsId(host.osId),
             name: host.alias,
-            meta: unmonitored ? host.endpoint : host.subtitle,
+            meta: meta,
             detail: metrics,
             pillText: pill,
             pillStatus: health,

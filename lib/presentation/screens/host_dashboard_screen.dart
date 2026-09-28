@@ -8,6 +8,7 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/facts/serial_mask.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/domain/hosts/dashboard_status.dart';
 import 'package:kelola/domain/probes/dashboard_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
@@ -148,6 +149,7 @@ class HostDashboardScreen extends ConsumerStatefulWidget {
 
 class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   Host? _host;
+  Map<String, Host> _hostsById = const {};
   HostFacts? _facts;
   DashboardSnapshot? _dash;
   int? _pendingUpdates;
@@ -175,6 +177,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         return;
       }
       _host = host;
+      _hostsById = {for (final h in await repo.list()) h.id: h};
       final startup = startupSnippetsForHost(
         await repo.listSnippetsForHost(host),
         host,
@@ -373,6 +376,14 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                   onDismiss: () => setState(() => _error = null),
                 ),
               ),
+            if (host != null && jumpViaLabel(host, _hostsById) != null) ...[
+              ServiceRow(
+                risk: RiskLevel.read,
+                name: jumpViaLabel(host, _hostsById)!,
+                meta: 'jump host',
+              ),
+              const SizedBox(height: 8),
+            ],
             if (dash != null && dash.failedUnitCount > 0) ...[
               ServiceRow(
                 risk: RiskLevel.read,
@@ -864,6 +875,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       MaterialPageRoute<void>(
         builder: (_) => HostDetailsScreen(
           host: host,
+          jumpVia: jumpViaLabel(host, _hostsById),
           facts: _facts ?? HostFacts.undiscovered,
           pinnedKey: pinned,
           connected: ref.read(sessionPoolProvider).hasLiveSession(host.id),

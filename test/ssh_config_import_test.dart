@@ -44,4 +44,15 @@ Host *
     expect(hosts.single.address, 'pi-dns');
     expect(hosts.single.port, 22);
   });
+
+  test('ProxyJump comma list is outermost-first; immediate hop is last', () {
+    final hosts = importer.parse('''
+Host web
+  HostName 10.0.0.10
+  User deploy
+  ProxyJump user@bastion:22,inner
+''');
+    expect(hosts.single.proxyJumps, ['bastion', 'inner']);
+    expect(hosts.single.proxyJump, 'inner');
+  });
 }

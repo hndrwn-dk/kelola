@@ -10,7 +10,7 @@ class SshConfigImporter {
     String? hostName;
     String? user;
     int port = 22;
-    String? proxyJump;
+    var proxyJumps = <String>[];
 
     void flush() {
       final name = alias;
@@ -26,7 +26,7 @@ class SshConfigImporter {
           address: hostName ?? name,
           port: port,
           username: user ?? 'root',
-          proxyJump: proxyJump,
+          proxyJumps: proxyJumps,
         ),
       );
     }
@@ -53,7 +53,7 @@ class SshConfigImporter {
         hostName = null;
         user = null;
         port = 22;
-        proxyJump = null;
+        proxyJumps = [];
         continue;
       }
 
@@ -65,7 +65,11 @@ class SshConfigImporter {
         case 'port':
           port = int.tryParse(value) ?? 22;
         case 'proxyjump':
-          proxyJump = value.split(',').first.split('@').last.split(':').first;
+          proxyJumps = [
+            for (final raw in value.split(','))
+              if (raw.trim().isNotEmpty)
+                raw.trim().split('@').last.split(':').first,
+          ];
         case 'identityfile':
         case 'identitiesonly':
         case 'certificatefile':
