@@ -58,6 +58,11 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // AGP 9 R8 full mode. WorkManager 2.9 dies without these keeps.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
@@ -74,5 +79,5 @@ flutter {
 
 dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.work:work-runtime-ktx:2.11.1")
 }
