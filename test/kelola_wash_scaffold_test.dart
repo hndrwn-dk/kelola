@@ -16,31 +16,37 @@ void main() {
     expect(block.split('SafeArea(').length - 1, 1);
   });
 
-  test('listed screens carry HostsChromeAccent / KelolaWashScaffold wash', () {
-    const screens = [
-      'lib/presentation/screens/fleet_screen.dart',
-      'lib/presentation/screens/llm_settings_screen.dart',
-      'lib/presentation/screens/audit_screen.dart',
-      'lib/presentation/screens/search_screen.dart',
-      'lib/presentation/screens/edit_host_screen.dart',
-      'lib/presentation/screens/settings_screen.dart',
-      'lib/presentation/screens/hosts_screen.dart',
-      'lib/presentation/widgets/kelola_chrome.dart',
-    ];
-    for (final path in screens) {
-      final src = File(path).readAsStringSync();
+  test('full-page screens use KelolaWashScaffold or KelolaPage, not a raw Scaffold',
+      () {
+    final dir = Directory('lib/presentation/screens');
+    final skip = {
+      'boot_gate.dart',
+    };
+    final files = dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .where((f) => !f.path.contains('sheet'))
+        .where((f) => !skip.contains(f.uri.pathSegments.last))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    expect(files, isNotEmpty);
+    for (final file in files) {
+      final src = file.readAsStringSync();
+      final name = file.uri.pathSegments.last;
       expect(
-        src.contains('HostsChromeAccent') || src.contains('KelolaWashScaffold'),
+        src.contains('KelolaWashScaffold') || src.contains('KelolaPage'),
         isTrue,
-        reason: '$path must use the amber arc wash',
+        reason: '$name must paint HostsChromeAccent via wash or KelolaPage',
+      );
+      expect(
+        src.contains('return Scaffold('),
+        isFalse,
+        reason: '$name still returns a raw Scaffold',
       );
     }
-    // Add host + host details go through KelolaPage → KelolaWashScaffold.
-    final add = File('lib/presentation/screens/add_host_screen.dart')
-        .readAsStringSync();
-    expect(add, contains('KelolaPage'));
-    final dash = File('lib/presentation/screens/host_dashboard_screen.dart')
-        .readAsStringSync();
-    expect(dash, contains('KelolaPage'));
+    final chrome =
+        File('lib/presentation/widgets/kelola_chrome.dart').readAsStringSync();
+    expect(chrome, contains('KelolaWashScaffold'));
   });
 }

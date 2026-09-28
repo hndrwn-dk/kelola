@@ -295,8 +295,7 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
     final c = context.kc;
     final snap = _snap;
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: 'Firewall',

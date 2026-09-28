@@ -64,8 +64,7 @@ class _FileEditorScreenState extends ConsumerState<FileEditorScreen> {
   Widget build(BuildContext context) {
     final c = context.kc;
     final readOnly = _host?.readOnly ?? false;
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: sftpBasename(widget.remotePath),

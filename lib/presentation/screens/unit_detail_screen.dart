@@ -184,8 +184,7 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
     final kicker = detail == null ? null : unitDetailKicker(detail);
     final journalTip = widget.facts.hasJournald && !widget.facts.journalReadable;
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: widget.host.alias,
         title: widget.unitName,

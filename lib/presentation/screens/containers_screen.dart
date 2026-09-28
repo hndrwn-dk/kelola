@@ -118,8 +118,7 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
     final counts = ContainerListCounts.from(_inv.rows);
     final kicker = containerListKicker(_inv.rows, engines: _inv.engines);
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: 'Containers',

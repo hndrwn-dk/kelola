@@ -113,8 +113,7 @@ class _ContainerImagesScreenState extends ConsumerState<ContainerImagesScreen> {
     final engine = widget.engine.toUpperCase();
     final reclaim = _inv.reclaimableLabel;
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: widget.host.alias,
         title: 'Images',

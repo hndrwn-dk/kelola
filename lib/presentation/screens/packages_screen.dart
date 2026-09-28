@@ -181,8 +181,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
         snap == null ? const <PackageUpdate>[] : visiblePackageUpdates(snap, _filter);
     final securityOn = snap?.securitySupported ?? false;
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
         title: 'Packages',

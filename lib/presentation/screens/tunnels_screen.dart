@@ -621,8 +621,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     final filtered = _filtered(active);
     final showNotifExplainer = _notificationsAllowed == false;
 
-    return Scaffold(
-      backgroundColor: c.ink,
+    return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: _hostAlias ?? '',
         title: 'Tunnels',
