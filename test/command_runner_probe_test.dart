@@ -81,22 +81,24 @@ void main() {
     expect(commandRunnerEmptyCopy.toLowerCase(), isNot(contains('connected')));
   });
 
-  // Command runner must stay exec-only (no PTY). Journal follow is the one
-  // exception: without a PTY, journalctl -f gets EPOLLHUP on a pipe and exits
-  // immediately (0b5b269). Counting SSHPtyConfig == 1 catches a second,
-  // ungated allocation elsewhere in session_pool.
-  test('session pool allocates a PTY only for journal follow', () {
+  // Command runner stays exec-only. Journal follow needs a gated PTY so
+  // journalctl -f does not EPOLLHUP on a pipe (0b5b269). M9 adds a second
+  // allocation for the interactive shell. A third SSHPtyConfig is a leak.
+  test('session pool allocates a PTY only for journal follow and M9 shell', () {
     final src = File('lib/data/ssh/session_pool.dart').readAsStringSync();
-    expect(src, isNot(contains('.shell(')));
+    expect(src, contains('.shell('));
+    expect(src, contains('openPty'));
     expect(src, isNot(contains('openShell')));
     expect(src, isNot(contains('interactive shell')));
+    expect(src, isNot(contains('kubectl exec -it')));
 
     final ptyMatches = RegExp(r'SSHPtyConfig').allMatches(src);
-    expect(ptyMatches.length, 1);
+    expect(ptyMatches.length, 2);
 
     final gated = RegExp(
       r'journalFollowRequiresPty\s*\?\s*const\s+SSHPtyConfig\s*\(\s*\)\s*:\s*null',
     );
     expect(gated.hasMatch(src), isTrue);
+    expect(src, contains('kPtyTermType'));
   });
 }

@@ -60,7 +60,7 @@ class CommandRunnerProbe extends Probe<CommandRunnerResult> {
 }
 
 const commandRunnerEmptyCopy =
-    'One command at a time over SSH exec. No PTY. vim, top, and less will not work.';
+    'One command at a time over SSH exec. No PTY. Open Terminal for vim, top, and less.';
 
 CommandRunnerResult commandRunFromExec({
   required String stdout,

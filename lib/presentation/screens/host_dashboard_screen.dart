@@ -29,6 +29,7 @@ import 'package:kelola/presentation/screens/journal_screen.dart';
 import 'package:kelola/presentation/screens/metrics_screen.dart';
 import 'package:kelola/presentation/screens/network_screen.dart';
 import 'package:kelola/presentation/screens/processes_screen.dart';
+import 'package:kelola/presentation/screens/pty_terminal_screen.dart';
 import 'package:kelola/presentation/screens/terminal_sheet.dart';
 import 'package:kelola/presentation/screens/snippets_screen.dart';
 import 'package:kelola/presentation/screens/tunnels_screen.dart';
@@ -673,6 +674,13 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
               ServiceRow(
                 risk: RiskLevel.mutate,
                 name: 'Terminal',
+                meta: 'PTY · vim · top',
+                onTap: () => openPtyTerminal(context, ref, host),
+              ),
+              const SizedBox(height: 6),
+              ServiceRow(
+                risk: RiskLevel.mutate,
+                name: 'Command',
                 meta: 'no PTY · audited',
                 onTap: () => openCommandSheet(context, ref, host),
               ),

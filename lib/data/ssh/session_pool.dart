@@ -16,6 +16,7 @@ import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/jump_chain.dart';
+import 'package:kelola/domain/pty/pty_session.dart';
 import 'package:kelola/domain/ssh/openssh_user_cert.dart';
 import 'package:kelola/domain/journal/journal_entry.dart';
 import 'package:kelola/domain/journal/journal_follow.dart';
@@ -108,6 +109,9 @@ class SshSessionPool {
 
   /// Dedicated key-only SSH clients for tunnels (one per host). Not exec `_pool`.
   final Map<String, SSHClient> _tunnelClients = {};
+
+  /// Dedicated PTY shells (one per host). Not exec `_pool`.
+  final Map<String, PtyChannel> _pty = {};
   final Map<String, JournalFollowHandle> _follows = {};
   final ProbeAuditPolicy _auditPolicy = ProbeAuditPolicy();
 
@@ -164,7 +168,11 @@ class SshSessionPool {
       return true;
     }
     final tunnel = _tunnelClients[hostId];
-    return tunnel != null && !tunnel.isClosed;
+    if (tunnel != null && !tunnel.isClosed) {
+      return true;
+    }
+    final pty = _pty[hostId];
+    return pty != null && !pty.client.isClosed;
   }
 
   /// Test hook: clients currently held in the key-auth pool for [hostId].
@@ -444,6 +452,90 @@ class SshSessionPool {
     );
     _tunnelClients[host.id] = client;
     return client;
+  }
+
+  /// Interactive PTY. Dedicated client. Audits open once; [PtyChannel.close]
+  /// audits close. Never [execute].
+  Future<PtyChannel> openPty(
+    Host host, {
+    required int cols,
+    required int rows,
+    UnknownHostKeyHandler? onUnknownHostKey,
+  }) async {
+    if (host.username == 'root') {
+      throw RootLoginRejectedException();
+    }
+    const openProbe = PtyBoundaryProbe();
+    if (host.readOnly) {
+      await _repository.recordAudit(
+        hostId: host.id,
+        hostAlias: host.alias,
+        remoteUser: host.username,
+        title: openProbe.auditTitle,
+        command: kPtyAuditCommand,
+        risk: openProbe.risk.name,
+        usedSudo: false,
+        errorSummary: 'ReadOnlyViolation',
+      );
+      throw ReadOnlyViolation(openProbe);
+    }
+    final existing = _pty[host.id];
+    if (existing != null && !existing.client.isClosed) {
+      existing.resize(cols, rows);
+      return existing;
+    }
+    await _repository.recordAudit(
+      hostId: host.id,
+      hostAlias: host.alias,
+      remoteUser: host.username,
+      title: kPtyAuditOpen,
+      command: kPtyAuditCommand,
+      risk: RiskLevel.mutate.name,
+      usedSudo: false,
+    );
+    final openedAt = DateTime.now();
+    final size = clampPtySize(cols, rows);
+    final client = await openSession(
+      host,
+      visiting: {host.id},
+      onUnknownHostKey: onUnknownHostKey,
+    );
+    try {
+      final session = await client.shell(
+        pty: SSHPtyConfig(
+          type: kPtyTermType,
+          width: size.$1,
+          height: size.$2,
+        ),
+      );
+      late final PtyChannel channel;
+      channel = PtyChannel(
+        client: client,
+        session: session,
+        onClosed: () async {
+          if (!identical(_pty[host.id], channel)) {
+            return;
+          }
+          _pty.remove(host.id);
+          await _repository.recordAudit(
+            hostId: host.id,
+            hostAlias: host.alias,
+            remoteUser: host.username,
+            title: kPtyAuditClose,
+            command: ptyCloseCommand(DateTime.now().difference(openedAt)),
+            risk: RiskLevel.mutate.name,
+            usedSudo: false,
+          );
+        },
+      );
+      _pty[host.id] = channel;
+      return channel;
+    } catch (_) {
+      if (!client.isClosed) {
+        await client.close();
+      }
+      rethrow;
+    }
   }
 
   /// Closes and drops the dedicated tunnel client for [hostId], if any.
@@ -762,6 +854,10 @@ class SshSessionPool {
     if (tunnel != null && !tunnel.isClosed) {
       await tunnel.close();
     }
+    final pty = _pty[hostId];
+    if (pty != null) {
+      await pty.close();
+    }
     final list = _pool.remove(hostId) ?? [];
     for (final c in list) {
       await c.close();
@@ -777,6 +873,7 @@ class SshSessionPool {
       ..._pool.keys,
       ..._followClients.keys,
       ..._tunnelClients.keys,
+      ..._pty.keys,
       ..._follows.keys,
     };
     for (final id in ids) {
@@ -823,5 +920,39 @@ class _DartSshFollowChannel implements JournalFollowChannel {
       await _client.close();
     }
     onClosed();
+  }
+}
+
+class PtyChannel {
+  PtyChannel({
+    required this.client,
+    required this.session,
+    required this.onClosed,
+  });
+
+  final SSHClient client;
+  final SSHSession session;
+  final Future<void> Function() onClosed;
+  var _closed = false;
+
+  void write(List<int> bytes) {
+    session.write(Uint8List.fromList(bytes));
+  }
+
+  void resize(int cols, int rows) {
+    final size = clampPtySize(cols, rows);
+    session.resizeTerminal(size.$1, size.$2);
+  }
+
+  Future<void> close() async {
+    if (_closed) {
+      return;
+    }
+    _closed = true;
+    session.close();
+    if (!client.isClosed) {
+      await client.close();
+    }
+    await onClosed();
   }
 }
