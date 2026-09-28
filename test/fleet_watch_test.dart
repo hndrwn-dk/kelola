@@ -102,6 +102,21 @@ void main() {
     );
   });
 
+  test('WorkManager is new enough for AGP 9 R8 full mode', () {
+    final gradle = File('android/app/build.gradle.kts').readAsStringSync();
+    final rules = File('android/app/proguard-rules.pro');
+    expect(
+      gradle,
+      isNot(contains('work-runtime-ktx:2.9.')),
+      reason: '2.9.x dies at launch under R8 full mode (WorkDatabase.canonicalName)',
+    );
+    expect(gradle, contains('work-runtime-ktx:2.1'));
+    expect(rules.existsSync(), isTrue);
+    final keep = rules.readAsStringSync();
+    expect(keep, contains('androidx.work'));
+    expect(keep, contains('<init>'));
+  });
+
   test('fleet watch uses its own notification channel, not tunnel FGS', () {
     final plugin = File(
       'android/app/src/main/kotlin/com/tursinalabs/kelola/FleetWatchPlugin.kt',
