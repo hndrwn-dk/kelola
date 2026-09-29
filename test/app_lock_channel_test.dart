@@ -57,7 +57,7 @@ void main() {
     expect(await port.authenticate(), isFalse);
   });
 
-  testWidgets('cancelled platform error stays locked; other errors fail open', (
+  testWidgets('cancelled and unavailable platform errors stay locked', (
     tester,
   ) async {
     var code = 'cancelled';
@@ -76,11 +76,13 @@ void main() {
     final port = MethodChannelAppLock(channel: channel);
     expect(await port.authenticate(), isFalse);
     code = 'no_activity';
-    expect(await port.authenticate(), isTrue);
+    expect(await port.authenticate(), isFalse);
+    code = 'unavailable';
+    expect(await port.authenticate(), isFalse);
     expect(await port.canAuthenticate(), isFalse);
   });
 
-  testWidgets('missing plugin fails open', (tester) async {
+  testWidgets('missing plugin stays locked', (tester) async {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       channel,
       (call) async {
@@ -95,7 +97,7 @@ void main() {
     });
     final port = MethodChannelAppLock(channel: channel);
     expect(await port.canAuthenticate(), isFalse);
-    expect(await port.authenticate(), isTrue);
+    expect(await port.authenticate(), isFalse);
     await port.setRecentsSecure(true);
   });
 }

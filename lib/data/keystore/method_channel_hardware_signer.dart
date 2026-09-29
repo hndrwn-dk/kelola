@@ -20,12 +20,19 @@ class MethodChannelHardwareSigner implements HardwareSigner {
     if (raw == null) {
       throw HardwareSignerException('generateKey returned nothing');
     }
-    return HardwareKey(
+    final key = HardwareKey(
       alias: alias,
       publicKeySpki: _bytes(raw['publicKeySpki']),
       backend: _backend(raw['backend'] as String?),
       authRequired: raw['authRequired'] as bool? ?? false,
     );
+    if (!key.authRequired) {
+      await deleteKey(alias);
+      throw HardwareSignerException(
+        'auth-backed key required; refusing unauthenticated enrollment',
+      );
+    }
+    return key;
   }
 
   @override

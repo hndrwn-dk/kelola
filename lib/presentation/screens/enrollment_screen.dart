@@ -202,6 +202,13 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
           ),
           const SizedBox(height: 8),
           KelolaCommand(command: line),
+          if (enrollment.authRequired) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Presence required',
+              style: KelolaType.body(color: c.dim, size: 12),
+            ),
+          ],
           if (installBlock != null) ...[
             const SizedBox(height: 18),
             Text(

@@ -1,5 +1,13 @@
 import 'package:kelola/domain/llm/provider.dart';
 
+bool isLlmLoopbackHost(String host) {
+  final h = host.trim().toLowerCase();
+  return h == 'localhost' ||
+      h == '127.0.0.1' ||
+      h == '::1' ||
+      h == '[::1]';
+}
+
 class LlmEndpointConfig {
   const LlmEndpointConfig({
     this.baseUrl,
@@ -26,11 +34,25 @@ class LlmEndpointConfig {
     return uri != null && uri.hasScheme && uri.host.isNotEmpty;
   }
 
+  bool hasValidBaseUrlFor(LlmProvider provider) {
+    if (!hasValidBaseUrl) {
+      return false;
+    }
+    if (provider != LlmProvider.openaiCompatible) {
+      return true;
+    }
+    final uri = baseUri!;
+    if (uri.scheme == 'https') {
+      return true;
+    }
+    return uri.scheme == 'http' && isLlmLoopbackHost(uri.host);
+  }
+
   bool isCompleteFor(LlmProvider provider) {
     if (!provider.enabled) {
       return true;
     }
-    if (!hasValidBaseUrl) {
+    if (!hasValidBaseUrlFor(provider)) {
       return false;
     }
     if (model?.trim().isEmpty ?? true) {

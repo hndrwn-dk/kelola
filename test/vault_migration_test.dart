@@ -6,6 +6,7 @@ import 'package:kelola/data/db/tunnel_repository.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
 import 'package:kelola/data/vault/vault_store.dart';
 import 'package:kelola/domain/host_env/host_env.dart';
+import 'package:kelola/domain/vault/vault.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
@@ -101,5 +102,96 @@ CREATE TABLE hosts (
       isTrue,
     );
     expect(await store.deviceId(), isNotEmpty);
+    final env = snap.records.singleWhere((r) => r.kind == VaultRecordKind.env);
+    expect(env.payload['name'], 'ROLE');
+    expect(env.payload.containsKey('value'), isFalse);
+  });
+
+  test('vault apply refuses to overwrite or delete existing host-key pins',
+      () async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    final hosts = HostRepository(db);
+    final store = VaultStore(
+      db: db,
+      hosts: hosts,
+      tunnels: TunnelRepository(db),
+      selectionOf: () async => FleetProbeSelectionStore.memory(),
+    );
+    final host = await hosts.insert(
+      alias: 'edge',
+      address: '10.0.0.9',
+      port: 22,
+      username: 'ops',
+    );
+    await hosts.pinKey(
+      hostId: host.id,
+      algorithm: 'ssh-ed25519',
+      fingerprint: 'SHA256:good',
+    );
+    await store.apply(
+      VaultDiff(
+        added: const [],
+        updated: [
+          VaultRecord(
+            id: host.id,
+            kind: VaultRecordKind.hostKey,
+            updatedAt: DateTime.utc(2030, 1, 1),
+            deviceId: 'attacker',
+            payload: const {
+              'algorithm': 'ssh-ed25519',
+              'fingerprint': 'SHA256:evil',
+            },
+          ),
+        ],
+        deleted: [
+          VaultRecord(
+            id: host.id,
+            kind: VaultRecordKind.hostKey,
+            updatedAt: DateTime.utc(2030, 1, 2),
+            deviceId: 'attacker',
+            payload: const {},
+            tombstone: true,
+          ),
+        ],
+      ),
+    );
+    final pin = await hosts.pinnedKey(host.id);
+    expect(pin?.fingerprint, 'SHA256:good');
+  });
+
+  test('vault apply never enables agent forwarding from a blob', () async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    final hosts = HostRepository(db);
+    final store = VaultStore(
+      db: db,
+      hosts: hosts,
+      tunnels: TunnelRepository(db),
+      selectionOf: () async => FleetProbeSelectionStore.memory(),
+    );
+    await store.apply(
+      VaultDiff(
+        added: [
+          VaultRecord(
+            id: 'imported',
+            kind: VaultRecordKind.host,
+            updatedAt: DateTime.utc(2026, 9, 1),
+            deviceId: 'other',
+            payload: const {
+              'alias': 'jump',
+              'address': '10.1.1.1',
+              'port': 22,
+              'username': 'ops',
+              'agentForward': true,
+            },
+          ),
+        ],
+        updated: const [],
+        deleted: const [],
+      ),
+    );
+    final imported = await hosts.get('imported');
+    expect(imported?.agentForward, isFalse);
   });
 }

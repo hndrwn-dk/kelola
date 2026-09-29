@@ -39,6 +39,38 @@ void main() {
         isTrue,
       );
     });
+
+    test('openaiCompatible rejects cleartext HTTP except loopback', () {
+      const lan = LlmEndpointConfig(
+        baseUrl: 'http://192.168.1.5:8080/v1',
+        model: 'gpt-4o-mini',
+        apiKey: 'sk-test',
+      );
+      expect(lan.isCompleteFor(LlmProvider.openaiCompatible), isFalse);
+      expect(lan.hasValidBaseUrlFor(LlmProvider.openaiCompatible), isFalse);
+
+      const loopback = LlmEndpointConfig(
+        baseUrl: 'http://127.0.0.1:8080/v1',
+        model: 'gpt-4o-mini',
+        apiKey: 'sk-test',
+      );
+      expect(loopback.isCompleteFor(LlmProvider.openaiCompatible), isTrue);
+
+      const localhost = LlmEndpointConfig(
+        baseUrl: 'http://localhost:8080/v1',
+        model: 'gpt-4o-mini',
+        apiKey: 'sk-test',
+      );
+      expect(localhost.isCompleteFor(LlmProvider.openaiCompatible), isTrue);
+
+      expect(
+        const LlmEndpointConfig(
+          baseUrl: 'http://192.168.1.5:11434',
+          model: 'llama3.2',
+        ).isCompleteFor(LlmProvider.ollama),
+        isTrue,
+      );
+    });
   });
 
   group('LlmSettingsBundle', () {

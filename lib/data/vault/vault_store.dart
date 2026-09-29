@@ -269,6 +269,10 @@ class VaultStore {
           HostTagsCompanion.insert(hostId: hostId, tag: tag),
         );
       case VaultRecordKind.hostKey:
+        final existing = await _hosts.pinnedKey(record.id);
+        if (existing != null) {
+          return;
+        }
         await _db.into(_db.hostKeys).insertOnConflictUpdate(
           HostKeysCompanion.insert(
             hostId: record.id,
@@ -331,7 +335,7 @@ class VaultStore {
         sudoNeedsPassword: Value(
           record.payload['sudoNeedsPassword'] as bool? ?? false,
         ),
-        agentForward: Value(record.payload['agentForward'] as bool? ?? false),
+        agentForward: const Value(false),
         sshCertificate: Value(record.payload['sshCertificate'] as String?),
         createdAt: now,
         updatedAt: Value(record.updatedAt),
@@ -363,6 +367,9 @@ class VaultStore {
   }
 
   Future<void> _delete(VaultRecord record) async {
+    if (record.kind == VaultRecordKind.hostKey) {
+      return;
+    }
     final device = await deviceId();
     await _db.into(_db.vaultTombstones).insertOnConflictUpdate(
       VaultTombstonesCompanion.insert(
@@ -385,8 +392,7 @@ class VaultStore {
               .go();
         }
       case VaultRecordKind.hostKey:
-        await (_db.delete(_db.hostKeys)..where((t) => t.hostId.equals(record.id)))
-            .go();
+        break;
       case VaultRecordKind.tunnel:
         await _tunnels.delete(record.id);
       case VaultRecordKind.env:

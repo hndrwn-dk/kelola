@@ -116,13 +116,13 @@ ${firewallAfterApply()}
 ''';
     }
     final handle = change.handle;
-    if (handle == null || handle.isEmpty) {
+    if (!isNftHandle(handle)) {
       return 'echo missing-handle; exit 1';
     }
     return '''
 LC_ALL=C
 ${firewallScheduleRevert('sudo -n /usr/sbin/nft add rule inet filter input $proto dport $num accept comment kelola')}
-sudo -n /usr/sbin/nft delete rule inet filter input handle $handle
+sudo -n /usr/sbin/nft delete rule inet filter input handle ${shellSingleQuote(handle!)}
 ${firewallAfterApply()}
 ''';
   }
@@ -253,7 +253,7 @@ echo reverted
 
   String _nft(String kill) {
     final handle = change.handle;
-    if (handle == null || handle.isEmpty) {
+    if (!isNftHandle(handle)) {
       return '''
 LC_ALL=C
 ${kill}echo reverted
@@ -261,7 +261,7 @@ ${kill}echo reverted
     }
     return '''
 LC_ALL=C
-${kill}sudo -n /usr/sbin/nft delete rule inet filter input handle $handle
+${kill}sudo -n /usr/sbin/nft delete rule inet filter input handle ${shellSingleQuote(handle!)}
 echo reverted
 ''';
   }

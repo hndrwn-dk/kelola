@@ -25,5 +25,9 @@ void main() {
     expect(swift, contains('deviceOwnerAuthentication'));
     expect(swift, contains('canAuthenticate'));
     expect(swift, contains('authenticate'));
+    expect(swift, contains('setSecure'));
+    expect(swift, contains('willResignActiveNotification'));
+    expect(swift, contains('didBecomeActiveNotification'));
+    expect(swift, isNot(contains('case "setSecure":\n      result(nil)')));
   });
 }

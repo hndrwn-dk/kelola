@@ -147,6 +147,48 @@ void main() {
     expect(kVaultSftpRelPath, '.kelola/vault.age');
   });
 
+  test('pack drops env values and snippet templates unless includeSecrets', () {
+    final env = VaultRecord(
+      id: 'e1',
+      kind: VaultRecordKind.env,
+      updatedAt: DateTime.utc(2026, 9, 1),
+      deviceId: 'dev-a',
+      payload: const {
+        'scope': 'host',
+        'scopeId': 'h1',
+        'name': 'TOKEN',
+        'value': 'super-secret',
+      },
+    );
+    final snippet = VaultRecord(
+      id: 's1',
+      kind: VaultRecordKind.snippet,
+      updatedAt: DateTime.utc(2026, 9, 1),
+      deviceId: 'dev-a',
+      payload: const {
+        'name': 'restart',
+        'template': 'systemctl restart secret-unit',
+      },
+    );
+    final redacted = packVaultRecords(
+      records: [env, snippet],
+      deviceId: 'dev-a',
+      includeSecrets: false,
+    );
+    expect(redacted.records[0].payload.containsKey('value'), isFalse);
+    expect(redacted.records[0].payload['name'], 'TOKEN');
+    expect(redacted.records[1].payload.containsKey('template'), isFalse);
+    expect(redacted.records[1].payload['name'], 'restart');
+
+    final full = packVaultRecords(
+      records: [env, snippet],
+      deviceId: 'dev-a',
+      includeSecrets: true,
+    );
+    expect(full.records[0].payload['value'], 'super-secret');
+    expect(full.records[1].payload['template'], contains('secret-unit'));
+  });
+
   test('env records encode without bumping vault schema', () {
     final record = VaultRecord(
       id: 'e1',
