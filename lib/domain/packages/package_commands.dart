@@ -21,8 +21,8 @@ class PackageCommands {
   static String listUpdates(PackageManager pkg) {
     return switch (pkg) {
       PackageManager.apt => 'apt-get -s upgrade',
-      PackageManager.dnf => 'dnf check-update --refresh',
-      PackageManager.yum => 'yum check-update',
+      PackageManager.dnf => _checkUpdateRefresh('dnf'),
+      PackageManager.yum => _checkUpdateRefresh('yum'),
       PackageManager.zypper => 'zypper -q lu',
       PackageManager.apk => "apk version -l '<'",
       PackageManager.pacman =>
@@ -31,11 +31,20 @@ class PackageCommands {
     };
   }
 
+  /// Same command as an interactive `sudo dnf check-update --refresh`, with
+  /// stdin closed so it cannot wait on a TTY. No unprivileged dnf fallback:
+  /// that hung on Rocky while the VM command (root, TTY) finished quickly.
+  static String _checkUpdateRefresh(String bin) {
+    return '/usr/bin/timeout -k 5 60 sudo -n /usr/bin/$bin --color=never '
+        'check-update --refresh </dev/null';
+  }
+
   /// Fleet tile batch — never `--refresh`. Metadata refresh made Rocky hosts
   /// exceed the fleet timeout and look unreachable while SSH stayed up.
   static String listUpdatesForFleet(PackageManager pkg) {
     return switch (pkg) {
       PackageManager.dnf => 'dnf check-update',
+      PackageManager.yum => 'yum check-update',
       _ => listUpdates(pkg),
     };
   }
@@ -49,8 +58,12 @@ class PackageCommands {
       PackageManager.apt =>
         "apt-get -s upgrade 2>/dev/null | grep '^Inst ' | "
             "grep -iE 'security|Debian-Security' || true",
-      PackageManager.dnf => 'dnf updateinfo list security',
-      PackageManager.yum => 'yum updateinfo list security',
+      PackageManager.dnf =>
+        'timeout -k 5 20 sudo -n /usr/bin/dnf --color=never --cacheonly '
+            'updateinfo list security || true',
+      PackageManager.yum =>
+        'timeout -k 5 20 sudo -n /usr/bin/yum --color=never --cacheonly '
+            'updateinfo list security || true',
       PackageManager.zypper => 'zypper lp --category security',
       PackageManager.apk => 'echo N/A',
       PackageManager.pacman => 'echo N/A',

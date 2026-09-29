@@ -94,4 +94,31 @@ void main() {
     expect(probed, [host.id]);
     expect(probed, isNot(contains(other.id)));
   });
+
+  test('probe failure keeps previously cached package counts', () async {
+    final host = await seed();
+    await repo.saveFleetCache(
+      FleetHostHealth(
+        hostId: host.id,
+        alias: host.alias,
+        reachable: true,
+        load1: 0.2,
+        failedUnitCount: 0,
+        pendingUpdates: 7,
+        securityUpdates: 2,
+        fetchedAt: DateTime.utc(2026, 9, 27, 11),
+      ),
+    );
+    final runner = FleetWatchRunner(hosts: repo);
+    await runner.tick(
+      hosts: [host],
+      thresholds: FleetWatchThresholds.defaults,
+      now: DateTime.utc(2026, 9, 27, 12),
+      probe: (_) async => throw StateError('ssh down'),
+    );
+    final cached = (await repo.loadFleetCacheByHost())[host.id]!;
+    expect(cached.reachable, isFalse);
+    expect(cached.pendingUpdates, 7);
+    expect(cached.securityUpdates, 2);
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:kelola/domain/sudo_hint.dart';
 
 class KelolaException implements Exception {
@@ -89,4 +91,30 @@ class TransferCancelledException implements Exception {
 
   @override
   String toString() => 'Transfer cancelled';
+}
+
+class ProbeTimeoutException extends KelolaException {
+  ProbeTimeoutException({
+    required this.title,
+    required this.timeout,
+  }) : super(
+          'Timed out after ${timeout.inSeconds}s running "$title". Pull to try again.',
+        );
+
+  final String title;
+  final Duration timeout;
+}
+
+Future<T> withProbeTimeout<T>({
+  required String title,
+  required Duration timeout,
+  required Future<T> future,
+}) {
+  return future.timeout(
+    timeout,
+    onTimeout: () => throw ProbeTimeoutException(
+      title: title,
+      timeout: timeout,
+    ),
+  );
 }

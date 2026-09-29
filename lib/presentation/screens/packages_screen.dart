@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/packages/package_snapshot.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
@@ -15,6 +17,9 @@ import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/confirm_package_action.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 import 'package:kelola/providers.dart';
+
+const packagesFetchingCopy =
+    'Refreshing package metadata on this host. You can go back; that stops the listing.';
 
 class PackagesScreen extends ConsumerStatefulWidget {
   const PackagesScreen({super.key, required this.hostId});
@@ -33,6 +38,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
   bool _landed = false;
   String? _error;
   bool _loading = true;
+  TransferCancel? _listCancel;
 
   @override
   void initState() {
@@ -40,7 +46,16 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _listCancel?.cancel();
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    _listCancel?.cancel();
+    final cancel = TransferCancel();
+    _listCancel = cancel;
     setState(() {
       _loading = true;
       _error = null;
@@ -49,12 +64,14 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
       final repo = ref.read(hostRepositoryProvider);
       final host = await repo.get(widget.hostId);
       if (host == null) {
-        setState(() => _error = 'Host missing');
+        if (!cancel.isCancelled && mounted) {
+          setState(() => _error = 'Host missing');
+        }
         return;
       }
       await ref.read(enrollmentProvider.notifier).ensureKey();
       var facts = await repo.facts(host.id);
-      if (!mounted) {
+      if (cancel.isCancelled || !mounted) {
         return;
       }
       facts ??= await runHostProbe(
@@ -62,18 +79,21 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
         context: context,
         host: host,
         probe: const HostFactsProbe(),
+        cancel: cancel,
       );
-      if (!mounted) {
+      if (cancel.isCancelled || !mounted) {
         return;
       }
       final resolved = facts;
       if (resolved == null) {
         return;
       }
+      setState(() {
+        _host = host;
+        _facts = resolved;
+      });
       if (resolved.pkg == PackageManager.unknown) {
         setState(() {
-          _host = host;
-          _facts = resolved;
           _snap = PackageSnapshot(
             manager: resolved.pkg,
             updates: const [],
@@ -88,7 +108,19 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
         host: host,
         probe: const PackageListProbe(),
         facts: resolved,
+        cancel: cancel,
       );
+      if (cancel.isCancelled || !mounted) {
+        return;
+      }
+      await repo.savePackageUpdateCounts(
+        hostId: host.id,
+        alias: host.alias,
+        snapshot: snap,
+      );
+      if (cancel.isCancelled || !mounted) {
+        return;
+      }
       setState(() {
         _host = host;
         _facts = resolved;
@@ -98,10 +130,15 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
           _landed = true;
         }
       });
+    } on TransferCancelledException {
+      return;
     } catch (e) {
+      if (cancel.isCancelled || !mounted) {
+        return;
+      }
       setState(() => _error = describeSshError(e));
     } finally {
-      if (mounted) {
+      if (mounted && identical(_listCancel, cancel)) {
         setState(() => _loading = false);
       }
     }
@@ -158,6 +195,9 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
   }
 
   String get _kicker {
+    if (_loading && _snap == null) {
+      return 'FETCHING UPDATES';
+    }
     final snap = _snap;
     final facts = _facts;
     if (snap == null || facts == null) {
@@ -195,22 +235,23 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
               backgroundColor: c.surface,
               color: c.amber,
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-            child: Wrap(
-              spacing: 5,
-              runSpacing: 5,
-              children: [
-                for (final filter in PackageListFilter.values)
-                  FilterPill(
-                    label: packageListChipLabel(filter, counts),
-                    selected: _filter == filter,
-                    enabled: filter != PackageListFilter.security || securityOn,
-                    onTap: () => setState(() => _filter = filter),
-                  ),
-              ],
+          if (snap != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              child: Wrap(
+                spacing: 5,
+                runSpacing: 5,
+                children: [
+                  for (final filter in PackageListFilter.values)
+                    FilterPill(
+                      label: packageListChipLabel(filter, counts),
+                      selected: _filter == filter,
+                      enabled: filter != PackageListFilter.security || securityOn,
+                      onTap: () => setState(() => _filter = filter),
+                    ),
+                ],
+              ),
             ),
-          ),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
@@ -235,6 +276,13 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
     List<PackageUpdate> visible,
   ) {
     final facts = _facts;
+    if (_loading && snap == null) {
+      return ListView(
+        children: const [
+          KelolaEmpty(body: packagesFetchingCopy),
+        ],
+      );
+    }
     if (facts != null && facts.pkg == PackageManager.unknown) {
       return ListView(
         children: const [

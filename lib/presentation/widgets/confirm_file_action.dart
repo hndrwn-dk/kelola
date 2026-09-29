@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/files/sftp_denied.dart';
 import 'package:kelola/domain/files/sftp_lockout.dart';
 import 'package:kelola/domain/files/sftp_path.dart';
 
@@ -139,4 +140,32 @@ Future<bool> _sheet(
     },
   );
   return confirmed;
+}
+
+Future<void> showSftpDeniedSheet(
+  BuildContext context, {
+  required String message,
+  required String path,
+  required String username,
+}) {
+  final copy = sftpDeniedCopy(
+    message: message,
+    path: path,
+    username: username,
+  );
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        child: ActionableError(
+          title: copy.title,
+          body: copy.body,
+          snippet: copy.snippet,
+          onDismiss: () => Navigator.of(ctx).pop(),
+        ),
+      );
+    },
+  );
 }

@@ -254,14 +254,22 @@ class SshSessionPool {
           );
           parsed = probe.isStream
               ? await future
-              : await future.timeout(probe.timeout);
+              : await withProbeTimeout(
+                  title: probe.auditTitle,
+                  timeout: probe.timeout,
+                  future: future,
+                );
         } finally {
           await sftp.close();
         }
       } else {
-        final result = await client
-            .runWithResult(command)
-            .timeout(probe.timeout);
+        final result = await _runExec(
+          client: client,
+          command: command,
+          title: probe.auditTitle,
+          timeout: probe.timeout,
+          cancel: cancel,
+        );
         exitCode = result.exitCode;
         if (probe is JournalProbe) {
           logJournalProbeReceive(
@@ -352,6 +360,88 @@ class SshSessionPool {
       }
       rethrow;
     }
+  }
+
+  Future<SSHRunResult> _runExec({
+    required SSHClient client,
+    required String command,
+    required String title,
+    required Duration timeout,
+    TransferCancel? cancel,
+  }) async {
+    if (cancel?.isCancelled == true) {
+      throw const TransferCancelledException();
+    }
+    final session = await client.execute(command);
+    var killed = false;
+    void kill() {
+      if (killed) {
+        return;
+      }
+      killed = true;
+      try {
+        session.kill(SSHSignal.TERM);
+      } catch (_) {}
+      try {
+        session.close();
+      } catch (_) {}
+    }
+
+    cancel?.addListener(kill);
+    if (cancel?.isCancelled == true) {
+      kill();
+      throw const TransferCancelledException();
+    }
+    try {
+      final result = await withProbeTimeout(
+        title: title,
+        timeout: timeout,
+        future: _readExecResult(session),
+      );
+      if (cancel?.isCancelled == true) {
+        throw const TransferCancelledException();
+      }
+      return result;
+    } on ProbeTimeoutException {
+      kill();
+      rethrow;
+    } on TransferCancelledException {
+      kill();
+      rethrow;
+    }
+  }
+
+  Future<SSHRunResult> _readExecResult(SSHSession session) async {
+    final stdoutBuilder = BytesBuilder(copy: false);
+    final stderrBuilder = BytesBuilder(copy: false);
+    final stdoutDone = Completer<void>();
+    final stderrDone = Completer<void>();
+    session.stdout.listen(
+      stdoutBuilder.add,
+      onDone: stdoutDone.complete,
+      onError: stdoutDone.completeError,
+      cancelOnError: true,
+    );
+    session.stderr.listen(
+      stderrBuilder.add,
+      onDone: stderrDone.complete,
+      onError: stderrDone.completeError,
+      cancelOnError: true,
+    );
+    await Future.wait(
+      [stdoutDone.future, stderrDone.future],
+      eagerError: true,
+    );
+    await session.done;
+    final stdout = stdoutBuilder.takeBytes();
+    final stderr = stderrBuilder.takeBytes();
+    return SSHRunResult(
+      output: Uint8List.fromList([...stdout, ...stderr]),
+      stdout: stdout,
+      stderr: stderr,
+      exitCode: session.exitCode,
+      exitSignal: session.exitSignal,
+    );
   }
 
   Future<JournalFollowHandle> startJournalFollow(

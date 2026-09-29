@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
+import 'package:kelola/domain/exceptions.dart';
 
 void main() {
   test('unwraps SSHAuthAbortError reason from dartssh2', () {
@@ -63,6 +64,37 @@ void main() {
       'Timed out waiting for SSH login. Check Wi-Fi/VPN and that the host is up.',
     );
     expectConnectionCopy(text);
+  });
+
+  test('probe timeout names the command, not SSH login', () {
+    final text = describeSshError(
+      ProbeTimeoutException(
+        title: 'Listed package updates',
+        timeout: const Duration(seconds: 60),
+      ),
+    );
+    expect(text, contains('Listed package updates'));
+    expect(text, contains('60s'));
+    expect(text, isNot(contains('SSH login')));
+    expectConnectionCopy(text);
+  });
+
+  test('withProbeTimeout throws ProbeTimeoutException, not a login timeout',
+      () async {
+    await expectLater(
+      withProbeTimeout(
+        title: 'Listed package updates',
+        timeout: const Duration(milliseconds: 20),
+        future: Completer<int>().future,
+      ),
+      throwsA(
+        isA<ProbeTimeoutException>().having(
+          (e) => e.title,
+          'title',
+          'Listed package updates',
+        ),
+      ),
+    );
   });
 
   test('server close keeps the server message and drops handshake jargon', () {

@@ -35,13 +35,16 @@ class FleetWatchRunner {
       try {
         live = await probe(host);
       } catch (_) {
+        final cached = (await _hosts.loadFleetCacheByHost())[host.id];
         live = FleetHostHealth(
           hostId: host.id,
           alias: host.alias,
           reachable: false,
-          load1: 0,
-          failedUnitCount: 0,
-          pendingUpdates: 0,
+          load1: cached?.load1 ?? 0,
+          failedUnitCount: cached?.failedUnitCount ?? 0,
+          pendingUpdates: cached?.pendingUpdates ?? 0,
+          securityUpdates: cached?.securityUpdates ?? 0,
+          rebootRequired: cached?.rebootRequired ?? false,
           fetchedAt: now.toUtc(),
           outcome: HostProbeOutcome.unreachable,
         );
