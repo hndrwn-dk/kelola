@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kelola/data/keystore/hardware_signer.dart';
 import 'package:kelola/data/keystore/method_channel_hardware_signer.dart';
 
 void main() {
@@ -72,5 +73,36 @@ void main() {
       throwsA(isA<PlatformException>()),
     );
     expect(types, isEmpty);
+  });
+
+  testWidgets('generateKey refuses a key that does not require auth',
+      (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      (call) async {
+        if (call.method == 'generateKey') {
+          return <String, dynamic>{
+            'publicKeySpki': Uint8List.fromList([1, 2, 3]),
+            'backend': 'tee',
+            'authRequired': false,
+          };
+        }
+        if (call.method == 'deleteKey') {
+          return null;
+        }
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      );
+    });
+    final signer = MethodChannelHardwareSigner(channel: channel);
+    await expectLater(
+      signer.generateKey('kelola'),
+      throwsA(isA<HardwareSignerException>()),
+    );
   });
 }

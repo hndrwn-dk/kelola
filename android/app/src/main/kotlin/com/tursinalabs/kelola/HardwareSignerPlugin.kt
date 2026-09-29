@@ -107,22 +107,19 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
     private fun generateKey(alias: String): Map<String, Any> {
         val ks = keyStore()
         if (ks.containsAlias(alias)) {
-            return publicPayload(alias, ks)
+            return requireAuthBacked(alias, ks, publicPayload(alias, ks))
         }
 
         var backend = "software"
-        var auth = false
         val attempts = listOf(
-            KeyAttempt(strongBox = true, auth = true, label = "strongbox"),
-            KeyAttempt(strongBox = false, auth = true, label = "tee"),
-            KeyAttempt(strongBox = false, auth = false, label = "tee"),
+            KeyAttempt(strongBox = true, label = "strongbox"),
+            KeyAttempt(strongBox = false, label = "tee"),
         )
         var last: Exception? = null
         for (attempt in attempts) {
             try {
                 createKey(alias, attempt)
                 backend = attempt.label
-                auth = attempt.auth
                 last = null
                 break
             } catch (e: Exception) {
@@ -135,7 +132,18 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         }
         val payload = publicPayload(alias, ks).toMutableMap()
         payload["backend"] = backend
-        payload["authRequired"] = auth
+        return requireAuthBacked(alias, ks, payload)
+    }
+
+    private fun requireAuthBacked(
+        alias: String,
+        ks: KeyStore,
+        payload: Map<String, Any>,
+    ): Map<String, Any> {
+        if (payload["authRequired"] != true) {
+            ks.deleteEntry(alias)
+            throw IllegalStateException("refusing unauthenticated key")
+        }
         return payload
     }
 
@@ -144,8 +152,8 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         val builder = KeyGenParameterSpec.Builder(alias, purposes)
             .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
             .setDigests(KeyProperties.DIGEST_SHA256)
-            .setUserAuthenticationRequired(attempt.auth)
-        if (attempt.auth && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            .setUserAuthenticationRequired(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // 300s read/mutate window (Fleet one-auth). Destructive actions
             // use an app-level BiometricPrompt gate — Keystore cannot re-auth
             // selected ops on a timed key without a second alias.
@@ -164,6 +172,15 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         val gen = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, ANDROID_KEYSTORE)
         gen.initialize(builder.build())
         gen.generateKeyPair()
+        val created = keyStore()
+        val privateKey = created.getKey(alias, null) as? PrivateKey
+            ?: throw IllegalStateException("key missing after generate")
+        val factory = KeyFactory.getInstance(privateKey.algorithm, ANDROID_KEYSTORE)
+        val info = factory.getKeySpec(privateKey, KeyInfo::class.java)
+        if (!info.isUserAuthenticationRequired) {
+            created.deleteEntry(alias)
+            throw IllegalStateException("refusing unauthenticated key")
+        }
     }
 
     private fun publicPayload(alias: String, ks: KeyStore): Map<String, Any> {
@@ -355,7 +372,6 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
 
     private data class KeyAttempt(
         val strongBox: Boolean,
-        val auth: Boolean,
         val label: String,
     )
 

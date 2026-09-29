@@ -6,6 +6,8 @@ const Set<String> kVaultSecretKeys = {
   'pem',
   'apiKey',
   'publicKeySpkiB64',
+  'value',
+  'template',
 };
 
 enum VaultRecordKind {

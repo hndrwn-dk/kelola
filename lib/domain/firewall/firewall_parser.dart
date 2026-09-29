@@ -3,6 +3,15 @@ import 'dart:convert';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/firewall/firewall_snapshot.dart';
 
+final _nftHandlePattern = RegExp(r'^[0-9]+$');
+
+bool isNftHandle(String? handle) {
+  if (handle == null || handle.isEmpty) {
+    return false;
+  }
+  return _nftHandlePattern.hasMatch(handle);
+}
+
 class FirewallParser {
   const FirewallParser();
 
@@ -173,7 +182,8 @@ class FirewallParser {
         final family = '${rule['family'] ?? ''}';
         final table = '${rule['table'] ?? ''}';
         final chain = '${rule['chain'] ?? ''}';
-        final handle = '${rule['handle'] ?? ''}';
+        final rawHandle = '${rule['handle'] ?? ''}';
+        final handle = isNftHandle(rawHandle) ? rawHandle : '';
         final expr = rule['expr'];
         final blob = jsonEncode(rule);
         final port = _nftPort(expr, blob);

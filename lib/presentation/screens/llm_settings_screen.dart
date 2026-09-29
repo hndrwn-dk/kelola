@@ -145,6 +145,11 @@ class _LlmSettingsScreenState extends ConsumerState<LlmSettingsScreen> {
               controller: _apiKey,
               mono: true,
             ),
+            const SizedBox(height: 8),
+            Text(
+              'HTTPS required. HTTP is only allowed on localhost.',
+              style: KelolaType.body(color: context.kc.dim, size: 12),
+            ),
           ],
         ],
       ),

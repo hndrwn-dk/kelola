@@ -26,12 +26,9 @@ class MethodChannelAppLock implements AppLockPort {
     try {
       return await _channel.invokeMethod<bool>('authenticate') ?? false;
     } on MissingPluginException {
-      return true;
-    } on PlatformException catch (e) {
-      if (e.code == 'cancelled' || e.code == 'auth_failed') {
-        return false;
-      }
-      return true;
+      return false;
+    } on PlatformException {
+      return false;
     }
   }
 
