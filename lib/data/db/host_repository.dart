@@ -13,6 +13,7 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_edit.dart';
 import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/domain/hosts/ssh_config_import.dart';
+import 'package:kelola/domain/packages/package_snapshot.dart';
 import 'package:kelola/domain/search/inventory_search.dart';
 import 'package:kelola/domain/journal/journal_bookmark.dart';
 import 'package:kelola/domain/journal/journal_view.dart';
@@ -1254,6 +1255,39 @@ class HostRepository {
     final rows = await _db.select(_db.hostTags).get();
     final set = rows.map((r) => r.tag).toSet().toList()..sort();
     return set;
+  }
+
+  Future<void> savePackageUpdateCounts({
+    required String hostId,
+    required String alias,
+    required PackageSnapshot snapshot,
+  }) async {
+    final existing = (await loadFleetCacheByHost())[hostId];
+    final now = DateTime.now().toUtc();
+    if (existing != null) {
+      await saveFleetCache(
+        existing.copyWith(
+          pendingUpdates: snapshot.updates.length,
+          securityUpdates: snapshot.securityCount,
+          rebootRequired: snapshot.rebootRequired,
+          fetchedAt: now,
+        ),
+      );
+      return;
+    }
+    await saveFleetCache(
+      FleetHostHealth(
+        hostId: hostId,
+        alias: alias,
+        reachable: true,
+        load1: 0,
+        failedUnitCount: 0,
+        pendingUpdates: snapshot.updates.length,
+        securityUpdates: snapshot.securityCount,
+        rebootRequired: snapshot.rebootRequired,
+        fetchedAt: now,
+      ),
+    );
   }
 
   Future<void> saveFleetCache(FleetHostHealth health) async {

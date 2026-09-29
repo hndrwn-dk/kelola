@@ -17,4 +17,9 @@ void main() {
     expect(sftpParent('/'), '/');
     expect(sftpBakPath('/etc/nginx/nginx.conf'), '/etc/nginx/nginx.conf.bak');
   });
+
+  test('login home is /home/user except root', () {
+    expect(sftpLoginHome('hendr'), '/home/hendr');
+    expect(sftpLoginHome('root'), '/root');
+  });
 }

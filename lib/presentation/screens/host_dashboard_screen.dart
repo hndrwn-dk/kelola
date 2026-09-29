@@ -793,6 +793,23 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   Future<void> _open(Widget Function(String hostId) builder) async {
     await Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => builder(widget.hostId)));
+    if (!mounted) {
+      return;
+    }
+    await _reloadPendingUpdates();
+  }
+
+  Future<void> _reloadPendingUpdates() async {
+    final fleetCache =
+        await ref.read(hostRepositoryProvider).loadFleetCacheByHost();
+    if (!mounted) {
+      return;
+    }
+    final pending = fleetCache[widget.hostId]?.pendingUpdates;
+    setState(() {
+      _pendingUpdates =
+          fleetCache.containsKey(widget.hostId) ? pending : _pendingUpdates;
+    });
   }
 
   Future<void> _editNote() async {

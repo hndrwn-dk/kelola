@@ -1591,6 +1591,7 @@ class ActionableError extends StatelessWidget {
       risk: RiskLevel.read,
       status: HealthStatus.failed,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/packages/package_commands.dart';
@@ -9,6 +10,7 @@ import 'package:kelola/domain/packages/package_snapshot.dart';
 import 'package:kelola/domain/probes/package_apply_probe.dart';
 import 'package:kelola/domain/probes/package_list_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 
 String fixture(String name) =>
     File('test/fixtures/packages/$name').readAsStringSync();
@@ -34,6 +36,7 @@ void main() {
     const probe = PackageListProbe();
     final apt = probe.command(factsOf(PackageManager.apt));
     expect(apt, contains('apt-get -s upgrade'));
+    expect(apt, isNot(contains('apt-get update')));
     expect(apt, contains("grep '^Inst '"));
     expect(apt, contains('Debian-Security'));
     expect(apt, isNot(contains('security.sources.list')));
@@ -43,8 +46,11 @@ void main() {
     expect(apt, contains('echo apt'));
 
     final dnf = probe.command(factsOf(PackageManager.dnf));
-    expect(dnf, contains('dnf check-update --refresh'));
-    expect(dnf, contains('dnf updateinfo list security'));
+    expect(dnf, contains(
+      '/usr/bin/timeout -k 5 60 sudo -n /usr/bin/dnf --color=never check-update --refresh </dev/null',
+    ));
+    expect(dnf, isNot(contains('|| timeout -k 5 15 /usr/bin/dnf')));
+    expect(dnf, contains('updateinfo list security'));
     expect(dnf, contains('echo dnf'));
 
     final zypper = probe.command(factsOf(PackageManager.zypper));
@@ -60,8 +66,13 @@ void main() {
     expect(pacman, contains('checkupdates'));
 
     final yum = probe.command(factsOf(PackageManager.yum));
-    expect(yum, contains('yum check-update'));
-    expect(yum, contains('yum updateinfo list security'));
+    expect(yum, contains(
+      '/usr/bin/timeout -k 5 60 sudo -n /usr/bin/yum --color=never check-update --refresh </dev/null',
+    ));
+    expect(yum, isNot(contains('|| timeout -k 5 15 /usr/bin/yum')));
+    expect(yum, contains('updateinfo list security'));
+
+    expect(const PackageListProbe().timeout, const Duration(seconds: 70));
   });
 
   test('apk and pacman do not claim a security filter', () {
@@ -236,5 +247,44 @@ ${fixture('apt_upgrade.txt')}
     final snap = probe.parse(out, '', 0);
     expect(snap.manager, PackageManager.apt);
     expect(snap.updates, isNotEmpty);
+  });
+
+  test('empty dnf list plus sudo password is SudoRequiredException, not zero',
+      () {
+    const probe = PackageListProbe();
+    const out = '''
+---PKG---
+dnf
+---UPDATES---
+---SECURITY---
+---REBOOT---
+''';
+    expect(
+      () => probe.parse(out, 'sudo: a password is required', 0),
+      throwsA(
+        isA<SudoRequiredException>()
+            .having((e) => e.context.kind, 'kind', SudoHintKind.packages)
+            .having(
+              (e) => e.context.binary,
+              'binary',
+              '/usr/bin/dnf check-update --refresh',
+            ),
+      ),
+    );
+  });
+
+  test('dnf cache packages still list when sudo -n refresh needs a password',
+      () {
+    const probe = PackageListProbe();
+    final out = '''
+---PKG---
+dnf
+---UPDATES---
+${fixture('dnf_check_update.txt')}
+---SECURITY---
+---REBOOT---
+''';
+    final snap = probe.parse(out, 'sudo: a password is required', 0);
+    expect(snap.updates.map((u) => u.name), containsAll(['openssl', 'kernel']));
   });
 }

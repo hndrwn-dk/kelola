@@ -8,6 +8,9 @@ String describeSshError(Object error) {
   if (error is SudoRequiredException) {
     return error.message;
   }
+  if (error is ProbeTimeoutException) {
+    return error.message;
+  }
   if (error is TimeoutException) {
     return 'Timed out waiting for SSH login. Check Wi-Fi/VPN and that the host is up.';
   }

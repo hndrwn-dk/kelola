@@ -11,6 +11,7 @@ import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/files/chmod_mode.dart';
 import 'package:kelola/domain/files/file_edit_save.dart';
+import 'package:kelola/domain/files/sftp_denied.dart';
 import 'package:kelola/domain/files/sftp_entry.dart';
 import 'package:kelola/domain/files/sftp_format.dart';
 import 'package:kelola/domain/files/sftp_list_view.dart';
@@ -164,7 +165,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     }
   }
 
-  Future<T?> _run<T>(SftpProbe<T> probe, {TransferCancel? cancel, void Function(int, int?)? onProgress}) async {
+  Future<T?> _run<T>(
+    SftpProbe<T> probe, {
+    TransferCancel? cancel,
+    void Function(int, int?)? onProgress,
+    String? failPath,
+  }) async {
     final host = _host;
     if (host == null || !mounted) {
       return null;
@@ -182,18 +188,59 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     } on TransferCancelledException {
       return null;
     } catch (e) {
-      if (mounted) {
-        setState(() => _error = describeSshError(e));
-      }
+      await _presentFailure(e, path: failPath ?? _path);
       return null;
     }
+  }
+
+  Future<bool> _mutate(
+    SftpProbe<void> probe, {
+    required String path,
+    TransferCancel? cancel,
+    void Function(int, int?)? onProgress,
+  }) async {
+    final host = _host;
+    if (host == null || !mounted) {
+      return false;
+    }
+    try {
+      await runHostProbe(
+        ref: ref,
+        context: context,
+        host: host,
+        probe: probe,
+        facts: _facts,
+        cancel: cancel,
+        onProgress: onProgress,
+      );
+      return true;
+    } on TransferCancelledException {
+      return false;
+    } catch (e) {
+      await _presentFailure(e, path: path);
+      return false;
+    }
+  }
+
+  Future<void> _presentFailure(Object e, {required String path}) async {
+    final message = describeSshError(e);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _error = message);
+    await showSftpDeniedSheet(
+      context,
+      message: message,
+      path: path,
+      username: _host?.username ?? '',
+    );
   }
 
   Future<Directory> _transferDir() async {
     final root = widget.transferDocumentsDir ??
         await getApplicationDocumentsDirectory();
     final dir = Directory('${root.path}/kelola-transfers');
-    await dir.create(recursive: true);
+    dir.createSync(recursive: true);
     return dir;
   }
 
@@ -210,6 +257,16 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
         title: 'Files',
         contextLine: _path,
         actions: [
+          IconButton(
+            tooltip: 'Home',
+            onPressed: _path == sftpLoginHome(_host?.username ?? '')
+                ? null
+                : () {
+                    _path = sftpLoginHome(_host?.username ?? '');
+                    _load();
+                  },
+            icon: const Icon(Icons.home_outlined),
+          ),
           IconButton(
             tooltip: 'Parent directory',
             onPressed: _path == '/' ? null : () {
@@ -451,6 +508,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final bytes = await _run(
       SftpDownloadProbe(remotePath: e.path, localPath: local.path),
       cancel: xfer.cancel,
+      failPath: e.path,
       onProgress: (done, total) {
         if (!mounted) {
           return;
@@ -511,6 +569,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final n = await _run(
       SftpDownloadProbe(remotePath: e.path, localPath: dest.path),
       cancel: xfer.cancel,
+      failPath: e.path,
       onProgress: (done, total) {
         if (!mounted) {
           return;
@@ -558,14 +617,19 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       hostAlias: host.alias,
       path: path,
       title: 'Create $name?',
-      body: 'Creates a directory on ${host.alias}.',
+      body: _writeBody(
+        'Creates a directory on ${host.alias}.',
+        path: path,
+        username: host.username,
+      ),
       confirmLabel: 'Create',
     );
     if (!ok) {
       return;
     }
-    await _run(SftpMkdirProbe(path: path));
-    await _load();
+    if (await _mutate(SftpMkdirProbe(path: path), path: path)) {
+      await _load();
+    }
   }
 
   Future<void> _rename(SftpEntry e) async {
@@ -593,8 +657,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (!ok) {
       return;
     }
-    await _run(SftpRenameProbe(from: e.path, to: to));
-    await _load();
+    if (await _mutate(SftpRenameProbe(from: e.path, to: to), path: e.path)) {
+      await _load();
+    }
   }
 
   Future<void> _chmod(SftpEntry e) async {
@@ -629,8 +694,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (!ok) {
       return;
     }
-    await _run(SftpChmodProbe(path: e.path, mode: mode));
-    await _load();
+    if (await _mutate(
+      SftpChmodProbe(path: e.path, mode: mode),
+      path: e.path,
+    )) {
+      await _load();
+    }
   }
 
   Future<void> _delete(SftpEntry e) async {
@@ -646,8 +715,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (!ok) {
       return;
     }
-    await _run(SftpDeleteProbe(path: e.path));
-    await _load();
+    if (await _mutate(SftpDeleteProbe(path: e.path), path: e.path)) {
+      await _load();
+    }
   }
 
   Future<File?> _pickPhoneFile() async {
@@ -721,6 +791,21 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     }
     final File? chosen;
     if (identical(picked, _pickFromPhone)) {
+      final warn = await confirmFileMutate(
+        context,
+        hostAlias: host.alias,
+        path: _path,
+        title: 'Upload from this phone?',
+        body: _writeBody(
+          'Picks a file on this phone and writes it into $_path on ${host.alias}.',
+          path: _path,
+          username: host.username,
+        ),
+        confirmLabel: 'Continue',
+      );
+      if (!warn || !mounted) {
+        return;
+      }
       chosen = await _pickPhoneFile();
     } else if (picked is File) {
       chosen = picked;
@@ -738,7 +823,11 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       hostAlias: host.alias,
       path: remote,
       title: 'Upload $name?',
-      body: 'Writes $name into $_path on ${host.alias}.',
+      body: _writeBody(
+        'Writes $name into $_path on ${host.alias}.',
+        path: remote,
+        username: host.username,
+      ),
       confirmLabel: 'Upload',
     );
     if (!ok) {
@@ -746,8 +835,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     }
     final xfer = _Transfer(label: 'Upload $name');
     setState(() => _holdTransfer(xfer));
-    await _run(
+    final wrote = await _mutate(
       SftpUploadProbe(localPath: file.path, remotePath: remote),
+      path: remote,
       cancel: xfer.cancel,
       onProgress: (done, total) {
         if (!mounted) {
@@ -762,7 +852,20 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (mounted) {
       setState(_clearTransfer);
     }
-    await _load();
+    if (wrote) {
+      await _load();
+    }
+  }
+
+  String _writeBody(
+    String lead, {
+    required String path,
+    required String username,
+  }) {
+    if (!sftpOutsideLoginHome(path, username)) {
+      return lead;
+    }
+    return '$lead ${sftpOutsideHomeWarning(username: username, path: path)}';
   }
 
   Future<String?> _prompt({
@@ -770,56 +873,96 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     String? initial,
     required String confirmLabel,
     bool mono = false,
-  }) async {
-    final ctrl = TextEditingController(text: initial ?? '');
-    final c = context.kc;
-    final value = await showDialog<String>(
+  }) {
+    return showDialog<String>(
       context: context,
-      builder: (ctx) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-          child: RiskBand(
-            risk: RiskLevel.mutate,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                KelolaInput(
-                  label: label,
-                  controller: ctrl,
-                  mono: mono,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: Text(
-                          'Cancel',
-                          style: KelolaType.display(color: c.muted, size: 13),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(ctx, ctrl.text),
-                        child: Text(
-                          confirmLabel,
-                          style: KelolaType.display(color: c.amber, size: 13),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+      builder: (_) {
+        return _FilesNamePrompt(
+          label: label,
+          initial: initial,
+          confirmLabel: confirmLabel,
+          mono: mono,
         );
       },
     );
-    ctrl.dispose();
-    return value;
+  }
+}
+
+class _FilesNamePrompt extends StatefulWidget {
+  const _FilesNamePrompt({
+    required this.label,
+    required this.confirmLabel,
+    this.initial,
+    this.mono = false,
+  });
+
+  final String label;
+  final String confirmLabel;
+  final String? initial;
+  final bool mono;
+
+  @override
+  State<_FilesNamePrompt> createState() => _FilesNamePromptState();
+}
+
+class _FilesNamePromptState extends State<_FilesNamePrompt> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initial ?? '');
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      child: RiskBand(
+        risk: RiskLevel.mutate,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            KelolaInput(
+              label: widget.label,
+              controller: _ctrl,
+              mono: widget.mono,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Cancel',
+                      style: KelolaType.display(color: c.muted, size: 13),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context, _ctrl.text),
+                    child: Text(
+                      widget.confirmLabel,
+                      style: KelolaType.display(color: c.amber, size: 13),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

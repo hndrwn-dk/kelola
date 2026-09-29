@@ -48,6 +48,7 @@ void main() {
     expect(src, contains('formatDashboardGiBPair'));
     expect(src, contains('DashboardLoadCard'));
     expect(src, isNot(contains('formatDashboardLoadCaption')));
+    expect(src, contains('_reloadPendingUpdates'));
   });
 
   test('parser exposes root disk kib and nproc cores for card denominators', () {

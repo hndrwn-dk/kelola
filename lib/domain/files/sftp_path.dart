@@ -60,3 +60,14 @@ String sftpParent(String path) {
 }
 
 String sftpBakPath(String path) => '$path.bak';
+
+String sftpLoginHome(String username) {
+  final user = username.trim();
+  if (user.isEmpty) {
+    return '.';
+  }
+  if (user == 'root') {
+    return '/root';
+  }
+  return '/home/$user';
+}

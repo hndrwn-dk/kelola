@@ -6,6 +6,8 @@ import 'package:kelola/domain/packages/package_parser.dart';
 import 'package:kelola/domain/packages/package_snapshot.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/sudo_hint.dart';
+import 'package:kelola/domain/units/shell_quote.dart';
 
 class PackageListProbe extends Probe<PackageSnapshot> {
   const PackageListProbe();
@@ -35,9 +37,9 @@ if [ -f /var/run/reboot-required ]; then
   cat /var/run/reboot-required.pkgs 2>/dev/null || true
 fi
 if command -v needs-restarting >/dev/null 2>&1; then
-  needs-restarting -r >/dev/null 2>&1
+  timeout -k 5 10 needs-restarting -r >/dev/null 2>&1
   echo NEEDS_RESTARTING_R:\$?
-  needs-restarting 2>/dev/null | head -20 || true
+  timeout -k 5 10 needs-restarting 2>/dev/null | head -20 || true
 fi
 ''';
   }
@@ -48,12 +50,25 @@ fi
       throw KelolaException('No package manager on this host.');
     }
     final pkg = _pkgFrom(stdout);
-    return const PackageParser().parse(
+    final snap = const PackageParser().parse(
       manager: pkg,
       stdout: stdout,
       stderr: stderr,
       exitCode: exitCode,
     );
+    if (snap.updates.isEmpty &&
+        (looksLikeSudoPasswordPrompt(stderr) ||
+            looksLikeSudoPasswordPrompt(stdout))) {
+      final bin = pkg == PackageManager.yum ? '/usr/bin/yum' : '/usr/bin/dnf';
+      throw SudoRequiredException(
+        SudoHintContext(
+          kind: SudoHintKind.packages,
+          binary: '$bin check-update --refresh',
+          verb: 'check-update',
+        ),
+      );
+    }
+    return snap;
   }
 
   static PackageManager _pkgFrom(String stdout) {
@@ -79,5 +94,5 @@ fi
   RiskLevel get risk => RiskLevel.read;
 
   @override
-  Duration get timeout => const Duration(seconds: 60);
+  Duration get timeout => const Duration(seconds: 70);
 }

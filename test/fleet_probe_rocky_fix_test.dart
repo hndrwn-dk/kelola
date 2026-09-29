@@ -132,12 +132,27 @@ Filesystem                   Type 1024-blocks    Used Available Capacity Mounted
     expect(health.securityUpdates, 0);
   });
 
-  test('fleet package list commands stay available for Packages screen refresh',
-      () {
-    expect(PackageCommands.listUpdates(PackageManager.dnf), contains('--refresh'));
+  test('Packages dnf refresh uses sudo -n; fleet never --refresh', () {
+    final list = PackageCommands.listUpdates(PackageManager.dnf);
+    expect(
+      list,
+      '/usr/bin/timeout -k 5 60 sudo -n /usr/bin/dnf --color=never check-update --refresh </dev/null',
+    );
     expect(
       PackageCommands.listUpdatesForFleet(PackageManager.dnf),
       isNot(contains('--refresh')),
+    );
+    expect(
+      PackageCommands.listUpdatesForFleet(PackageManager.dnf),
+      isNot(contains('sudo')),
+    );
+    expect(
+      PackageCommands.listUpdatesForFleet(PackageManager.yum),
+      isNot(contains('--refresh')),
+    );
+    expect(
+      PackageCommands.listUpdatesForFleet(PackageManager.yum),
+      isNot(contains('sudo')),
     );
   });
 }
