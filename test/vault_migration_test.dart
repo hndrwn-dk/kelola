@@ -6,6 +6,7 @@ import 'package:kelola/data/db/tunnel_repository.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
 import 'package:kelola/data/vault/vault_store.dart';
 import 'package:kelola/domain/host_env/host_env.dart';
+import 'package:kelola/domain/snippets/snippet.dart';
 import 'package:kelola/domain/vault/vault.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -193,5 +194,87 @@ CREATE TABLE hosts (
     );
     final imported = await hosts.get('imported');
     expect(imported?.agentForward, isFalse);
+  });
+
+  test('redacted vault apply keeps local snippet template and env value',
+      () async {
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
+    final hosts = HostRepository(db);
+    final store = VaultStore(
+      db: db,
+      hosts: hosts,
+      tunnels: TunnelRepository(db),
+      selectionOf: () async => FleetProbeSelectionStore.memory(),
+    );
+    await hosts.upsertSnippet(
+      const Snippet(
+        id: 's1',
+        name: 'restart',
+        template: 'systemctl restart nginx',
+      ),
+    );
+    await hosts.upsertEnvBinding(
+      const EnvBinding(
+        id: 'e1',
+        scope: EnvScope.host,
+        scopeId: 'h1',
+        name: 'TOKEN',
+        value: 'super-secret',
+      ),
+    );
+
+    final redactedSnippet = packVaultRecords(
+      records: [
+        VaultRecord(
+          id: 's1',
+          kind: VaultRecordKind.snippet,
+          updatedAt: DateTime.utc(2030, 1, 1),
+          deviceId: 'other',
+          payload: const {
+            'name': 'restart-nginx',
+            'template': 'systemctl restart nginx',
+          },
+        ),
+      ],
+      deviceId: 'other',
+      includeSecrets: false,
+    ).records.single;
+    final redactedEnv = packVaultRecords(
+      records: [
+        VaultRecord(
+          id: 'e1',
+          kind: VaultRecordKind.env,
+          updatedAt: DateTime.utc(2030, 1, 1),
+          deviceId: 'other',
+          payload: const {
+            'scope': 'host',
+            'scopeId': 'h1',
+            'name': 'TOKEN',
+            'value': 'super-secret',
+          },
+        ),
+      ],
+      deviceId: 'other',
+      includeSecrets: false,
+    ).records.single;
+    expect(redactedSnippet.payload.containsKey('template'), isFalse);
+    expect(redactedEnv.payload.containsKey('value'), isFalse);
+
+    await store.apply(
+      VaultDiff(
+        added: const [],
+        updated: [redactedSnippet, redactedEnv],
+        deleted: const [],
+      ),
+    );
+
+    final snippets = await hosts.listSnippets();
+    final snippet = snippets.singleWhere((s) => s.id == 's1');
+    expect(snippet.name, 'restart-nginx');
+    expect(snippet.template, 'systemctl restart nginx');
+    final envs = await hosts.listEnvBindings();
+    final env = envs.singleWhere((e) => e.id == 'e1');
+    expect(env.value, 'super-secret');
   });
 }

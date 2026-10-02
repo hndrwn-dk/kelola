@@ -140,6 +140,37 @@ void main() {
     expect(tie.updated.single.deviceId, 'dev-z');
   });
 
+  test('host and hostKey with the same id do not shadow each other', () {
+    final host = VaultRecord(
+      id: 'h1',
+      kind: VaultRecordKind.host,
+      updatedAt: DateTime.utc(2026, 1, 1),
+      deviceId: 'dev-a',
+      payload: const {'alias': 'old'},
+    );
+    final pin = VaultRecord(
+      id: 'h1',
+      kind: VaultRecordKind.hostKey,
+      updatedAt: DateTime.utc(2026, 6, 1),
+      deviceId: 'dev-a',
+      payload: const {
+        'algorithm': 'ssh-ed25519',
+        'fingerprint': 'SHA256:good',
+      },
+    );
+    final hostEdit = VaultRecord(
+      id: 'h1',
+      kind: VaultRecordKind.host,
+      updatedAt: DateTime.utc(2026, 3, 1),
+      deviceId: 'dev-b',
+      payload: const {'alias': 'renamed'},
+    );
+    final diff = diffVault(local: [host, pin], incoming: [hostEdit]);
+    expect(diff.updated.single.payload['alias'], 'renamed');
+    expect(vaultRecordKey(host), 'host:h1');
+    expect(vaultRecordKey(pin), 'hostKey:h1');
+  });
+
   test('file transport is free; lan and sftp require the unlock', () {
     expect(vaultTransportRequiresUnlock(VaultTransportKind.file), isFalse);
     expect(vaultTransportRequiresUnlock(VaultTransportKind.lan), isTrue);
