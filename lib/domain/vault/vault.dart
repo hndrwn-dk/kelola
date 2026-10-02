@@ -183,16 +183,23 @@ int _compareRecords(VaultRecord a, VaultRecord b) {
   return a.deviceId.compareTo(b.deviceId);
 }
 
+/// Host rows and host-key pins share the same string id (the host id).
+/// Diff must key by kind+id or a pin's `pinnedAt` shadows the host row and
+/// drops legitimate host identity updates.
+String vaultRecordKey(VaultRecord record) => '${record.kind.name}:${record.id}';
+
 VaultDiff diffVault({
   required List<VaultRecord> local,
   required List<VaultRecord> incoming,
 }) {
-  final localById = {for (final record in local) record.id: record};
+  final localByKey = {
+    for (final record in local) vaultRecordKey(record): record,
+  };
   final added = <VaultRecord>[];
   final updated = <VaultRecord>[];
   final deleted = <VaultRecord>[];
   for (final next in incoming) {
-    final current = localById[next.id];
+    final current = localByKey[vaultRecordKey(next)];
     if (next.tombstone) {
       if (current != null &&
           !current.tombstone &&
