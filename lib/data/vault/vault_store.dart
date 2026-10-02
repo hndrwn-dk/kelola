@@ -248,17 +248,7 @@ class VaultStore {
       case VaultRecordKind.host:
         await _upsertHost(record);
       case VaultRecordKind.snippet:
-        await _hosts.upsertSnippet(
-          Snippet(
-            id: record.id,
-            name: record.payload['name'] as String? ?? '',
-            template: record.payload['template'] as String? ?? '',
-            starter: record.payload['starter'] as bool? ?? false,
-            hostId: record.payload['hostId'] as String?,
-            tag: record.payload['tag'] as String?,
-            startup: record.payload['startup'] as bool? ?? false,
-          ),
-        );
+        await _upsertSnippet(record);
       case VaultRecordKind.hostTag:
         final hostId = record.payload['hostId'] as String? ?? '';
         final tag = record.payload['tag'] as String? ?? '';
@@ -298,24 +288,65 @@ class VaultStore {
       case VaultRecordKind.pref:
         await _applyPrefs(record.payload);
       case VaultRecordKind.env:
-        final name = record.payload['name'] as String? ?? '';
-        if (!isEnvName(name)) {
-          return;
-        }
-        await _hosts.upsertEnvBinding(
-          EnvBinding(
-            id: record.id,
-            scope: EnvScope.values.byName(
-              record.payload['scope'] as String? ?? EnvScope.host.name,
-            ),
-            scopeId: record.payload['scopeId'] as String? ?? '',
-            name: name,
-            value: record.payload['value'] as String? ?? '',
-          ),
-        );
+        await _upsertEnv(record);
       case VaultRecordKind.tombstone:
         break;
     }
+  }
+
+  /// Default vault blobs strip `template`. Applying those must not wipe a
+  /// local snippet body when only metadata (name/scope) moved forward.
+  Future<void> _upsertSnippet(VaultRecord record) async {
+    final existing = await (_db.select(_db.snippets)
+          ..where((t) => t.id.equals(record.id)))
+        .getSingleOrNull();
+    final template = record.payload.containsKey('template')
+        ? (record.payload['template'] as String? ?? '')
+        : (existing?.template ?? '');
+    await _hosts.upsertSnippet(
+      Snippet(
+        id: record.id,
+        name: record.payload['name'] as String? ?? existing?.name ?? '',
+        template: template,
+        starter: record.payload['starter'] as bool? ?? existing?.starter ?? false,
+        hostId: record.payload.containsKey('hostId')
+            ? record.payload['hostId'] as String?
+            : existing?.hostId,
+        tag: record.payload.containsKey('tag')
+            ? record.payload['tag'] as String?
+            : existing?.tag,
+        startup:
+            record.payload['startup'] as bool? ?? existing?.startup ?? false,
+      ),
+    );
+  }
+
+  /// Same as snippets: redacted blobs omit `value`; keep the local secret.
+  Future<void> _upsertEnv(VaultRecord record) async {
+    final name = record.payload['name'] as String? ?? '';
+    final existing = await (_db.select(_db.envVars)
+          ..where((t) => t.id.equals(record.id)))
+        .getSingleOrNull();
+    final resolvedName = name.isNotEmpty ? name : (existing?.name ?? '');
+    if (!isEnvName(resolvedName)) {
+      return;
+    }
+    final value = record.payload.containsKey('value')
+        ? (record.payload['value'] as String? ?? '')
+        : (existing?.value ?? '');
+    await _hosts.upsertEnvBinding(
+      EnvBinding(
+        id: record.id,
+        scope: EnvScope.values.byName(
+          record.payload['scope'] as String? ??
+              existing?.scope ??
+              EnvScope.host.name,
+        ),
+        scopeId: record.payload['scopeId'] as String? ?? existing?.scopeId ?? '',
+        name: resolvedName,
+        value: value,
+      ),
+    );
   }
 
   Future<void> _upsertHost(VaultRecord record) async {
