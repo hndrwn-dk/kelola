@@ -31,6 +31,7 @@ void main() {
     expect(find.byType(RiskBand), findsWidgets);
     expect(find.byType(StatCard), findsNWidgets(4));
     expect(find.byType(ServiceRow), findsNWidgets(8));
+    expect(find.byType(HelpTopic), findsOneWidget);
     expect(find.byType(SectionSlab), findsNWidgets(5));
     expect(find.byType(OsIcon), findsNWidgets(11));
     expect(find.byType(ToolTile), findsNWidgets(2));

@@ -120,6 +120,17 @@ class StyleGuideScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
+            'HELPTOPIC',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          const HelpTopic(
+            question: 'How do I add a server?',
+            answer:
+                'On Hosts, add a host. Kelola talks to it over SSH.',
+          ),
+          const SizedBox(height: 18),
+          Text(
             'TOOLTILE',
             style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
           ),

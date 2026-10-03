@@ -648,6 +648,41 @@ class ServiceRow extends StatelessWidget {
   }
 }
 
+/// FAQ / help topic. Question is display; answer is wrapping body.
+/// Do not use [ServiceRow.detail] for this — that line is mono and clipped.
+class HelpTopic extends StatelessWidget {
+  const HelpTopic({
+    super.key,
+    required this.question,
+    required this.answer,
+  });
+
+  final String question;
+  final String answer;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return RiskBand(
+      risk: RiskLevel.read,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            question,
+            style: KelolaType.display(color: c.text, size: 13),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            answer,
+            style: KelolaType.body(color: c.muted, size: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Pill extends StatelessWidget {
   final String text;
   final RiskLevel risk;
