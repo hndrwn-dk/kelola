@@ -112,7 +112,7 @@ void main() {
     expect(find.text('Language'), findsNothing);
     expect(find.text('Theme'), findsNothing);
     expect(find.byType(HostsChromeAccent), findsOneWidget);
-    expect(find.byType(HostGroupTray), findsOneWidget);
+    expect(find.byType(HostGroupTray), findsNWidgets(2));
     expect(find.text('Source'), findsNothing);
     expect(find.text('License'), findsNothing);
     expect(find.text('About'), findsNothing);

@@ -8,11 +8,14 @@ import 'package:kelola/domain/session_logs/session_log.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/support/support_links.dart';
 import 'package:kelola/domain/vault/vault.dart';
 import 'package:kelola/presentation/host_env/env_bindings_sheet.dart';
 import 'package:kelola/presentation/pro_locked_sheet.dart';
+import 'package:kelola/presentation/screens/help_screen.dart';
 import 'package:kelola/providers.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Paid only when unlock says so. The build token (`std` / `ext`) is not this.
 /// Fleet unlimited stands in for the unlock set: tunnels has a single
@@ -27,8 +30,18 @@ const kShowLanguageSetting = false;
 /// Flip when a light theme exists. Does not add one.
 const kShowThemeSetting = false;
 
+typedef SettingsLaunchUrl = Future<bool> Function(Uri uri);
+typedef SettingsShare = Future<void> Function(String text, {String? subject});
+
 class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({
+    super.key,
+    this.launchUrlFn,
+    this.shareFn,
+  });
+
+  final SettingsLaunchUrl? launchUrlFn;
+  final SettingsShare? shareFn;
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -802,6 +815,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
   }
 
+  Future<void> _openSupportUrl(String url) async {
+    final launch = widget.launchUrlFn ??
+        ((uri) => launchUrl(uri, mode: LaunchMode.externalApplication));
+    try {
+      final ok = await launch(Uri.parse(url));
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open link.')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open link.')),
+      );
+    }
+  }
+
+  Future<void> _shareKelola() async {
+    final share = widget.shareFn ??
+        ((text, {subject}) async {
+          await Share.share(text, subject: subject);
+        });
+    try {
+      await share(kKelolaShareText, subject: kKelolaShareSubject);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not share.')),
+      );
+    }
+  }
+
+  void _openHelp() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const HelpScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final timeout = ref.watch(appLockTimeoutProvider).asData?.value ?? 0;
@@ -922,6 +980,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                 ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          HostGroupTray(
+            label: 'Support',
+            child: Column(
+              children: [
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Help & FAQ',
+                  meta: 'common questions',
+                  onTap: _openHelp,
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Privacy',
+                  meta: 'tursinalabs.com',
+                  onTap: () => _openSupportUrl(kKelolaPrivacyUrl),
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Terms of Service',
+                  meta: 'tursinalabs.com',
+                  onTap: () => _openSupportUrl(kKelolaTermsUrl),
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Rate & review',
+                  meta: 'Play Store',
+                  onTap: () => _openSupportUrl(kKelolaPlayStoreUrl),
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Share Kelola',
+                  meta: 'invite a friend',
+                  onTap: _shareKelola,
+                ),
               ],
             ),
           ),
