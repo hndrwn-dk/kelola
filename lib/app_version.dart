@@ -1,9 +1,9 @@
 /// Marketing/version line from pubspec `version:` (before `+build`).
 /// Keep in lockstep with pubspec.yaml; do not add package_info_plus for this.
-const kelolaAppVersion = '0.2.8';
+const kelolaAppVersion = '0.2.9';
 
 /// Build number from pubspec `version:` after `+`. Not a git commit.
-const kelolaVersionCode = '11';
+const kelolaVersionCode = '12';
 
 /// Flutter SDK line from README. Keep in lockstep; not read from the device.
 const kelolaFlutterVersion = '3.47';
