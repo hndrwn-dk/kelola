@@ -22,6 +22,7 @@ import 'package:kelola/domain/snippets/snippet.dart';
 import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/domain/snippets/starters.dart';
 import 'package:kelola/data/secrets/secret_store.dart';
+import 'package:kelola/domain/llm/api_key_hint.dart';
 import 'package:kelola/domain/llm/provider.dart';
 import 'package:kelola/domain/llm/settings.dart';
 import 'package:kelola/domain/units/service_unit.dart';
@@ -1495,12 +1496,22 @@ class HostRepository {
     );
   }
 
-  Future<void> saveLlmSettingsBundle(LlmSettingsBundle bundle) async {
-    final key = bundle.openaiCompatible.apiKey?.trim() ?? '';
-    if (key.isEmpty) {
-      await _secrets.delete(kLlmOpenaiApiKeySecret);
-    } else {
-      await _secrets.write(kLlmOpenaiApiKeySecret, key);
+  Future<void> saveLlmSettingsBundle(
+    LlmSettingsBundle bundle, {
+    LlmApiKeyWrite apiKeyWrite = LlmApiKeyWrite.set,
+  }) async {
+    switch (apiKeyWrite) {
+      case LlmApiKeyWrite.keep:
+        break;
+      case LlmApiKeyWrite.clear:
+        await _clearOpenaiApiKey();
+      case LlmApiKeyWrite.set:
+        final key = bundle.openaiCompatible.apiKey?.trim() ?? '';
+        if (key.isEmpty) {
+          await _clearOpenaiApiKey();
+        } else {
+          await _writeOpenaiApiKey(key);
+        }
     }
     final existing = await _settings();
     await _db
@@ -1518,6 +1529,45 @@ class HostRepository {
     await _wipeSqliteApiKeys();
   }
 
+  /// Masked hint for UI. Never returns the full key.
+  Future<String?> apiKeyHint(LlmProvider provider) async {
+    if (provider != LlmProvider.openaiCompatible) {
+      return null;
+    }
+    final existing = await _secrets.read(kLlmOpenaiApiKeyHintSecret);
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+    final key = await _openaiApiKey(await _settings());
+    if (key == null || key.isEmpty) {
+      return null;
+    }
+    final hint = maskLlmApiKeyHint(key);
+    await _secrets.write(kLlmOpenaiApiKeyHintSecret, hint);
+    return hint;
+  }
+
+  Future<void> replaceOpenaiApiKey(String key) async {
+    final trimmed = key.trim();
+    if (trimmed.isEmpty) {
+      await _clearOpenaiApiKey();
+      return;
+    }
+    await _writeOpenaiApiKey(trimmed);
+  }
+
+  Future<void> removeOpenaiApiKey() => _clearOpenaiApiKey();
+
+  Future<void> _writeOpenaiApiKey(String key) async {
+    await _secrets.write(kLlmOpenaiApiKeySecret, key);
+    await _secrets.write(kLlmOpenaiApiKeyHintSecret, maskLlmApiKeyHint(key));
+  }
+
+  Future<void> _clearOpenaiApiKey() async {
+    await _secrets.delete(kLlmOpenaiApiKeySecret);
+    await _secrets.delete(kLlmOpenaiApiKeyHintSecret);
+  }
+
   Future<String?> _openaiApiKey(AppSettingsRow? row) async {
     final stored = await _secrets.read(kLlmOpenaiApiKeySecret);
     if (stored != null && stored.isNotEmpty) {
@@ -1530,7 +1580,7 @@ class HostRepository {
     if (leftover == null || leftover.isEmpty) {
       return null;
     }
-    await _secrets.write(kLlmOpenaiApiKeySecret, leftover);
+    await _writeOpenaiApiKey(leftover);
     await _wipeSqliteApiKeys();
     return leftover;
   }
