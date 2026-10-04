@@ -1,4 +1,5 @@
 const kLlmOpenaiApiKeySecret = 'llm_openai_api_key';
+const kLlmOpenaiApiKeyHintSecret = 'llm_openai_api_key.hint';
 
 abstract class SecretStore {
   Future<String?> read(String key);
