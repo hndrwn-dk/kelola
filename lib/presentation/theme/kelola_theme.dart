@@ -32,19 +32,20 @@ class KelolaColors extends ThemeExtension<KelolaColors> {
   final Color green;
   final Color blue;
 
+  /// Keep in sync with `lib/design/kelola_theme.dart` Soft Navy + Warm Amber (C1).
   static const dark = KelolaColors(
-    ink: Color(0xFF0D1117),
-    surface: Color(0xFF161B22),
-    surface2: Color(0xFF21262D),
-    surface3: Color(0xFF30363D),
-    line: Color(0x14FFFFFF),
-    text: Color(0xFFE6EDF3),
-    muted: Color(0xFF8B949E),
-    dim: Color(0xFF6E7681),
-    amber: Color(0xFFF0A02C),
+    ink: Color(0xFF0B1220),
+    surface: Color(0xFF152238),
+    surface2: Color(0xFF1A2C44),
+    surface3: Color(0xFF243A56),
+    line: Color(0xFF2E4560),
+    text: Color(0xFFD7DEE8),
+    muted: Color(0xFF8B9BB0),
+    dim: Color(0xFF5C6B7E),
+    amber: Color(0xFFE8A03A),
     red: Color(0xFFE5484D),
-    green: Color(0xFF3FB950),
-    blue: Color(0xFF58A6FF),
+    green: Color(0xFF46A758),
+    blue: Color(0xFF6B9BE8),
   );
 
   static const hazardDark = Color(0xFF3A1416);
