@@ -61,21 +61,28 @@ class KelolaColors extends ThemeExtension<KelolaColors> {
   /// Footer hairline vs ink. `line` on `ink` vanishes on OLED.
   static const colophonHairlineOpacity = 0.28;
 
+  /// Coolors-inspired Soft Navy + Warm Amber (C1), 60-30-10:
+  /// - 60% neutralDeep `#0B1220`, neutralSoft `#152238`
+  /// - 30% primary `#1E3A5F`, primaryBright `#2A4A6E`
+  /// - 10% accent `#E8A03A`
+  /// Sources: coolors.co/000814-001d3d-003566-ffc300-ffd60a (navy family),
+  /// coolors.co/000000-14213d-fca311-e5e5e5-ffffff (gold accent, softened).
+  /// Red/green remain semantic outliers (destructive / healthy), not brand.
   static const dark = KelolaColors(
-    ink: Color(0xFF0E1116),
-    surface: Color(0xFF161A21),
-    surface2: Color(0xFF1E242D),
-    surface3: Color(0xFF262E39),
-    line: Color(0xFF2A323D),
-    text: Color(0xFFE4E8EE),
-    muted: Color(0xFF8A95A5),
-    dim: Color(0xFF5C6675),
-    amber: Color(0xFFF0A02C),
-    amberDim: Color(0xFF8A5D1A),
+    ink: Color(0xFF0B1220),
+    surface: Color(0xFF152238),
+    surface2: Color(0xFF1A2C44),
+    surface3: Color(0xFF243A56),
+    line: Color(0xFF2E4560),
+    text: Color(0xFFD7DEE8),
+    muted: Color(0xFF8B9BB0),
+    dim: Color(0xFF5C6B7E),
+    amber: Color(0xFFE8A03A),
+    amberDim: Color(0xFF8A5F1E),
     red: Color(0xFFE5484D),
     redDim: Color(0xFF7A2528),
     green: Color(0xFF46A758),
-    blue: Color(0xFF5B8DEF),
+    blue: Color(0xFF6B9BE8),
   );
 
   /// The one place RiskLevel becomes a color. Every risk band,
