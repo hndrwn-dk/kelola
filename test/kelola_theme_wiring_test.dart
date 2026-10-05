@@ -27,13 +27,13 @@ void main() {
       ),
     );
 
-    expect(kc.ink, const Color(0xFF0E1116));
+    expect(kc.ink, const Color(0xFF0B1220));
     expect(kc.forRisk(RiskLevel.mutate), kc.amber);
 
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(app.themeMode, ThemeMode.dark);
-    expect(app.theme!.scaffoldBackgroundColor, const Color(0xFF0E1116));
-    expect(app.darkTheme!.scaffoldBackgroundColor, const Color(0xFF0E1116));
+    expect(app.theme!.scaffoldBackgroundColor, const Color(0xFF0B1220));
+    expect(app.darkTheme!.scaffoldBackgroundColor, const Color(0xFF0B1220));
   });
 
   test('forHealth maps status, not RiskLevel', () {
