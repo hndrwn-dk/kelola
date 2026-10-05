@@ -8,12 +8,12 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildKelolaDarkTheme(),
-        home: const Scaffold(
+        home: Scaffold(
           body: SizedBox(
             width: 300,
             child: Sparkline(
-              values: [0.2, 0.8, 0.4],
-              color: Color(0xFFF0A02C),
+              values: const [0.2, 0.8, 0.4],
+              color: KelolaColors.dark.amber,
             ),
           ),
         ),
