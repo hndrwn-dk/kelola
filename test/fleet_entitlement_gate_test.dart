@@ -62,6 +62,9 @@ class _ScriptedEntitlement implements Entitlement {
 
   @override
   String get sourceLabel => 'std';
+
+  @override
+  String? get priceLabel => null;
 }
 
 class _ExistsSigner implements HardwareSigner {
@@ -402,6 +405,10 @@ void main() {
     expect(find.byType(KelolaSheet), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
     expect(find.textContaining('http'), findsNothing);
+    expect(
+      find.text('Purchases are not available on this device right now.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('build token sits on Settings Version row',

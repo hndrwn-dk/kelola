@@ -116,6 +116,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         title: 'Hosts',
         body: 'This build monitors up to $kFreeFleetHostLimit hosts. '
             'Unlock to add another.',
+        priceLabel: ref.read(entitlementProvider).priceLabel,
         onPurchase: () => ref.read(entitlementProvider).purchase(),
       );
       return;
@@ -149,6 +150,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         title: 'Fleet',
         body: 'This build monitors up to $kFreeFleetHostLimit hosts. '
             'Choose which three stay in the fleet probe.',
+        priceLabel: ref.read(entitlementProvider).priceLabel,
         onPurchase: () => ref.read(entitlementProvider).purchase(),
       );
       return;

@@ -20,6 +20,9 @@ class OpenEntitlement implements Entitlement {
   Future<ProPurchaseResult> restore() async => ProPurchaseResult.unavailable;
 
   @override
+  String? get priceLabel => null;
+
+  @override
   String get sourceLabel => 'std';
 
   @override

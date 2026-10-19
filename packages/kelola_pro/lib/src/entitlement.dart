@@ -17,6 +17,10 @@ abstract class Entitlement {
   Future<ProPurchaseResult> purchase();
   Future<ProPurchaseResult> restore();
 
+  /// Localized price from the store (e.g. "Rp 49.000", "US$4.99"), or null
+  /// when unknown or this build has no store. Never hard-code a price.
+  String? get priceLabel;
+
   /// Build variant token in the hosts colophon. Not an entitlement status.
   /// Stub: 'std'. Billing builds: 'ext'.
   String get sourceLabel;

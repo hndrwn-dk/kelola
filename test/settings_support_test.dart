@@ -12,6 +12,9 @@ class _FakeEntitlement implements Entitlement {
   String get sourceLabel => 'std';
 
   @override
+  String? get priceLabel => null;
+
+  @override
   bool isUnlocked(ProFeature feature) => true;
 
   @override

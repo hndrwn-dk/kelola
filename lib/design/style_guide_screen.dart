@@ -3,6 +3,7 @@ import 'package:kelola/app_version.dart';
 import 'kelola_components.dart';
 import 'kelola_theme.dart';
 import 'package:kelola/domain/audit/audit_view.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/hosts/os_icon_kind.dart';
 
 /// Isolated gallery of every widget in [kelola_components.dart].
@@ -486,7 +487,7 @@ class StyleGuideScreen extends StatelessWidget {
             title: 'Tunnels',
             body: 'Tunnels open a local SSH port forward so you can reach '
                 'admin UIs on this host. This build keeps tunnels locked.',
-            onUnlock: () async {},
+            onUnlock: () async => ProPurchaseResult.cancelled,
           ),
           const SizedBox(height: 18),
           Text(

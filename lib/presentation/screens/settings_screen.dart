@@ -161,6 +161,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         body: 'Background fleet watch refreshes selected hosts about hourly '
             'and alerts locally when a watched signal changes. '
             'This build keeps watch locked.',
+        priceLabel: entitlement.priceLabel,
         onPurchase: () => entitlement.purchase(),
       );
       return;
@@ -561,6 +562,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: 'Remote vault',
         body: 'A passphrase-sealed copy on a host you already administer. '
             'This build keeps remote vault locked.',
+        priceLabel: ref.read(entitlementProvider).priceLabel,
         onPurchase: () => ref.read(entitlementProvider).purchase(),
       );
       return;
@@ -675,6 +677,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: 'Pair on LAN',
         body: 'Ephemeral X25519 handshake on the local network. '
             'This build keeps LAN pairing locked.',
+        priceLabel: ref.read(entitlementProvider).priceLabel,
         onPurchase: () => ref.read(entitlementProvider).purchase(),
       );
       return;
@@ -799,6 +802,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Future<void> _openProPurchase() {
+    final entitlement = ref.read(entitlementProvider);
+    return showProLockedSheet(
+      context,
+      title: 'Kelola Pro',
+      body: 'Pro unlocks unlimited fleet, fleet watch, tunnels, '
+          'multi-host snippets, and vault sync.',
+      priceLabel: entitlement.priceLabel,
+      onPurchase: () => entitlement.purchase(),
+    );
+  }
+
   Future<void> _restore() async {
     final result = await ref.read(entitlementProvider).restore();
     if (!mounted) {
@@ -806,8 +821,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     setState(() {
       _restoreNote = switch (result) {
-        ProPurchaseResult.unavailable => 'Nothing to restore on this build.',
-        ProPurchaseResult.purchased => 'Purchase restored.',
+        ProPurchaseResult.unavailable =>
+          'Nothing to restore for this Google account.',
+        ProPurchaseResult.purchased => 'Kelola Pro restored.',
         ProPurchaseResult.pending => 'Restore is still pending.',
         ProPurchaseResult.cancelled => 'Restore cancelled.',
         ProPurchaseResult.error => 'Restore did not complete. Try again.',
@@ -868,8 +884,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final canAuth = ref.watch(appLockAvailableProvider).asData?.value ?? false;
     final lockReady = ref.watch(appLockAvailableProvider).hasValue;
     final c = context.kc;
+    ref.watch(entitlementRevisionProvider);
     final entitlement = ref.watch(entitlementProvider);
     final paid = entitlementIsPaid(entitlement);
+    final price = entitlement.priceLabel?.trim();
+    final priced = price != null && price.isNotEmpty;
     final token = entitlement.sourceLabel.trim();
     final versionMeta = token.isEmpty
         ? '$kelolaAppVersion · build $kelolaVersionCode'
@@ -955,7 +974,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ServiceRow(
                   risk: RiskLevel.read,
                   name: paid ? 'Paid' : 'Free',
-                  meta: 'purchase status',
+                  meta: paid
+                      ? 'Kelola Pro'
+                      : (priced ? 'Pro · $price' : 'purchase status'),
+                  onTap: !paid && priced ? _openProPurchase : null,
                 ),
                 const SizedBox(height: 8),
                 ServiceRow(

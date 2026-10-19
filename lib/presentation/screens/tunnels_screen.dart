@@ -45,6 +45,7 @@ String tunnelUptimeLabel(DateTime openedAtUtc, DateTime now) {
 Future<void> showTunnelsLockedExplainer(
   BuildContext context, {
   Future<ProPurchaseResult> Function()? onPurchase,
+  String? priceLabel,
 }) {
   return showProLockedSheet(
     context,
@@ -52,6 +53,7 @@ Future<void> showTunnelsLockedExplainer(
     body: 'Tunnels open a local SSH port forward so you can reach '
         'admin UIs on this host from your phone browser. '
         'This build keeps tunnels locked.',
+    priceLabel: priceLabel,
     onPurchase: onPurchase ?? () async => ProPurchaseResult.unavailable,
   );
 }

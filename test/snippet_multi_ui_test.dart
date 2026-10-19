@@ -26,6 +26,9 @@ class _Entitlement implements Entitlement {
   String get sourceLabel => 'test';
 
   @override
+  String? get priceLabel => null;
+
+  @override
   bool isUnlocked(ProFeature feature) => unlocked;
 
   @override

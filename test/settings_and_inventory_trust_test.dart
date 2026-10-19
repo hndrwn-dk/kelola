@@ -38,6 +38,9 @@ class _FakeEntitlement implements Entitlement {
   String get sourceLabel => label;
 
   @override
+  String? get priceLabel => null;
+
+  @override
   bool isUnlocked(ProFeature feature) => unlocked;
 
   @override
@@ -123,7 +126,10 @@ void main() {
 
     await tester.tap(find.text('Restore purchase'));
     await tester.pumpAndSettle();
-    expect(find.text('Nothing to restore on this build.'), findsOneWidget);
+    expect(
+      find.text('Nothing to restore for this Google account.'),
+      findsOneWidget,
+    );
     expect(find.byType(SnackBar), findsNothing);
     expect(
       find.text('$kelolaAppVersion · build $kelolaVersionCode · std'),

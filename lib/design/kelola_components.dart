@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:kelola/domain/audit/audit_view.dart';
 import 'package:kelola/domain/containers/container_row.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/hosts/dashboard_status.dart';
 import 'package:kelola/domain/hosts/os_icon_kind.dart';
 import 'package:kelola/domain/sudo_hint.dart';
@@ -2547,19 +2548,57 @@ class CollapsedHostGroup extends StatelessWidget {
   }
 }
 
-/// Locked Pro feature card. One unlock action. No price, no payment URL.
+/// Locked Pro feature card. One unlock action. No payment URL.
 /// Shown inside an existing [KelolaSheet], never as a one-off screen widget.
-class ProLockedCard extends StatelessWidget {
+///
+/// [priceLabel] comes from the store. Null keeps the button as "Unlock".
+class ProLockedCard extends StatefulWidget {
   const ProLockedCard({
     super.key,
     required this.title,
     required this.body,
     required this.onUnlock,
+    this.priceLabel,
   });
 
   final String title;
   final String body;
-  final Future<void> Function() onUnlock;
+  final Future<ProPurchaseResult> Function() onUnlock;
+  final String? priceLabel;
+
+  @override
+  State<ProLockedCard> createState() => _ProLockedCardState();
+}
+
+class _ProLockedCardState extends State<ProLockedCard> {
+  var _busy = false;
+  String? _note;
+
+  String get _buttonLabel {
+    final price = widget.priceLabel?.trim();
+    if (price == null || price.isEmpty) {
+      return 'Unlock';
+    }
+    return 'Unlock · $price';
+  }
+
+  Future<void> _unlock() async {
+    setState(() {
+      _busy = true;
+      _note = null;
+    });
+    try {
+      final result = await widget.onUnlock();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _note = _purchaseNote(result));
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2570,25 +2609,53 @@ class ProLockedCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: KelolaType.display(color: c.text, size: 18)),
+          Text(
+            widget.title,
+            style: KelolaType.display(color: c.text, size: 18),
+          ),
           const SizedBox(height: 10),
-          Text(body, style: KelolaType.body(color: c.muted, size: 13)),
+          Text(widget.body, style: KelolaType.body(color: c.muted, size: 13)),
           const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerRight,
             child: FilledButton(
-              onPressed: () => onUnlock(),
+              onPressed: _busy ? null : _unlock,
               style: FilledButton.styleFrom(backgroundColor: c.amber),
-              child: Text(
-                'Unlock',
-                style: KelolaType.display(color: c.ink, size: 13),
-              ),
+              child: _busy
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: c.ink,
+                      ),
+                    )
+                  : Text(
+                      _buttonLabel,
+                      style: KelolaType.display(color: c.ink, size: 13),
+                    ),
             ),
           ),
+          if (_note != null) ...[
+            const SizedBox(height: 8),
+            Text(_note!, style: KelolaType.body(color: c.muted, size: 13)),
+          ],
         ],
       ),
     );
   }
+}
+
+String? _purchaseNote(ProPurchaseResult result) {
+  return switch (result) {
+    ProPurchaseResult.pending =>
+      'Payment pending. Pro unlocks once Google Play confirms it.',
+    ProPurchaseResult.error => 'Purchase did not complete. Try again.',
+    ProPurchaseResult.unavailable =>
+      'Purchases are not available on this device right now.',
+    ProPurchaseResult.cancelled => null,
+    ProPurchaseResult.purchased => null,
+  };
 }
 
 /// Shared chrome for back / overflow: same plate and hit target so they

@@ -563,6 +563,7 @@ class _SnippetRunSheetState extends ConsumerState<_SnippetRunSheet> {
         title: 'Run on hosts',
         body: 'Run this snippet on every host it already applies to, '
             'after a per-host preview. This build keeps multi-exec locked.',
+        priceLabel: entitlement.priceLabel,
         onPurchase: () => entitlement.purchase(),
       );
       return;

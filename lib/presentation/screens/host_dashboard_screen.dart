@@ -639,6 +639,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                       if (!unlocked) {
                         showTunnelsLockedExplainer(
                           context,
+                          priceLabel: ref.read(entitlementProvider).priceLabel,
                           onPurchase: () =>
                               ref.read(entitlementProvider).purchase(),
                         );
