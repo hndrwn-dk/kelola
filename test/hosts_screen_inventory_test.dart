@@ -5,10 +5,44 @@ import 'package:kelola/app.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/presentation/screens/hosts_screen.dart';
 import 'package:kelola/providers.dart';
+
+/// Explicit unlock so inventory layout tests do not depend on
+/// [createEntitlement] (stub unlocks everything; Play billing locks fleet).
+class _UnlockedEntitlement implements Entitlement {
+  @override
+  String get sourceLabel => 'test';
+
+  @override
+  String? get priceLabel => null;
+
+  @override
+  bool isUnlocked(ProFeature feature) => true;
+
+  @override
+  Stream<void> get changes => const Stream.empty();
+
+  @override
+  void initialize() {}
+
+  @override
+  Future<ProPurchaseResult> purchase() async => ProPurchaseResult.unavailable;
+
+  @override
+  Future<ProPurchaseResult> restore() async => ProPurchaseResult.unavailable;
+
+  @override
+  void dispose() {}
+}
+
+List<Override> _overrides(KelolaDatabase db) => [
+      databaseProvider.overrideWithValue(db),
+      entitlementProvider.overrideWithValue(_UnlockedEntitlement()),
+    ];
 
 void main() {
   testWidgets('hosts home groups by status and shows a summary strip',
@@ -70,7 +104,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(db)],
+        overrides: _overrides(db),
         child: const KelolaApp(),
       ),
     );
@@ -121,7 +155,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(db)],
+        overrides: _overrides(db),
         child: const KelolaApp(),
       ),
     );

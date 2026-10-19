@@ -45,13 +45,13 @@ void main() {
   });
 
   test('build_play_aab.sh refuses without pubspec_overrides.yaml', () {
-    final overrides = File(p.join(root, 'pubspec_overrides.yaml'));
-    expect(overrides.existsSync(), isFalse,
-        reason: 'test assumes no overrides in CI/dev checkout');
+    final sandbox = _makeGateSandbox();
+    addTearDown(() => _deleteQuiet(sandbox));
+
     final result = Process.runSync(
       'bash',
       ['scripts/build_play_aab.sh'],
-      workingDirectory: root,
+      workingDirectory: sandbox.path,
       runInShell: true,
     );
     expect(result.exitCode, isNot(0),
@@ -63,32 +63,19 @@ void main() {
   });
 
   test('check_play_billing accepts a non-stub override path', () {
-    final overrides = File(p.join(root, 'pubspec_overrides.yaml'));
-    expect(overrides.existsSync(), isFalse);
+    final sandbox = _makeGateSandbox();
+    addTearDown(() => _deleteQuiet(sandbox));
 
     final fakeRoot = Directory.systemTemp.createTempSync('kelola_pro_gate_');
-    addTearDown(() {
-      if (overrides.existsSync()) {
-        overrides.deleteSync();
-      }
-      Process.runSync(
-        'flutter',
-        ['pub', 'get'],
-        workingDirectory: root,
-        runInShell: true,
-      );
-      if (fakeRoot.existsSync()) {
-        fakeRoot.deleteSync(recursive: true);
-      }
-    });
+    addTearDown(() => _deleteQuiet(fakeRoot));
 
-    final stub = Directory(p.join(root, 'packages', 'kelola_pro'));
+    final stub = Directory(p.join(sandbox.path, 'packages', 'kelola_pro'));
     final fakePro = Directory(p.join(fakeRoot.path, 'kelola_pro'));
     _copyDir(stub, fakePro);
 
     // Use forward slashes so YAML path works on Windows bash/Dart alike.
     final fakePath = fakePro.path.replaceAll(r'\', '/');
-    overrides.writeAsStringSync(
+    File(p.join(sandbox.path, 'pubspec_overrides.yaml')).writeAsStringSync(
       'dependency_overrides:\n'
       '  kelola_pro:\n'
       '    path: $fakePath\n',
@@ -97,30 +84,22 @@ void main() {
     final result = Process.runSync(
       'bash',
       ['scripts/check_play_billing.sh'],
-      workingDirectory: root,
+      workingDirectory: sandbox.path,
       runInShell: true,
     );
     expect(result.exitCode, 0,
         reason: '${result.stdout}${result.stderr}');
-    expect('${result.stdout}${result.stderr}', contains('check_play_billing: ok'));
+    expect(
+      '${result.stdout}${result.stderr}',
+      contains('check_play_billing: ok'),
+    );
   });
 
   test('check_play_billing rejects override that still points at stub', () {
-    final overrides = File(p.join(root, 'pubspec_overrides.yaml'));
-    expect(overrides.existsSync(), isFalse);
-    addTearDown(() {
-      if (overrides.existsSync()) {
-        overrides.deleteSync();
-      }
-      Process.runSync(
-        'flutter',
-        ['pub', 'get'],
-        workingDirectory: root,
-        runInShell: true,
-      );
-    });
+    final sandbox = _makeGateSandbox();
+    addTearDown(() => _deleteQuiet(sandbox));
 
-    overrides.writeAsStringSync(
+    File(p.join(sandbox.path, 'pubspec_overrides.yaml')).writeAsStringSync(
       'dependency_overrides:\n'
       '  kelola_pro:\n'
       '    path: packages/kelola_pro\n',
@@ -129,7 +108,7 @@ void main() {
     final result = Process.runSync(
       'bash',
       ['scripts/check_play_billing.sh'],
-      workingDirectory: root,
+      workingDirectory: sandbox.path,
       runInShell: true,
     );
     expect(result.exitCode, isNot(0));
@@ -138,6 +117,36 @@ void main() {
       contains('packages/kelola_pro'),
     );
   });
+}
+
+/// Minimal checkout under [Directory.systemTemp]. Never copies the developer's
+/// root [pubspec_overrides.yaml], so local billing wiring stays untouched.
+Directory _makeGateSandbox() {
+  final root = Directory.current.path;
+  final sandbox = Directory.systemTemp.createTempSync('kelola_billing_gate_');
+  File(p.join(root, 'pubspec.yaml')).copySync(
+    p.join(sandbox.path, 'pubspec.yaml'),
+  );
+  _copyDir(
+    Directory(p.join(root, 'packages', 'kelola_pro')),
+    Directory(p.join(sandbox.path, 'packages', 'kelola_pro')),
+  );
+  final scripts = Directory(p.join(sandbox.path, 'scripts'))
+    ..createSync(recursive: true);
+  for (final name in [
+    'check_play_billing.dart',
+    'check_play_billing.sh',
+    'build_play_aab.sh',
+  ]) {
+    File(p.join(root, 'scripts', name)).copySync(p.join(scripts.path, name));
+  }
+  return sandbox;
+}
+
+void _deleteQuiet(Directory dir) {
+  if (dir.existsSync()) {
+    dir.deleteSync(recursive: true);
+  }
 }
 
 void _copyDir(Directory src, Directory dst) {
