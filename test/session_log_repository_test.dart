@@ -56,10 +56,15 @@ void main() {
       now: t0,
     );
 
-    final listed = await repo.listSessionLogs(a.id);
+    // listSessionLogs prunes against wall-clock by default; pin the clock to
+    // the fixture window so this suite does not rot after retentionDays.
+    final listed = await repo.listSessionLogs(
+      a.id,
+      now: t0.add(const Duration(seconds: 1)),
+    );
     expect(listed.map((l) => l.title), ['df -h', 'uptime']);
     expect(listed.first.body, contains('df -h'));
-    expect(await repo.listSessionLogs(b.id), hasLength(1));
+    expect(await repo.listSessionLogs(b.id, now: t0), hasLength(1));
   });
 
   test('retention and bookmark survive prune; host delete clears rows', () async {
