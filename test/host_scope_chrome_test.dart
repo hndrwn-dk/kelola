@@ -27,12 +27,17 @@ final hostScopedScreenFiles = [
   'lib/presentation/screens/network_screen.dart',
   'lib/presentation/screens/packages_screen.dart',
   'lib/presentation/screens/processes_screen.dart',
+  'lib/presentation/screens/pty_terminal_screen.dart',
   'lib/presentation/screens/snippets_screen.dart',
+  'lib/presentation/screens/terminal_sheet.dart',
   'lib/presentation/screens/tofu_screen.dart',
   'lib/presentation/screens/tunnels_screen.dart',
   'lib/presentation/screens/unit_detail_screen.dart',
   'lib/presentation/screens/units_screen.dart',
-  'lib/presentation/screens/terminal_sheet.dart',
+  'lib/presentation/screens/workload_detail_screen.dart',
+  'lib/presentation/screens/workload_exec_sheet.dart',
+  'lib/presentation/screens/workload_yaml_screen.dart',
+  'lib/presentation/screens/workloads_screen.dart',
 ];
 
 void main() {

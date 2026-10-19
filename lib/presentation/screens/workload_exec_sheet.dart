@@ -105,11 +105,12 @@ class _WorkloadExecSheetState extends ConsumerState<WorkloadExecSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              widget.workload.title,
-              style: KelolaType.mono(color: c.muted, size: 12),
+            KelolaHostIdentity(
+              hostAlias: widget.host.alias,
+              title: 'Pod exec',
+              contextLine: widget.workload.title,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             TextField(
               controller: _input,
               enabled: !_busy,
