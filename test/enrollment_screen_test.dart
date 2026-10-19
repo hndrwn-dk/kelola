@@ -35,9 +35,15 @@ void main() {
   final fingerprint = OpensshEcdsaP256.fingerprintSha256(blob);
 
   Future<void> pumpEnrollment(WidgetTester tester) async {
+    // FleetWatchResume (e7f67a4) ticks on first frame and reads
+    // databaseProvider; without a memory override, drift_flutter leaves a
+    // pending native timer that fails the test after dispose.
+    final db = KelolaDatabase.memory();
+    addTearDown(db.close);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          databaseProvider.overrideWithValue(db),
           enrollmentProvider.overrideWith(_ReadyEnrollment.new),
         ],
         child: const KelolaApp(
