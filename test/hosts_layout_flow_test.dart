@@ -172,10 +172,10 @@ void main() {
     );
   });
 
-  test('settings carries version build token and keys colophon lines', () {
+  test('settings carries version build token without the keys line', () {
     final src = File('lib/presentation/screens/settings_screen.dart')
         .readAsStringSync();
-    expect(src, contains('Keys stay on this device'));
+    expect(src, isNot(contains('Keys stay on this device')));
     expect(src, contains('sourceLabel'));
     expect(src, contains('kelolaVersionCode'));
     expect(src, contains('KelolaWashScaffold'));

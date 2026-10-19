@@ -17,7 +17,6 @@ import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
-import 'package:kelola/domain/search/inventory_search.dart';
 import 'package:kelola/domain/search/search_index_write.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/presentation/screens/search_screen.dart';
@@ -101,18 +100,12 @@ void main() {
     await db.close();
   });
 
-  Future<void> pumpSearch(
-    WidgetTester tester, {
-    List<SearchUnit> units = const [],
-    List<SearchContainer> containers = const [],
-  }) async {
+  Future<void> pumpSearch(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
           sessionPoolProvider.overrideWithValue(pool),
-          cachedSearchUnitsProvider.overrideWithValue(units),
-          cachedSearchContainersProvider.overrideWithValue(containers),
         ],
         child: const KelolaApp(home: SearchScreen()),
       ),
@@ -126,7 +119,7 @@ void main() {
     expect(find.text('Search'), findsOneWidget);
     expect(find.text('LOCAL'), findsOneWidget);
     expect(
-      find.text('Search hosts, units, and containers already on this phone.'),
+      find.text('Search hosts by name, address, or tag.'),
       findsOneWidget,
     );
     expect(find.text('east-worker-uat'), findsNothing);
@@ -135,158 +128,38 @@ void main() {
     await tester.enterText(find.byType(TextField), 'zzz');
     await tester.pump();
 
-    expect(find.text('No matches.'), findsOneWidget);
+    expect(find.text('No hosts match.'), findsOneWidget);
     expect(
-      find.text('Search hosts, units, and containers already on this phone.'),
+      find.text('Search hosts by name, address, or tag.'),
       findsNothing,
     );
+    expect(find.byType(FilterPill), findsNothing);
     expect(find.text('0 MATCHES'), findsOneWidget);
     expect(pool.executeCalls, 0);
   });
 
-  testWidgets('results are ServiceRows with type · origin meta; no HostCard',
+  testWidgets('a host match is a ServiceRow; unit names stay off this screen',
       (tester) async {
-    await pumpSearch(
-      tester,
-      units: [
-        SearchUnit(
-          hostId: 'east-worker-uat',
-          hostAlias: 'east-worker-uat',
-          unit: const ServiceUnit(
-            name: 'nginx.service',
-            description: '',
-            load: 'loaded',
-            active: 'failed',
-            sub: 'failed',
-          ),
-        ),
-      ],
-      containers: [
-        SearchContainer(
-          hostId: 'east-worker-uat',
-          hostAlias: 'east-worker-uat',
-          row: const ContainerRow(
-            id: 'c1',
-            names: 'nginx',
-            image: 'nginx:latest',
-            state: 'running',
-            status: 'Up 2 days',
-          ),
-        ),
-      ],
-    );
-
-    await tester.enterText(find.byType(TextField), 'nginx');
-    await tester.pump();
-
-    expect(find.byType(ServiceRow), findsNWidgets(2));
-    expect(find.byType(HostCard), findsNothing);
-    expect(find.text('nginx.service'), findsOneWidget);
-    expect(
-      find.descendant(of: find.byType(ServiceRow), matching: find.text('nginx')),
-      findsOneWidget,
-    );
-    expect(find.text('unit · east-worker-uat'), findsOneWidget);
-    expect(find.text('container · east-worker-uat'), findsOneWidget);
-    expect(find.text('2 MATCHES'), findsOneWidget);
-    expect(pool.executeCalls, 0);
-  });
-
-  testWidgets('type chips filter; empty filter shows empty state with counts',
-      (tester) async {
-    await pumpSearch(
-      tester,
-      units: [
-        SearchUnit(
-          hostId: 'east-worker-uat',
-          hostAlias: 'east-worker-uat',
-          unit: const ServiceUnit(
-            name: 'nginx.service',
-            description: '',
-            load: 'loaded',
-            active: 'active',
-            sub: 'running',
-          ),
-        ),
-      ],
-    );
-
-    await tester.enterText(find.byType(TextField), 'east');
-    await tester.pump();
-
-    expect(find.text('east-worker-uat'), findsWidgets);
-    expect(find.text('host · 192.168.18.114'), findsOneWidget);
-    expect(find.text('HOSTS 1'), findsOneWidget);
-    expect(find.text('UNITS 0'), findsOneWidget);
-    expect(find.text('CONTAINERS 0'), findsOneWidget);
-    expect(find.text('ALL 1'), findsOneWidget);
-
-    await tester.tap(find.text('UNITS 0'));
-    await tester.pump();
-
-    expect(find.text('No units match.'), findsOneWidget);
-    expect(find.byType(ServiceRow), findsNothing);
-    expect(find.text('1 MATCHES'), findsOneWidget);
-
-    await tester.tap(find.text('HOSTS 1'));
-    await tester.pump();
-
-    expect(find.byType(ServiceRow), findsOneWidget);
-    expect(find.text('host · 192.168.18.114'), findsOneWidget);
-    expect(pool.executeCalls, 0);
-  });
-
-  testWidgets(
-      'UnitsProbe index is read locally: nginx names host without execute',
-      (tester) async {
-    final stored = await repo.list();
-    final host = stored.single;
+    final stored = (await repo.list()).single;
     await writeSearchIndexFromProbe(
       repo: repo,
-      hostId: host.id,
+      hostId: stored.id,
       parsed: const UnitListResult(
         units: [
           ServiceUnit(
             name: 'nginx.service',
             description: '',
             load: 'loaded',
-            active: 'active',
-            sub: 'running',
+            active: 'failed',
+            sub: 'failed',
           ),
         ],
         initSupported: true,
       ),
     );
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          sessionPoolProvider.overrideWithValue(pool),
-        ],
-        child: const KelolaApp(home: SearchScreen()),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
-
-    await tester.enterText(find.byType(TextField), 'nginx');
-    await tester.pump();
-    await tester.pump();
-
-    expect(find.text('nginx.service'), findsOneWidget);
-    expect(find.text('unit · east-worker-uat'), findsOneWidget);
-    expect(find.text('UNITS 1'), findsOneWidget);
-    expect(pool.executeCalls, 0);
-  });
-
-  testWidgets(
-      'ContainerListProbe index is read locally without execute',
-      (tester) async {
-    final host = (await repo.list()).single;
     await writeSearchIndexFromProbe(
       repo: repo,
-      hostId: host.id,
+      hostId: stored.id,
       parsed: const ContainerInventory(
         rows: [
           ContainerRow(
@@ -294,7 +167,7 @@ void main() {
             names: 'nginx',
             image: 'nginx:latest',
             state: 'running',
-            status: 'Up 1 day',
+            status: 'Up 2 days',
           ),
         ],
       ),
@@ -315,54 +188,24 @@ void main() {
     await tester.enterText(find.byType(TextField), 'nginx');
     await tester.pump();
     await tester.pump();
+    expect(find.byType(ServiceRow), findsNothing);
+    expect(find.text('nginx.service'), findsNothing);
+    expect(find.text('No hosts match.'), findsOneWidget);
 
-    expect(
-      find.descendant(of: find.byType(ServiceRow), matching: find.text('nginx')),
-      findsOneWidget,
-    );
-    expect(find.text('container · east-worker-uat'), findsOneWidget);
-    expect(find.text('CONTAINERS 1'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'east');
+    await tester.pump();
+    expect(find.byType(ServiceRow), findsOneWidget);
+    expect(find.byType(HostCard), findsNothing);
+    expect(find.text('east-worker-uat'), findsOneWidget);
+    expect(find.text('host · 192.168.18.114'), findsOneWidget);
+    expect(find.text('1 MATCHES'), findsOneWidget);
+    expect(find.byType(FilterPill), findsNothing);
     expect(pool.executeCalls, 0);
-  });
 
-  testWidgets('stale unit hit still appears with age in meta', (tester) async {
-    final host = (await repo.list()).single;
-    await writeSearchIndexFromProbe(
-      repo: repo,
-      hostId: host.id,
-      parsed: const UnitListResult(
-        units: [
-          ServiceUnit(
-            name: 'nginx.service',
-            description: '',
-            load: 'loaded',
-            active: 'active',
-            sub: 'running',
-          ),
-        ],
-        initSupported: true,
-      ),
-      now: DateTime.now().toUtc().subtract(const Duration(minutes: 20)),
-    );
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          sessionPoolProvider.overrideWithValue(pool),
-        ],
-        child: const KelolaApp(home: SearchScreen()),
-      ),
-    );
+    await tester.enterText(find.byType(TextField), 'hendra');
     await tester.pump();
-    await tester.pump();
-
-    await tester.enterText(find.byType(TextField), 'nginx');
-    await tester.pump();
-    await tester.pump();
-
-    expect(find.text('nginx.service'), findsOneWidget);
-    expect(find.text('unit · east-worker-uat · 20m ago'), findsOneWidget);
+    expect(find.byType(ServiceRow), findsNothing);
+    expect(find.text('No hosts match.'), findsOneWidget);
     expect(pool.executeCalls, 0);
   });
 }

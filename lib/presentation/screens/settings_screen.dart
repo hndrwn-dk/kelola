@@ -913,12 +913,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   meta: versionMeta,
                 ),
                 const SizedBox(height: 8),
-                const ServiceRow(
-                  risk: RiskLevel.read,
-                  name: 'Keys stay on this device',
-                  meta: 'never leave this phone',
-                ),
-                const SizedBox(height: 8),
                 ServiceRow(
                   risk: RiskLevel.read,
                   name: 'App lock',

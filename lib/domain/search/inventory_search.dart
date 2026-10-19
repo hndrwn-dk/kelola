@@ -5,8 +5,6 @@ import 'package:kelola/domain/units/service_unit.dart';
 
 enum SearchKind { host, unit, container }
 
-enum SearchFilter { hosts, units, containers, all }
-
 class SearchUnit {
   const SearchUnit({
     required this.hostId,
@@ -64,11 +62,11 @@ class SearchIndex {
 class SearchCounts {
   const SearchCounts({
     required this.hosts,
-    required this.units,
-    required this.containers,
+    this.units = 0,
+    this.containers = 0,
   });
 
-  static const empty = SearchCounts(hosts: 0, units: 0, containers: 0);
+  static const empty = SearchCounts(hosts: 0);
 
   final int hosts;
   final int units;
@@ -127,12 +125,7 @@ class SearchView {
 class InventorySearch {
   const InventorySearch();
 
-  SearchView query(
-    SearchIndex index,
-    String raw, {
-    SearchFilter filter = SearchFilter.all,
-    DateTime? now,
-  }) {
+  SearchView query(SearchIndex index, String raw) {
     final q = raw.trim().toLowerCase();
     if (q.isEmpty) {
       return const SearchView(
@@ -142,67 +135,22 @@ class InventorySearch {
       );
     }
 
-    final hosts = <SearchHit>[];
-    for (final h in index.hosts) {
-      if (_hostMatches(h, q)) {
-        hosts.add(
+    final hosts = <SearchHit>[
+      for (final h in index.hosts)
+        if (_hostMatches(h, q))
           SearchHit(
             kind: SearchKind.host,
             name: h.alias,
-            origin: h.address,
+            origin: _hostOrigin(h, q),
             hostId: h.id,
             host: h,
           ),
-        );
-      }
-    }
-
-    final units = <SearchHit>[];
-    for (final u in index.units) {
-      if (_unitMatches(u, q)) {
-        units.add(
-          SearchHit(
-            kind: SearchKind.unit,
-            name: u.unit.name,
-            origin: u.hostAlias,
-            hostId: u.hostId,
-            unit: u,
-            indexedAt: u.indexedAt,
-            now: now,
-          ),
-        );
-      }
-    }
-
-    final containers = <SearchHit>[];
-    for (final c in index.containers) {
-      if (_containerMatches(c, q)) {
-        containers.add(
-          SearchHit(
-            kind: SearchKind.container,
-            name: c.row.title,
-            origin: c.hostAlias,
-            hostId: c.hostId,
-            container: c,
-            indexedAt: c.indexedAt,
-            now: now,
-          ),
-        );
-      }
-    }
-
-    final counts = SearchCounts(
-      hosts: hosts.length,
-      units: units.length,
-      containers: containers.length,
+    ];
+    return SearchView(
+      hits: hosts,
+      counts: SearchCounts(hosts: hosts.length),
+      idle: false,
     );
-    final hits = switch (filter) {
-      SearchFilter.hosts => hosts,
-      SearchFilter.units => units,
-      SearchFilter.containers => containers,
-      SearchFilter.all => [...hosts, ...units, ...containers],
-    };
-    return SearchView(hits: hits, counts: counts, idle: false);
   }
 }
 
@@ -210,18 +158,18 @@ bool _hostMatches(Host host, String q) {
   return host.alias.toLowerCase().contains(q) ||
       host.address.toLowerCase().contains(q) ||
       (host.note?.toLowerCase().contains(q) ?? false) ||
-      host.username.toLowerCase().contains(q);
+      host.tags.any((tag) => tag.toLowerCase().contains(q));
 }
 
-bool _unitMatches(SearchUnit item, String q) {
-  return item.unit.name.toLowerCase().contains(q) ||
-      item.unit.description.toLowerCase().contains(q);
-}
-
-bool _containerMatches(SearchContainer item, String q) {
-  return item.row.names.toLowerCase().contains(q) ||
-      item.row.image.toLowerCase().contains(q) ||
-      item.row.title.toLowerCase().contains(q);
+String _hostOrigin(Host host, String q) {
+  final tags = [
+    for (final tag in host.tags)
+      if (tag.toLowerCase().contains(q)) tag,
+  ]..sort();
+  if (tags.isEmpty) {
+    return host.address;
+  }
+  return '${host.address} · ${tags.join(', ')}';
 }
 
 String _kindLabel(SearchKind kind) => switch (kind) {
@@ -230,25 +178,11 @@ String _kindLabel(SearchKind kind) => switch (kind) {
       SearchKind.container => 'container',
     };
 
-String searchChipLabel(SearchFilter filter, SearchCounts counts) {
-  return switch (filter) {
-    SearchFilter.hosts => 'Hosts ${counts.hosts}',
-    SearchFilter.units => 'Units ${counts.units}',
-    SearchFilter.containers => 'Containers ${counts.containers}',
-    SearchFilter.all => 'All ${counts.all}',
-  };
-}
-
-String searchEmptyCopy(SearchFilter filter, {required bool idle}) {
+String searchEmptyCopy({required bool idle}) {
   if (idle) {
-    return 'Search hosts, units, and containers already on this phone.';
+    return 'Search hosts by name, address, or tag.';
   }
-  return switch (filter) {
-    SearchFilter.all => 'No matches.',
-    SearchFilter.hosts => 'No hosts match.',
-    SearchFilter.units => 'No units match.',
-    SearchFilter.containers => 'No containers match.',
-  };
+  return 'No hosts match.';
 }
 
 String searchKicker({required bool idle, required SearchCounts counts}) {

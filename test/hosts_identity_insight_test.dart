@@ -5,6 +5,7 @@ import 'package:kelola/app.dart';
 import 'package:kelola/app_version.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/domain/audit/audit_view.dart';
 import 'package:kelola/presentation/screens/audit_screen.dart';
@@ -99,11 +100,12 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    final token = createEntitlement().sourceLabel;
     expect(
-      find.text('$kelolaAppVersion · build $kelolaVersionCode · std'),
+      find.text('$kelolaAppVersion · build $kelolaVersionCode · $token'),
       findsOneWidget,
     );
-    expect(find.text('Keys stay on this device'), findsOneWidget);
+    expect(find.text('Keys stay on this device'), findsNothing);
     await flushDriftStreams(tester);
   });
 

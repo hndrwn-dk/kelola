@@ -129,7 +129,7 @@ void main() {
       find.text('$kelolaAppVersion · build $kelolaVersionCode · std'),
       findsOneWidget,
     );
-    expect(find.text('Keys stay on this device'), findsOneWidget);
+    expect(find.text('Keys stay on this device'), findsNothing);
     expect(find.text('Session logs'), findsOneWidget);
     expect(find.text('Environments'), findsOneWidget);
     expect(find.text('Fleet watch'), findsOneWidget);
@@ -164,7 +164,7 @@ void main() {
       find.text('$kelolaAppVersion · build $kelolaVersionCode · std'),
       findsOneWidget,
     );
-    expect(find.text('Keys stay on this device'), findsOneWidget);
+    expect(find.text('Keys stay on this device'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   });

@@ -9,6 +9,7 @@ Host host(
   String alias, {
   String address = '10.0.0.1',
   String? note,
+  List<String> tags = const [],
   HostAttention attention = HostAttention.healthy,
 }) {
   return Host(
@@ -19,6 +20,7 @@ Host host(
     username: 'hendra',
     keyAlias: 'kelola-user',
     note: note,
+    tags: tags,
     attention: attention,
   );
 }
@@ -68,7 +70,7 @@ SearchIndex index({
 }
 
 void main() {
-  test('search matches alias, address, and notes locally', () {
+  test('search matches alias, address, and notes, not the login name', () {
     final hosts = [
       host('nas-01', address: '192.168.1.24', note: 'living-room NAS'),
       host('web-prod', address: '10.0.4.11'),
@@ -93,6 +95,24 @@ void main() {
           .name,
       'nas-01',
     );
+    expect(
+      const InventorySearch().query(index(hosts: hosts), 'hendra').hits,
+      isEmpty,
+    );
+  });
+
+  test('one tag finds every host that carries it', () {
+    final hosts = [
+      host('web-01', address: '10.0.0.8', tags: const ['prod', 'edge']),
+      host('web-02', address: '10.0.0.9', tags: const ['prod']),
+      host('nas-01', address: '10.0.0.10', tags: const ['lab']),
+    ];
+    final hits = const InventorySearch().query(index(hosts: hosts), 'Prod').hits;
+    expect(hits.map((h) => h.name), ['web-01', 'web-02']);
+    expect(hits.map((h) => h.meta), [
+      'host · 10.0.0.8 · prod',
+      'host · 10.0.0.9 · prod',
+    ]);
   });
 
   test('blank query is idle: no hits, not a dump of inventory', () {
@@ -117,20 +137,20 @@ void main() {
 
   test('idle and miss empty copy are distinct', () {
     expect(
-      searchEmptyCopy(SearchFilter.all, idle: true),
-      'Search hosts, units, and containers already on this phone.',
+      searchEmptyCopy(idle: true),
+      'Search hosts by name, address, or tag.',
     );
     expect(
-      searchEmptyCopy(SearchFilter.all, idle: false),
-      'No matches.',
+      searchEmptyCopy(idle: false),
+      'No hosts match.',
     );
     expect(
-      searchEmptyCopy(SearchFilter.all, idle: true),
-      isNot(searchEmptyCopy(SearchFilter.all, idle: false)),
+      searchEmptyCopy(idle: true),
+      isNot(searchEmptyCopy(idle: false)),
     );
   });
 
-  test('chips are pure filters with match counts, not a sort', () {
+  test('unit and container names are not inventory matches', () {
     final snap = index(
       hosts: [
         host('east-worker-uat', address: '192.168.18.114'),
@@ -143,85 +163,21 @@ void main() {
         containerHit(hostAlias: 'east-worker-uat', name: 'nginx'),
       ],
     );
-    const search = InventorySearch();
-    final all = search.query(snap, 'nginx');
-    expect(all.counts.hosts, 1);
-    expect(all.counts.units, 1);
-    expect(all.counts.containers, 1);
-    expect(all.counts.all, 3);
-    expect(all.hits.map((h) => h.kind).toList(), [
-      SearchKind.host,
-      SearchKind.unit,
-      SearchKind.container,
-    ]);
-    expect(
-      searchChipLabel(SearchFilter.hosts, all.counts),
-      'Hosts 1',
-    );
-    expect(
-      searchChipLabel(SearchFilter.units, all.counts),
-      'Units 1',
-    );
-    expect(
-      searchChipLabel(SearchFilter.containers, all.counts),
-      'Containers 1',
-    );
-    expect(searchChipLabel(SearchFilter.all, all.counts), 'All 3');
-
-    final hostsOnly = search.query(snap, 'nginx', filter: SearchFilter.hosts);
-    expect(hostsOnly.hits.map((h) => h.kind), [SearchKind.host]);
-    expect(hostsOnly.counts.all, 3);
-
-    final unitsOnly = search.query(snap, 'nginx', filter: SearchFilter.units);
-    expect(unitsOnly.hits.map((h) => h.kind), [SearchKind.unit]);
-
-    final none = search.query(snap, 'nginx-edge', filter: SearchFilter.units);
-    expect(none.hits, isEmpty);
-    expect(none.counts.hosts, 1);
-    expect(none.counts.units, 0);
-    expect(
-      searchEmptyCopy(SearchFilter.units, idle: false),
-      'No units match.',
-    );
-  });
-
-  test('meta sub-line is type · origin so cross-host hits are obvious', () {
-    final snap = index(
-      hosts: [host('east-worker-uat', address: '192.168.18.114')],
-      units: [
-        unitHit(hostAlias: 'east-worker-uat', name: 'nginx.service'),
-      ],
-      containers: [
-        containerHit(hostAlias: 'east-worker-uat', name: 'nginx'),
-      ],
-    );
-    final hits = const InventorySearch().query(snap, 'east').hits;
-    expect(
-      hits.firstWhere((h) => h.kind == SearchKind.host).meta,
-      'host · 192.168.18.114',
-    );
-
-    final named = const InventorySearch().query(snap, 'nginx');
-    expect(
-      named.hits.firstWhere((h) => h.kind == SearchKind.unit).meta,
-      'unit · east-worker-uat',
-    );
-    expect(
-      named.hits.firstWhere((h) => h.kind == SearchKind.container).meta,
-      'container · east-worker-uat',
-    );
+    final view = const InventorySearch().query(snap, 'nginx');
+    expect(view.hits.map((h) => h.name), ['nginx-edge']);
+    expect(view.hits.map((h) => h.kind), [SearchKind.host]);
+    expect(view.counts.hosts, 1);
+    expect(view.counts.all, 1);
+    expect(view.hits.single.meta, 'host · 10.0.0.9');
   });
 
   test('query is a pure function: no repository or session is required', () {
     final view = const InventorySearch().query(
-      index(
-        hosts: [host('nas-01', address: '192.168.1.24')],
-        units: [unitHit(hostAlias: 'nas-01', name: 'sshd.service')],
-      ),
-      'sshd',
+      index(hosts: [host('nas-01', address: '192.168.1.24')]),
+      '192.168.1',
     );
-    expect(view.hits.single.kind, SearchKind.unit);
-    expect(view.hits.single.name, 'sshd.service');
+    expect(view.hits.single.kind, SearchKind.host);
+    expect(view.hits.single.name, 'nas-01');
   });
 
   test('attention sort puts failed units first', () {

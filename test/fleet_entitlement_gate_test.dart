@@ -404,7 +404,7 @@ void main() {
     expect(find.textContaining('http'), findsNothing);
   });
 
-  testWidgets('build token sits on Settings Version row with keys line',
+  testWidgets('build token sits on Settings Version row',
       (tester) async {
     await pumpScreen(tester, const SettingsScreen());
     await tester.pump(const Duration(milliseconds: 100));
@@ -413,7 +413,7 @@ void main() {
         find.text('$kelolaAppVersion · build $kelolaVersionCode · std');
     expect(label, findsOneWidget);
     expect(find.text('open-source'), findsNothing);
-    expect(find.text('Keys stay on this device'), findsOneWidget);
+    expect(find.text('Keys stay on this device'), findsNothing);
     expect(find.byKey(HostsColophon.hairlineKey), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());

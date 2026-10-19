@@ -291,13 +291,8 @@ Future<bool> _showEnvEditor({
     ),
     builder: (ctx) {
       return KelolaSheet(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            14,
-            16,
-            14,
-            MediaQuery.viewInsetsOf(ctx).bottom + 12,
-          ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
           child: _EnvEditorForm(
             scope: scope,
             scopeId: scopeId,
@@ -332,6 +327,8 @@ class _EnvEditorFormState extends ConsumerState<_EnvEditorForm> {
   late final TextEditingController _name;
   late final TextEditingController _value;
   late final TextEditingController _tag;
+  final _nameFocus = FocusNode();
+  final _valueFocus = FocusNode();
   String? _nameError;
 
   @override
@@ -349,11 +346,17 @@ class _EnvEditorFormState extends ConsumerState<_EnvEditorForm> {
     _name.dispose();
     _value.dispose();
     _tag.dispose();
+    _nameFocus.dispose();
+    _valueFocus.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _nameError = 'Name is required');
+      return;
+    }
     if (!isEnvName(name)) {
       setState(() => _nameError = 'Use letters, digits, underscore');
       return;
@@ -424,21 +427,31 @@ class _EnvEditorFormState extends ConsumerState<_EnvEditorForm> {
             label: 'Tag',
             controller: _tag,
             hint: 'prod',
+            textInputAction: TextInputAction.next,
+            onSubmitted: (_) => _nameFocus.requestFocus(),
           ),
         ],
         const SizedBox(height: 14),
         KelolaInput(
           label: 'Name',
           controller: _name,
+          focusNode: _nameFocus,
           hint: 'REGION',
           error: _nameError,
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) => _valueFocus.requestFocus(),
         ),
         const SizedBox(height: 14),
         KelolaInput(
           label: 'Value',
           controller: _value,
+          focusNode: _valueFocus,
           hint: 'us-east',
           mono: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) {
+            _save();
+          },
         ),
         const SizedBox(height: 18),
         FilledButton(

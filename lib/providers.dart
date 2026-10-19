@@ -392,26 +392,3 @@ final recentsProvider = StreamProvider<List<Host>>((ref) {
 final lastHostIdProvider = StreamProvider<String?>((ref) {
   return ref.watch(hostRepositoryProvider).watchLastHostId();
 });
-
-final _searchUnitsFromDbProvider =
-    FutureProvider.autoDispose<List<SearchUnit>>((ref) {
-  return ref.watch(hostRepositoryProvider).listSearchUnits();
-});
-
-final _searchContainersFromDbProvider =
-    FutureProvider.autoDispose<List<SearchContainer>>((ref) {
-  return ref.watch(hostRepositoryProvider).listSearchContainers();
-});
-
-/// Last-known units from the local search index. Filled when UnitsProbe
-/// succeeds — search never SSHs to populate it.
-final cachedSearchUnitsProvider = Provider.autoDispose<List<SearchUnit>>((ref) {
-  return ref.watch(_searchUnitsFromDbProvider).valueOrNull ?? const [];
-});
-
-/// Last-known containers from the local search index. Filled when
-/// ContainerListProbe succeeds — search never SSHs to populate it.
-final cachedSearchContainersProvider =
-    Provider.autoDispose<List<SearchContainer>>((ref) {
-  return ref.watch(_searchContainersFromDbProvider).valueOrNull ?? const [];
-});
