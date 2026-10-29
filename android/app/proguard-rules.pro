@@ -4,3 +4,11 @@
 # { *; } does not keep constructors. Keep <init> across the package.
 -keep class androidx.work.** { <init>(...); }
 -keep class androidx.work.impl.** { *; }
+
+# FleetWatchWorker is enqueued by class name; keep the WorkManager constructor.
+-keep class com.tursinalabs.kelola.FleetWatchWorker {
+    public <init>(android.content.Context, androidx.work.WorkerParameters);
+}
+
+# Play Core is referenced transitively by billing; not all classes ship on device.
+-dontwarn com.google.android.play.core.**

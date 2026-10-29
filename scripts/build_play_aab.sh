@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Build a Play Store release AAB only when private kelola_pro billing is wired.
 # Copy the signed AAB into gitignored bundles_release/v<version>/.
+#
+# Manual Play uploads must pass --build-number higher than the last CI
+# versionCode (github.run_number + 100). See docs/RELEASING.md.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

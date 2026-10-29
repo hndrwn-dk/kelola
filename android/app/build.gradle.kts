@@ -7,11 +7,23 @@ plugins {
 import java.util.Properties
 import java.io.FileInputStream
 
+val envStoreFile = System.getenv("ANDROID_KEYSTORE_PATH")
+val envStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+val envKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+val envKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+val hasEnvSigning =
+    !envStoreFile.isNullOrBlank() &&
+        !envStorePassword.isNullOrBlank() &&
+        !envKeyAlias.isNullOrBlank() &&
+        !envKeyPassword.isNullOrBlank()
+
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
+val hasPropertiesSigning = keystorePropertiesFile.exists()
+val isCi = System.getenv("CI") == "true"
 
 android {
     namespace = "com.tursinalabs.kelola"
@@ -40,23 +52,41 @@ android {
     }
 
     signingConfigs {
-        if (keystorePropertiesFile.exists()) {
+        if (hasEnvSigning || hasPropertiesSigning) {
             create("release") {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = keystoreProperties["storeFile"]?.let { file(it) }
-                storePassword = keystoreProperties["storePassword"] as String
+                if (hasEnvSigning) {
+                    keyAlias = envKeyAlias
+                    keyPassword = envKeyPassword
+                    storeFile = file(envStoreFile!!)
+                    storePassword = envStorePassword
+                } else {
+                    keyAlias = keystoreProperties["keyAlias"] as String
+                    keyPassword = keystoreProperties["keyPassword"] as String
+                    storeFile = keystoreProperties["storeFile"]?.let { file(it) }
+                    storePassword = keystoreProperties["storePassword"] as String
+                }
             }
         }
     }
 
     buildTypes {
         release {
-            // Prefer upload/release keystore when android/key.properties is present.
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
+            // Prefer env (CI) → android/key.properties (local) → debug (local only).
+            // Never silently debug-sign a CI release.
+            signingConfig = when {
+                hasEnvSigning || hasPropertiesSigning ->
+                    signingConfigs.getByName("release")
+                isCi ->
+                    throw GradleException(
+                        "CI release build requires ANDROID_KEYSTORE_* env vars " +
+                            "or android/key.properties; refusing debug signing.",
+                    )
+                else -> signingConfigs.getByName("debug")
             }
             // AGP 9 R8 full mode. WorkManager 2.9 dies without these keeps.
             proguardFiles(
