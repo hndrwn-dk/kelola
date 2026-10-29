@@ -221,21 +221,6 @@ jobs:
               print("::error::flutter test failed and test.json is missing")
               sys.exit(1)
           failed = []
-          for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-              line = line.strip()
-              if not line:
-                  continue
-              try:
-                  ev = json.loads(line)
-              except json.JSONDecodeError:
-                  continue
-              if ev.get("type") != "error":
-                  continue
-              err = ev.get("error", {})
-              test_id = err.get("testID")
-              message = (err.get("error") or "").splitlines()[0] if err.get("error") else "failed"
-              failed.append(f"testID={test_id}: {message}")
-          # Also surface test-done failures
           names = {}
           for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
               line = line.strip()
@@ -245,12 +230,29 @@ jobs:
                   ev = json.loads(line)
               except json.JSONDecodeError:
                   continue
+              if not isinstance(ev, dict):
+                  continue
               if ev.get("type") == "testStart":
-                  t = ev.get("test", {})
-                  names[t.get("id")] = t.get("name", "?")
+                  t = ev.get("test") or {}
+                  if isinstance(t, dict):
+                      names[t.get("id")] = t.get("name", "?")
               if ev.get("type") == "testDone" and ev.get("result") == "error":
                   tid = ev.get("testID")
                   failed.append(f"{names.get(tid, tid)}: testDone error")
+              if ev.get("type") != "error":
+                  continue
+              # Flutter file-reporter: "error" may be a string or an object.
+              err = ev.get("error")
+              if isinstance(err, dict):
+                  test_id = err.get("testID")
+                  raw = err.get("error") or err.get("stackTrace") or "failed"
+                  message = str(raw).splitlines()[0]
+                  failed.append(f"testID={test_id}: {message}")
+              else:
+                  tid = ev.get("testID")
+                  message = str(err or "failed").splitlines()[0]
+                  name = names.get(tid, tid)
+                  failed.append(f"{name}: {message}")
           body = "%0A".join(failed[:40]) if failed else "flutter test failed (see log)"
           print(f"::error file=.github/workflows/app.yml::{body}")
           sys.exit(1)

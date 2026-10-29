@@ -64,6 +64,12 @@ void main() {
     expect(find.text('4 cores'), findsOneWidget);
     expect(find.text('2.1 / 33.3 GiB'), findsOneWidget);
 
+    // Pixel goldens are Linux/CI-authoritative (Ubuntu). Widget finders
+    // above already assert the design-system inventory on every OS.
+    if (!Platform.isLinux && !autoUpdateGoldenFiles) {
+      return;
+    }
+
     await tester.runAsync(() async {
       final boundary =
           boundaryKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
@@ -79,7 +85,8 @@ void main() {
       expect(
         file.existsSync(),
         isTrue,
-        reason: 'missing golden; regenerate with flutter test --update-goldens',
+        reason:
+            'missing golden; regenerate on Linux with flutter test --update-goldens',
       );
       expect(captured, file.readAsBytesSync());
     });
