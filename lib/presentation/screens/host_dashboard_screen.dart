@@ -34,7 +34,7 @@ import 'package:kelola/presentation/screens/terminal_sheet.dart';
 import 'package:kelola/presentation/screens/snippets_screen.dart';
 import 'package:kelola/presentation/screens/tunnels_screen.dart';
 import 'package:kelola/presentation/screens/units_screen.dart';
-import 'package:kelola/presentation/screens/workloads_screen.dart';
+import 'package:kelola/presentation/screens/kubernetes_home_screen.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/probes/host_action_probe.dart';
@@ -658,7 +658,8 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                   child: ToolTile(
                     label: 'Kubernetes',
                     meta: 'cluster',
-                    onTap: () => _open((id) => WorkloadsScreen(hostId: id)),
+                    onTap: () =>
+                        _open((id) => KubernetesHomeScreen(hostId: id)),
                   ),
                 ),
                 const SizedBox(width: 7),

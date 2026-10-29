@@ -65,25 +65,46 @@ K8sWorkload? _item(Map<String, dynamic> raw) {
       final containers = status['containerStatuses'];
       var ready = 0;
       var desired = 0;
+      var waitingReason = '';
       if (containers is List) {
         desired = containers.length;
         for (final c in containers) {
-          if (c is Map && c['ready'] == true) {
+          if (c is! Map) {
+            continue;
+          }
+          if (c['ready'] == true) {
             ready++;
+          }
+          final state = _map(c['state']);
+          final waiting = _map(state['waiting']);
+          final reason = waiting['reason'] as String? ?? '';
+          if (reason.isNotEmpty && waitingReason.isEmpty) {
+            waitingReason = reason;
           }
         }
       }
-      final health = switch (phase) {
-        'Failed' || 'Unknown' => HealthStatus.failed,
-        'Pending' => HealthStatus.warning,
-        'Succeeded' => HealthStatus.healthy,
-        'Running' =>
-          ready == desired && desired > 0
-              ? HealthStatus.healthy
-              : HealthStatus.warning,
-        _ => HealthStatus.unknown,
-      };
-      return (ready: ready, desired: desired, phase: phase, health: health);
+      final displayPhase =
+          waitingReason.isNotEmpty ? waitingReason : phase;
+      final crashy = waitingReason == 'CrashLoopBackOff' ||
+          waitingReason == 'ImagePullBackOff' ||
+          waitingReason == 'ErrImagePull';
+      final health = crashy || phase == 'Failed' || phase == 'Unknown'
+          ? HealthStatus.failed
+          : switch (phase) {
+              'Pending' => HealthStatus.warning,
+              'Succeeded' => HealthStatus.healthy,
+              'Running' =>
+                ready == desired && desired > 0
+                    ? HealthStatus.healthy
+                    : HealthStatus.warning,
+              _ => HealthStatus.unknown,
+            };
+      return (
+        ready: ready,
+        desired: desired,
+        phase: displayPhase,
+        health: health,
+      );
     case K8sKind.daemonSet:
       final desired = _int(status['desiredNumberScheduled']) ?? 0;
       final ready = _int(status['numberReady']) ?? 0;

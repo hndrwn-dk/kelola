@@ -79,6 +79,36 @@ void main() {
     );
   });
 
+  test('pod waiting reason CrashLoopBackOff becomes phase and failed health',
+      () {
+    final inv = parseWorkloadList(r'''
+{
+  "kind": "List",
+  "items": [
+    {
+      "kind": "Pod",
+      "metadata": {"name": "api-x", "namespace": "default"},
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [
+          {
+            "ready": false,
+            "restartCount": 14,
+            "state": {"waiting": {"reason": "CrashLoopBackOff"}}
+          }
+        ]
+      }
+    }
+  ]
+}
+''');
+    final pod = inv.rows.single;
+    expect(pod.phase, 'CrashLoopBackOff');
+    expect(pod.health, HealthStatus.failed);
+    expect(pod.ready, 0);
+    expect(pod.desired, 1);
+  });
+
   test('sentinel and junk JSON are empty, not a crash', () {
     expect(parseWorkloadList('---NO_KUBECTL---').missingKubectl, isTrue);
     expect(parseWorkloadList('not-json').rows, isEmpty);

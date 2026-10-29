@@ -130,13 +130,13 @@ class _WorkloadsScreenState extends ConsumerState<WorkloadsScreen> {
     return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
         hostAlias: watchedHostAlias(ref, widget.hostId),
-        title: 'Kubernetes',
+        title: 'Workloads',
         contextLine: _inv.missingKubectl
             ? 'no kubectl'
             : '${_inv.rows.length} objects',
         actions: [
           KelolaChromeIconButton(
-            tooltip: 'Filter Kubernetes',
+            tooltip: 'Filter workloads',
             icon: _searching ? Icons.search_off_rounded : Icons.search_rounded,
             onPressed: () => setState(() => _searching = !_searching),
           ),
