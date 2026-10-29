@@ -439,6 +439,8 @@ jobs:
         shell: bash
         env:
           TRACK: ${{ needs.build.outputs.track }}
+          # Never inline the SA JSON into bash — PEM "PRIVATE KEY" breaks [[ -z "..." ]].
+          HAS_PLAY_SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
         run: |
           set -euo pipefail
           if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
@@ -462,7 +464,7 @@ jobs:
             echo "::error file=.github/workflows/app.yml::mapping.txt artifact missing."
             exit 1
           fi
-          if [[ -z "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" ]]; then
+          if [[ "$HAS_PLAY_SA" != "true" ]]; then
             echo "::error file=.github/workflows/app.yml::PLAY_SERVICE_ACCOUNT_JSON secret is missing."
             exit 1
           fi
@@ -492,9 +494,11 @@ jobs:
 
       - name: Write service account JSON
         shell: bash
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
-          printf '%s' "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" > "$RUNNER_TEMP/play-sa.json"
+          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/play-sa.json"
 
       - name: Upload to Google Play
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
