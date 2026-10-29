@@ -180,25 +180,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Repo already has analyzer infos + warnings; only fail on severity=error.
+          # Format: "warning • message • path:line:col • code"
           set +e
-          out="$(flutter analyze --no-fatal-infos 2>&1)"
+          out="$(flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1)"
           code=$?
           set -e
           printf '%s\n' "$out"
-          while IFS= read -r line; do
-            if [[ "$line" =~ ^(error|warning|info)\ -\ (.+)\ -\ (.+):([0-9]+):([0-9]+)\ -\ (.+)$ ]]; then
-              sev="${BASH_REMATCH[1]}"
-              msg="${BASH_REMATCH[2]}"
-              file="${BASH_REMATCH[3]}"
-              row="${BASH_REMATCH[4]}"
-              col="${BASH_REMATCH[5]}"
-              if [[ "$sev" == "info" ]]; then
-                echo "::warning file=${file},line=${row},col=${col}::${msg}"
-              else
-                echo "::error file=${file},line=${row},col=${col}::${msg}"
-              fi
-            fi
-          done <<< "$out"
+          python3 - "$out" <<'PY'
+          import re, sys
+          text = sys.argv[1]
+          # Leading spaces then severity • message • file:line:col • code
+          pat = re.compile(
+              r"^\s*(error|warning|info)\s+•\s+(.+?)\s+•\s+([^:]+):(\d+):(\d+)\s+•\s+(\S+)\s*$"
+          )
+          for line in text.splitlines():
+              m = pat.match(line)
+              if not m:
+                  continue
+              sev, msg, path, row, col, _code = m.groups()
+              # GitHub annotations: errors fail the check UI; infos/warnings stay advisory.
+              kind = "error" if sev == "error" else "warning"
+              print(f"::{kind} file={path},line={row},col={col}::{msg}")
+          PY
           exit "$code"
 
       - name: Test

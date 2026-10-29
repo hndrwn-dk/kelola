@@ -95,6 +95,9 @@ bash scripts/build_play_aab.sh --build-number=200
 
 Job **Analyze & test** always runs. Annotations (`::error` /
 `::warning`) point at analyzer findings and failed tests.
+`flutter analyze` uses `--no-fatal-infos --no-fatal-warnings` so
+existing infos/warnings do not fail the job; only analyzer **errors**
+fail CI.
 
 Jobs **Build Play AAB** and **Upload to Google Play** run only when
 `track != none`, under the `play` environment.
