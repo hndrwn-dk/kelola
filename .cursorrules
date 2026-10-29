@@ -78,9 +78,11 @@ deferred per spec.
 
 Follow `docs/RELEASING.md`. Hard rules:
 
-- A feature or bug-fix release bumps **versionName** in `pubspec.yaml`
-  and **replaces** `docs/store/whatsnew/whatsnew-en-US` for that version
-  only (≤ 500 chars). Never bump one without the other.
+- A feature or bug-fix release bumps **versionName** in `pubspec.yaml`,
+  updates `lib/app_version.dart` defaults to the same name/`+N`, and
+  **replaces** `docs/store/whatsnew/whatsnew-en-US` for that version
+  only (≤ 500 chars). Never bump one without the others. Settings Version
+  must match the AAB (CI injects KELOLA_VERSION / KELOLA_BUILD).
 - Every feature or bug-fix change adds unit/widget tests for what it
   changes. CI runs `flutter test` only — no emulator / integration_test.
 - Never commit `pubspec_overrides.yaml`, keystores, service-account
