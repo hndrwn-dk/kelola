@@ -355,13 +355,20 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          VERSION_NAME="${{ needs.analyze.outputs.version_name }}"
           BUILD_NUMBER=$((GITHUB_RUN_NUMBER + 100))
           LOG="$RUNNER_TEMP/aab-build.log"
           trap 'code=$?; if [[ $code -ne 0 ]]; then
             tail=$(grep -v "^[[:space:]]*$" "$LOG" 2>/dev/null | tail -n 25 | sed "s/%/%25/g;s/\r//g" | awk "{printf \"%s%%0A\", \$0}")
             echo "::error file=.github/workflows/app.yml::AAB build failed:%0A${tail}"
           fi; exit $code' ERR
-          flutter build appbundle --release --build-number="$BUILD_NUMBER" 2>&1 | tee "$LOG"
+          # Same name/build as Android package metadata so Settings Version matches the AAB.
+          flutter build appbundle --release \
+            --build-name="$VERSION_NAME" \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define=KELOLA_VERSION="$VERSION_NAME" \
+            --dart-define=KELOLA_BUILD="$BUILD_NUMBER" \
+            2>&1 | tee "$LOG"
 
       - name: Require mapping.txt and native debug symbols
         shell: bash

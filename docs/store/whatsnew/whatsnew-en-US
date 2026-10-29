@@ -1,1 +1,1 @@
-Kubernetes home: open the chip for cluster health (API, control plane, CoreDNS, this host) and a short not-ready workload list, then drill into all workloads. Pods show CrashLoop and image-pull waiting reasons.
+Settings Version now matches the installed AAB (name and build). Kubernetes home from 0.3.3 is unchanged: cluster health plus not-ready workloads, with CrashLoop and image-pull reasons.

@@ -10,13 +10,28 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 bash "$ROOT/scripts/check_play_billing.sh"
-flutter build appbundle --release "$@"
 
 VERSION="$(awk -F': ' '/^version:/ {gsub(/\r/, "", $2); gsub(/ /, "", $2); print $2; exit}' pubspec.yaml)"
 if [[ -z "$VERSION" ]]; then
   echo "build_play_aab: could not read version from pubspec.yaml" >&2
   exit 1
 fi
+VERSION_NAME="${VERSION%%+*}"
+VERSION_CODE="${VERSION##*+}"
+if [[ -z "$VERSION_NAME" || -z "$VERSION_CODE" || "$VERSION_NAME" == "$VERSION" ]]; then
+  echo "build_play_aab: pubspec version must be name+build (got $VERSION)" >&2
+  exit 1
+fi
+
+# Keep Settings Version identical to the package metadata in this AAB.
+# Callers may still pass --build-number=… after -- to raise above CI codes;
+# when they do, also pass matching --dart-define=KELOLA_BUILD=….
+flutter build appbundle --release \
+  --build-name="$VERSION_NAME" \
+  --build-number="$VERSION_CODE" \
+  --dart-define=KELOLA_VERSION="$VERSION_NAME" \
+  --dart-define=KELOLA_BUILD="$VERSION_CODE" \
+  "$@"
 
 DEST="$ROOT/bundles_release/v${VERSION}"
 mkdir -p "$DEST"

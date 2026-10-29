@@ -6,10 +6,17 @@ A **release** is a push to `main` that changes **versionName** in
 `pubspec.yaml` (the part before `+`). Patch for fixes, minor for
 features. CI ignores the `+N` build metadata for release detection.
 
-Together with the versionName bump you **must** replace
-`docs/store/whatsnew/whatsnew-en-US` with notes for **this version
-only** (plain text, ≤ 500 characters, no language tags). Never paste
-older releases' notes into that file.
+Together with the versionName bump you **must**:
+
+1. Update `lib/app_version.dart` default values to the same name and
+   `+N` (Settings reads these; AAB builds also inject matching
+   `--dart-define=KELOLA_VERSION` / `KELOLA_BUILD`).
+2. Replace `docs/store/whatsnew/whatsnew-en-US` with notes for **this
+   version only** (plain text, ≤ 500 characters, no language tags).
+   Never paste older releases' notes into that file.
+
+`test/app_version_lockstep_test.dart` fails CI if defaults drift from
+pubspec or if the AAB build drops the dart-defines.
 
 Other changes (docs, tests, CI, refactors) must not bump versionName
 and must not rewrite whatsnew.
