@@ -226,6 +226,7 @@ class _DeniedPool extends SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) async {
     if (probe is SftpListProbe) {
       final list = probe as SftpListProbe;

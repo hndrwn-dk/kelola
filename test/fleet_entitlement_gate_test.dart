@@ -109,6 +109,7 @@ class _RecordingPool extends SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) async {
     probed.add(host.id);
     throw StateError('no ssh in test');

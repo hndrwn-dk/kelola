@@ -203,6 +203,7 @@ class SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) async {
     if (host.username == 'root') {
       throw RootLoginRejectedException();
@@ -222,7 +223,7 @@ class SshSessionPool {
       );
       throw ReadOnlyViolation(probe);
     }
-    final command = draft.command;
+    final command = probe.command(resolvedFacts);
     final started = DateTime.now();
     final skipProbeAudit = _auditPolicy.alreadyLost(host.id);
     // Successful Fleet-scope reads must not flood Insights (spec B).
@@ -269,6 +270,7 @@ class SshSessionPool {
           title: probe.auditTitle,
           timeout: probe.timeout,
           cancel: cancel,
+          stdinBytes: stdinBytes,
         );
         exitCode = result.exitCode;
         if (probe is JournalProbe) {
@@ -368,11 +370,16 @@ class SshSessionPool {
     required String title,
     required Duration timeout,
     TransferCancel? cancel,
+    List<int>? stdinBytes,
   }) async {
     if (cancel?.isCancelled == true) {
       throw const TransferCancelledException();
     }
     final session = await client.execute(command);
+    if (stdinBytes != null) {
+      session.write(Uint8List.fromList(stdinBytes));
+      await session.stdin.close();
+    }
     var killed = false;
     void kill() {
       if (killed) {

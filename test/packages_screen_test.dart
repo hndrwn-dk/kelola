@@ -131,7 +131,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(DestructiveConfirmSheet), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
-    expect(find.text('Apply 1 security updates?'), findsOneWidget);
+    expect(find.text('Update openssl?'), findsOneWidget);
   });
 
   testWidgets('sudo-gated dnf refresh shows ActionableError, not ALL 0',
@@ -147,7 +147,7 @@ void main() {
               list: () async => throw SudoRequiredException(
                 const SudoHintContext(
                   kind: SudoHintKind.packages,
-                  binary: '/usr/bin/dnf check-update --refresh',
+                  binary: '/usr/bin/dnf --color=never check-update --refresh',
                   verb: 'check-update',
                 ),
               ),
@@ -160,7 +160,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(ActionableError), findsOneWidget);
-    expect(find.textContaining('dnf check-update --refresh'), findsWidgets);
+    expect(
+      find.textContaining('dnf --color=never check-update --refresh'),
+      findsWidgets,
+    );
     expect(find.textContaining('hendr ALL=(root) NOPASSWD'), findsWidgets);
     expect(find.textContaining('FETCHING UPDATES'), findsNothing);
     expect(find.text(packagesFetchingCopy), findsNothing);
@@ -260,6 +263,7 @@ class _PackagesPool extends SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) async {
     this.cancel = cancel;
     if (probe is HostFactsProbe) {

@@ -158,13 +158,14 @@ SudoHint kelolaSudoHint({
       return SudoHint(
         body:
             'This host\'s sudo asks for a password, so this mutate failed. '
-            'Kelola never prompts for a sudo password. Add a NOPASSWD line for '
-            'this unit only, using visudo so a syntax error cannot lock sudo, '
-            'or a polkit rule limited to $unit. $sudoNeedsNoSudoCopy',
-        snippet: '$sudoers\n'
-            '\n'
-            '# Edit with visudo so a syntax error cannot lock sudo:\n'
-            '# $visudoKelolaCommand\n'
+            'Kelola never prompts for a sudo password on daily probes. '
+            'Add a NOPASSWD line for this unit only at $visudoKelolaPath '
+            '(mode 0440), or a polkit rule limited to $unit. '
+            '$sudoNeedsNoSudoCopy',
+        snippet: '# path: $visudoKelolaPath  mode: 0440\n'
+            '$visudoKelolaCommand\n'
+            '# then paste:\n'
+            '$sudoers\n'
             '\n'
             '${_polkitRule(user: user, unit: unit, verb: verb)}',
       );
@@ -206,8 +207,9 @@ SudoHint kelolaSudoHint({
       return SudoHint(
         body: sudoRequiredBody,
         snippet:
-            '# Use visudo so a syntax error cannot lock sudo:\n'
+            '# path: $visudoKelolaPath  mode: 0440\n'
             '$visudoKelolaCommand\n'
+            '# Prefer Enable Kelola sudo on the host dashboard for a guided apply.\n'
             '# Kelola will show a command-specific rule when a mutate fails.\n'
             '# Never grant passwordless access to a shell or to docker/systemctl without arguments.\n'
             '# systemd alternative: a polkit rule at $polkitKelolaPath limited to one unit.\n',
@@ -227,13 +229,13 @@ SudoHint _binaryHint({
   return SudoHint(
     body:
         'This host\'s sudo asks for a password, so $bodyLead failed. '
-        'Kelola never prompts for a sudo password. Add a NOPASSWD line for '
-        'this command only, using visudo so a syntax error cannot lock sudo. '
-        '$sudoNeedsNoSudoCopy',
-    snippet: '$user ALL=(root) NOPASSWD: $spec\n'
-        '\n'
-        '# Edit with visudo so a syntax error cannot lock sudo:\n'
-        '# $visudoKelolaCommand\n',
+        'Kelola never prompts for a sudo password on daily probes. '
+        'Use Enable Kelola sudo, or add a NOPASSWD line for this command only '
+        'at $visudoKelolaPath (mode 0440). $sudoNeedsNoSudoCopy',
+    snippet: '# path: $visudoKelolaPath  mode: 0440\n'
+        '$visudoKelolaCommand\n'
+        '# then paste:\n'
+        '$user ALL=(root) NOPASSWD: $spec\n',
   );
 }
 

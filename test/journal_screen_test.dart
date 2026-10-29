@@ -273,6 +273,7 @@ class _JournalPool extends SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) async {
     if (probe is JournalProbe) {
       return page as T;

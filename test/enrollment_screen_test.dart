@@ -640,6 +640,7 @@ class _AlreadyPresentVerifiedPool extends SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) async {
     // Dashboard refresh must not open a real socket in widget tests.
     return HostFacts.undiscovered as T;

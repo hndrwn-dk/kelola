@@ -14,8 +14,11 @@ import 'package:kelola/domain/probes/package_apply_probe.dart';
 import 'package:kelola/domain/probes/package_list_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/presentation/widgets/confirm_package_action.dart';
+import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
+import 'package:kelola/presentation/widgets/package_detail_sheet.dart';
 import 'package:kelola/providers.dart';
 
 const packagesFetchingCopy =
@@ -144,7 +147,27 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
     }
   }
 
-  Future<void> _apply() async {
+  Future<void> _openPackage(PackageUpdate update) async {
+    final host = _host;
+    final snap = _snap;
+    if (host == null || snap == null) {
+      return;
+    }
+    final updateThis = await showPackageDetailSheet(
+      context,
+      update: update,
+      readOnly: host.readOnly,
+    );
+    if (!updateThis || !mounted) {
+      return;
+    }
+    await _apply(names: [update.name], securityOnly: false);
+  }
+
+  Future<void> _apply({
+    List<String>? names,
+    bool? securityOnly,
+  }) async {
     final host = _host;
     final facts = _facts;
     final snap = _snap;
@@ -152,15 +175,17 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
       return;
     }
     final visible = visiblePackageUpdates(snap, _filter);
-    if (visible.isEmpty) {
+    final applyNames =
+        names ?? visible.map((u) => u.name).toList();
+    if (applyNames.isEmpty) {
       return;
     }
-    final securityOnly = _filter == PackageListFilter.security;
+    final sec = securityOnly ?? (_filter == PackageListFilter.security);
     final ok = await confirmPackageApply(
       context,
       hostAlias: host.alias,
-      names: visible.map((u) => u.name).toList(),
-      securityOnly: securityOnly,
+      names: applyNames,
+      securityOnly: sec,
       rebootRequired: snap.rebootRequired,
     );
     if (!ok || !mounted) {
@@ -176,8 +201,8 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
         context: context,
         host: host,
         probe: PackageApplyProbe(
-          names: visible.map((u) => u.name).toList(),
-          securityOnly: securityOnly,
+          names: applyNames,
+          securityOnly: sec,
           manager: facts.pkg,
         ),
         facts: facts,
@@ -258,6 +283,21 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
               child: KelolaError(
                 message: _error!,
                 sudoUser: _host?.username,
+                onEnableSudo: _host == null
+                    ? null
+                    : () async {
+                        final host = _host!;
+                        final ok = await runEnableKelolaSudoFlow(
+                          context: context,
+                          ref: ref,
+                          host: host,
+                          facts: _facts,
+                          preselected: {KelolaSudoersGroup.packages},
+                        );
+                        if (ok && mounted) {
+                          await _load();
+                        }
+                      },
               ),
             ),
           Expanded(
@@ -330,6 +370,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
               name: u.name,
               meta: u.versionMeta,
               pillText: u.security ? 'sec' : null,
+              onTap: () => _openPackage(u),
             ),
           ),
         if (visible.isNotEmpty && _host?.readOnly != true) ...[
@@ -340,7 +381,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
             meta: snap != null && snap.rebootRequired
                 ? 'destructive · may require reboot'
                 : 'destructive · never auto-applied',
-            onTap: _apply,
+            onTap: () => _apply(),
           ),
         ],
       ],

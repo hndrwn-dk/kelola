@@ -43,6 +43,7 @@ import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/domain/tunnels/active_tunnel.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
+import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/diagnostic_pack_sheet.dart';
 import 'package:kelola/presentation/widgets/incident_sheet.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
@@ -348,6 +349,9 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
             onNote: _editNote,
             onEdit: _openEdit,
             onDetails: _openDetails,
+            onEnableSudo: host == null
+                ? null
+                : () => _enableKelolaSudo(host),
             onDiagnostic: host == null
                 ? null
                 : () => openDiagnosticPack(context, ref, host),
@@ -755,13 +759,16 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
             if (host != null) ...[
               const SizedBox(height: 16),
               GestureDetector(
-                onTap: () => _toggleReadOnly(host),
+                onTap: host.sudoNeedsPassword
+                    ? null
+                    : () => _toggleReadOnly(host),
                 behavior: HitTestBehavior.opaque,
                 child: DashboardStatusLine(
                   checkedAt: host.attentionAt,
                   readOnly: host.readOnly,
                   sudoNeedsPassword: host.sudoNeedsPassword,
                   sudoUser: host.username,
+                  onEnableSudo: () => _enableKelolaSudo(host),
                 ),
               ),
             ],
@@ -980,6 +987,27 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     }
   }
 
+  Future<void> _enableKelolaSudo(Host host) async {
+    final ok = await runEnableKelolaSudoFlow(
+      context: context,
+      ref: ref,
+      host: host,
+      facts: _facts,
+    );
+    if (!ok || !mounted) {
+      return;
+    }
+    final refreshed = await ref.read(hostRepositoryProvider).get(host.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      if (refreshed != null) {
+        _host = refreshed;
+      }
+    });
+  }
+
   Future<void> _hostVerb(
     Host host,
     HostVerb verb, {
@@ -1057,6 +1085,7 @@ class HostDashboardMenuButton extends StatelessWidget {
     required this.onAudit,
     required this.onRemove,
     this.onDiagnostic,
+    this.onEnableSudo,
   });
 
   final VoidCallback onNote;
@@ -1065,6 +1094,7 @@ class HostDashboardMenuButton extends StatelessWidget {
   final VoidCallback onAudit;
   final VoidCallback onRemove;
   final VoidCallback? onDiagnostic;
+  final VoidCallback? onEnableSudo;
 
   @override
   Widget build(BuildContext context) {
@@ -1083,6 +1113,8 @@ class HostDashboardMenuButton extends StatelessWidget {
             onEdit();
           case 'details':
             onDetails();
+          case 'enable_sudo':
+            onEnableSudo?.call();
           case 'diagnostic':
             onDiagnostic?.call();
           case 'audit':
@@ -1097,6 +1129,11 @@ class HostDashboardMenuButton extends StatelessWidget {
           const PopupMenuItem(value: 'note', child: Text('Note')),
           const PopupMenuItem(value: 'edit', child: Text('Edit host')),
           const PopupMenuItem(value: 'details', child: Text('Host details')),
+          if (onEnableSudo != null)
+            const PopupMenuItem(
+              value: 'enable_sudo',
+              child: Text('Enable Kelola sudo…'),
+            ),
           if (onDiagnostic != null)
             const PopupMenuItem(
               value: 'diagnostic',

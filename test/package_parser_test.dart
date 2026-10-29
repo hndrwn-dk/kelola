@@ -233,6 +233,34 @@ NEEDS_RESTARTING_R:1
     );
   });
 
+  test('single-name apply upgrades only that package', () {
+    const probe = PackageApplyProbe(
+      names: ['openssl'],
+      securityOnly: false,
+      manager: PackageManager.dnf,
+    );
+    expect(
+      probe.command(factsOf(PackageManager.dnf)),
+      "sudo -n /usr/bin/dnf upgrade -y 'openssl'",
+    );
+    expect(
+      PackageCommands.apply(
+        PackageManager.apt,
+        securityOnly: false,
+        names: const ['curl'],
+      ),
+      contains('install --only-upgrade'),
+    );
+    expect(
+      PackageCommands.apply(
+        PackageManager.apt,
+        securityOnly: false,
+        names: const ['curl'],
+      ),
+      contains('curl'),
+    );
+  });
+
   test('list probe parse reads PKG from the script echo, not a second detection',
       () {
     const probe = PackageListProbe();
@@ -267,7 +295,7 @@ dnf
             .having(
               (e) => e.context.binary,
               'binary',
-              '/usr/bin/dnf check-update --refresh',
+              '/usr/bin/dnf --color=never check-update --refresh',
             ),
       ),
     );

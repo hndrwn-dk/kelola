@@ -8,6 +8,20 @@ Future<bool> confirmPackageApply(
   required bool securityOnly,
   required bool rebootRequired,
 }) {
+  if (names.length == 1) {
+    final name = names.first;
+    final reboot = rebootRequired
+        ? 'A reboot is already flagged on this host.\n\n'
+        : '';
+    return _sheet(
+      context,
+      title: 'Update $name?',
+      consequence:
+          'This installs $name on $hostAlias. Never auto-applied.',
+      warning: '${reboot}Package:\n$name',
+      token: name,
+    );
+  }
   final n = names.length;
   final title = securityOnly
       ? 'Apply $n security updates?'

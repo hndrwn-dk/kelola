@@ -17,10 +17,11 @@ import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/presentation/destructive_auth.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/presentation/widgets/confirm_package_action.dart';
+import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 import 'package:kelola/providers.dart';
-import 'package:kelola/domain/risk/risk_level.dart';
 
 class FirewallScreen extends ConsumerStatefulWidget {
   const FirewallScreen({super.key, required this.hostId});
@@ -315,6 +316,21 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
               child: KelolaError(
                 message: _error!,
                 sudoUser: _host?.username,
+                onEnableSudo: _host == null
+                    ? null
+                    : () async {
+                        final host = _host!;
+                        final ok = await runEnableKelolaSudoFlow(
+                          context: context,
+                          ref: ref,
+                          host: host,
+                          facts: _facts,
+                          preselected: {KelolaSudoersGroup.firewall},
+                        );
+                        if (ok && mounted) {
+                          await _load();
+                        }
+                      },
               ),
             ),
           Expanded(

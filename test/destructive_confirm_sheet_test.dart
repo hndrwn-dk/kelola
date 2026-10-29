@@ -63,6 +63,37 @@ void main() {
     expect(armed.onPressed, isNotNull);
   });
 
+  testWidgets('long warning scrolls inside a height-capped view', (tester) async {
+    final long = List.generate(80, (i) => 'package-$i').join('\n');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildKelolaDarkTheme(),
+        home: Scaffold(
+          body: DestructiveConfirmSheet(
+            title: 'Apply 80 updates?',
+            consequence: 'Installs packages.',
+            warning: 'Packages:\n$long',
+            confirmToken: 'host',
+            onConfirmed: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.byType(SingleChildScrollView), findsWidgets);
+    expect(find.textContaining('package-0'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('package-79'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(DestructiveConfirmSheet),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.textContaining('package-79'), findsOneWidget);
+  });
+
   testWidgets('medium haptic once on first token match, again after rematch',
       (tester) async {
     final types = <String>[];

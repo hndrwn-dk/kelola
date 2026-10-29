@@ -148,6 +148,7 @@ class _FilesPool extends SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) async {
     if (probe is SftpListProbe) {
       return SftpListing(

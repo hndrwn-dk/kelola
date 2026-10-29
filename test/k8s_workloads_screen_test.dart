@@ -295,6 +295,7 @@ class _WorkloadPool extends SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) async {
     probes.add(probe);
     scopes.add(scope);

@@ -85,6 +85,7 @@ class _ProbePool extends SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) async {
     executeCalls++;
     if (probe is DashboardProbe) {

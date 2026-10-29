@@ -16,9 +16,9 @@ class HostActionProbe extends Probe<String> {
   String command(HostFacts facts) {
     switch (verb) {
       case HostVerb.reboot:
-        return 'sudo -n reboot';
+        return 'sudo -n /usr/sbin/reboot';
       case HostVerb.poweroff:
-        return 'sudo -n poweroff';
+        return 'sudo -n /usr/sbin/poweroff';
       case HostVerb.dropCaches:
         return "sudo -n sh -c ${shellSingleQuote('sync; echo 3 > /proc/sys/vm/drop_caches')}";
     }

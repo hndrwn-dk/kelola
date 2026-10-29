@@ -92,6 +92,7 @@ class _ScriptedPool extends SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) async {
     final value = await onExecute(probe);
     return value as T;

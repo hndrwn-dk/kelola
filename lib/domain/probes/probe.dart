@@ -17,6 +17,9 @@ abstract class Probe<T> {
 
   /// Human title for the audit log. Never the first shell token.
   String get auditTitle => runtimeType.toString();
+
+  /// Audit log command field. Override when [command] embeds payloads.
+  String auditCommand(HostFacts facts) => command(facts);
 }
 
 class ProbeExecResult {

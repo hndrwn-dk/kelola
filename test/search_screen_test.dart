@@ -69,6 +69,7 @@ class _NoSshPool extends SshSessionPool {
     void Function(int done, int? total)? onProgress,
     TransferCancel? cancel,
     ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
   }) {
     // Match real SFTP path: cancelled transfers abort before any work.
     if (cancel?.isCancelled == true) {

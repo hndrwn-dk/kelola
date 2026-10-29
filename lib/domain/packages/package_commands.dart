@@ -1,4 +1,5 @@
 import 'package:kelola/domain/facts/enums.dart';
+import 'package:kelola/domain/units/shell_quote.dart';
 
 /// Command table from M6. Manager comes from [HostFacts.pkg] — never `command -v`.
 class PackageCommands {
@@ -71,7 +72,14 @@ class PackageCommands {
     };
   }
 
-  static String apply(PackageManager pkg, {required bool securityOnly}) {
+  static String apply(
+    PackageManager pkg, {
+    required bool securityOnly,
+    List<String> names = const [],
+  }) {
+    if (names.length == 1) {
+      return _applyOne(pkg, names.first);
+    }
     if (securityOnly) {
       return switch (pkg) {
         PackageManager.apt =>
@@ -94,6 +102,22 @@ class PackageCommands {
       PackageManager.zypper => 'sudo -n /usr/bin/zypper --non-interactive update',
       PackageManager.apk => 'sudo -n /sbin/apk upgrade',
       PackageManager.pacman => 'sudo -n /usr/bin/pacman -Syu --noconfirm',
+      PackageManager.unknown => 'echo unsupported; exit 1',
+    };
+  }
+
+  static String _applyOne(PackageManager pkg, String name) {
+    final q = shellSingleQuote(name);
+    return switch (pkg) {
+      PackageManager.apt =>
+        'sudo -n /usr/bin/apt-get -y -o Dpkg::Options::=--force-confold '
+            'install --only-upgrade $q',
+      PackageManager.dnf => 'sudo -n /usr/bin/dnf upgrade -y $q',
+      PackageManager.yum => 'sudo -n /usr/bin/yum update -y $q',
+      PackageManager.zypper =>
+        'sudo -n /usr/bin/zypper --non-interactive update $q',
+      PackageManager.apk => 'sudo -n /sbin/apk add -u $q',
+      PackageManager.pacman => 'sudo -n /usr/bin/pacman -S --noconfirm $q',
       PackageManager.unknown => 'echo unsupported; exit 1',
     };
   }

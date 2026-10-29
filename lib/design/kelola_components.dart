@@ -1293,15 +1293,28 @@ class _DestructiveConfirmSheetState extends State<DestructiveConfirmSheet> {
           const SizedBox(height: 7),
           Text(widget.consequence, style: KelolaType.body(color: c.muted, size: 12)),
           const SizedBox(height: 13),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: c.red.withOpacity(0.08),
-              border: Border.all(color: c.redDim),
-              borderRadius: BorderRadius.circular(KelolaRadii.sm),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.4,
             ),
-            child: Text(widget.warning,
-                style: KelolaType.mono(color: const Color(0xFFF2A9AB), size: 10)),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: c.red.withValues(alpha: 0.08),
+                border: Border.all(color: c.redDim),
+                borderRadius: BorderRadius.circular(KelolaRadii.sm),
+              ),
+              child: SingleChildScrollView(
+                child: Text(
+                  widget.warning,
+                  style: KelolaType.mono(
+                    color: c.red.withValues(alpha: 0.85),
+                    size: 10,
+                  ),
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 13),
           Text.rich(
@@ -1593,6 +1606,7 @@ class ActionableError extends StatelessWidget {
   final String body;
   final String snippet;
   final VoidCallback? onDismiss;
+  final VoidCallback? onEnableSudo;
 
   const ActionableError({
     super.key,
@@ -1600,6 +1614,7 @@ class ActionableError extends StatelessWidget {
     required this.body,
     required this.snippet,
     this.onDismiss,
+    this.onEnableSudo,
   });
 
   factory ActionableError.sudo({
@@ -1608,6 +1623,7 @@ class ActionableError extends StatelessWidget {
     SudoHintContext context = const SudoHintContext(),
     String? message,
     VoidCallback? onDismiss,
+    VoidCallback? onEnableSudo,
   }) {
     final ctx = message == null ? context : SudoHintContext.tryParse(message);
     final hint = kelolaSudoHint(user: user, context: ctx);
@@ -1617,6 +1633,7 @@ class ActionableError extends StatelessWidget {
       body: hint.body,
       snippet: hint.snippet,
       onDismiss: onDismiss,
+      onEnableSudo: onEnableSudo,
     );
   }
 
@@ -1652,6 +1669,20 @@ class ActionableError extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(body, style: KelolaType.body(color: c.muted, size: 13)),
+          if (onEnableSudo != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: onEnableSudo,
+                style: FilledButton.styleFrom(backgroundColor: c.amber),
+                child: Text(
+                  'Enable Kelola sudo…',
+                  style: KelolaType.body(color: c.ink, size: 13),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Container(
             width: double.infinity,
@@ -1698,12 +1729,14 @@ class KelolaError extends StatelessWidget {
   final String message;
   final String? sudoUser;
   final VoidCallback? onDismiss;
+  final VoidCallback? onEnableSudo;
 
   const KelolaError({
     super.key,
     required this.message,
     this.sudoUser,
     this.onDismiss,
+    this.onEnableSudo,
   });
 
   @override
@@ -1713,6 +1746,7 @@ class KelolaError extends StatelessWidget {
         user: sudoUser ?? 'YOURUSER',
         message: message,
         onDismiss: onDismiss,
+        onEnableSudo: onEnableSudo,
       );
     }
     return Text(
@@ -1725,6 +1759,7 @@ class KelolaError extends StatelessWidget {
 Future<void> showSudoHintSheet(
   BuildContext context, {
   String user = 'YOURUSER',
+  VoidCallback? onEnableSudo,
 }) {
   final c = context.kc;
   return showModalBottomSheet<void>(
@@ -1741,7 +1776,15 @@ Future<void> showSudoHintSheet(
       return KelolaSheet(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-          child: ActionableError.sudo(user: user),
+          child: ActionableError.sudo(
+            user: user,
+            onEnableSudo: onEnableSudo == null
+                ? null
+                : () {
+                    Navigator.of(ctx).pop();
+                    onEnableSudo();
+                  },
+          ),
         ),
       );
     },
@@ -1755,6 +1798,7 @@ class DashboardStatusLine extends StatelessWidget {
   final bool readOnly;
   final bool sudoNeedsPassword;
   final String sudoUser;
+  final VoidCallback? onEnableSudo;
 
   const DashboardStatusLine({
     super.key,
@@ -1763,6 +1807,7 @@ class DashboardStatusLine extends StatelessWidget {
     this.readOnly = false,
     this.sudoNeedsPassword = false,
     this.sudoUser = 'YOURUSER',
+    this.onEnableSudo,
   });
 
   @override
@@ -1801,7 +1846,13 @@ class DashboardStatusLine extends StatelessWidget {
       return text;
     }
     return GestureDetector(
-      onTap: () => showSudoHintSheet(context, user: sudoUser),
+      onTap: () {
+        if (onEnableSudo != null) {
+          onEnableSudo!();
+          return;
+        }
+        showSudoHintSheet(context, user: sudoUser);
+      },
       behavior: HitTestBehavior.opaque,
       child: text,
     );

@@ -27,7 +27,11 @@ class PackageApplyProbe extends Probe<String> {
 
   @override
   String command(HostFacts facts) {
-    return PackageCommands.apply(facts.pkg, securityOnly: securityOnly);
+    return PackageCommands.apply(
+      facts.pkg,
+      securityOnly: securityOnly,
+      names: names,
+    );
   }
 
   @override
@@ -37,8 +41,11 @@ class PackageApplyProbe extends Probe<String> {
       throw SudoRequiredException(
         SudoHintContext(
           kind: SudoHintKind.packages,
-          binary: PackageCommands.apply(manager, securityOnly: securityOnly)
-              .replaceFirst('sudo -n ', ''),
+          binary: PackageCommands.apply(
+            manager,
+            securityOnly: securityOnly,
+            names: names,
+          ).replaceFirst('sudo -n ', ''),
           verb: securityOnly ? 'security-upgrade' : 'upgrade',
         ),
       );

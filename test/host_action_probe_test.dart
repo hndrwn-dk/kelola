@@ -8,10 +8,10 @@ import 'package:kelola/domain/sudo_hint.dart';
 void main() {
   test('reboot and poweroff are destructive sudo -n', () {
     const reboot = HostActionProbe(HostVerb.reboot);
-    expect(reboot.command(HostFacts.undiscovered), 'sudo -n reboot');
+    expect(reboot.command(HostFacts.undiscovered), 'sudo -n /usr/sbin/reboot');
     expect(reboot.risk, RiskLevel.destructive);
     const off = HostActionProbe(HostVerb.poweroff);
-    expect(off.command(HostFacts.undiscovered), 'sudo -n poweroff');
+    expect(off.command(HostFacts.undiscovered), 'sudo -n /usr/sbin/poweroff');
     expect(off.risk, RiskLevel.destructive);
   });
 

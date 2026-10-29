@@ -21,7 +21,7 @@ class AuditDraft {
   factory AuditDraft.fromProbe(Probe<dynamic> probe, HostFacts facts) {
     return AuditDraft(
       title: probe.auditTitle,
-      command: probe.command(facts),
+      command: probe.auditCommand(facts),
       risk: probe.risk.name,
       usedSudo: probe.needsSudo,
     );

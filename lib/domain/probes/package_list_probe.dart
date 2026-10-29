@@ -63,7 +63,7 @@ fi
       throw SudoRequiredException(
         SudoHintContext(
           kind: SudoHintKind.packages,
-          binary: '$bin check-update --refresh',
+          binary: '$bin --color=never check-update --refresh',
           verb: 'check-update',
         ),
       );

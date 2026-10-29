@@ -30,6 +30,7 @@ Future<T> runHostProbe<T>({
   void Function(int done, int? total)? onProgress,
   TransferCancel? cancel,
   ProbeScope scope = ProbeScope.host,
+  List<int>? stdinBytes,
 }) {
   return ref.read(sessionPoolProvider).execute(
         host,
@@ -38,6 +39,7 @@ Future<T> runHostProbe<T>({
         onProgress: onProgress,
         cancel: cancel,
         scope: scope,
+        stdinBytes: stdinBytes,
         onUnknownHostKey: (hostId, algorithm, fingerprint) {
           return promptUnknownHostKey(
             context,
