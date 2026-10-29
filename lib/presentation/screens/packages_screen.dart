@@ -14,7 +14,6 @@ import 'package:kelola/domain/probes/package_apply_probe.dart';
 import 'package:kelola/domain/probes/package_list_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/presentation/host_session.dart';
-import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/presentation/widgets/confirm_package_action.dart';
 import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
@@ -292,7 +291,6 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
                           ref: ref,
                           host: host,
                           facts: _facts,
-                          preselected: {KelolaSudoersGroup.packages},
                         );
                         if (ok && mounted) {
                           await _load();

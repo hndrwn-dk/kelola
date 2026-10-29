@@ -24,13 +24,22 @@ String kelolaSudoersGroupLabel(KelolaSudoersGroup g) {
   };
 }
 
+String kelolaSudoersGroupsLabel(Set<KelolaSudoersGroup> groups) {
+  return KelolaSudoersGroup.values
+      .where(groups.contains)
+      .map(kelolaSudoersGroupLabel)
+      .join(', ');
+}
+
 /// Guided install of [kelolaSudoersPath]. Returns true on verified install.
+///
+/// Always installs the full set available for [facts] (Packages, Firewall,
+/// Host power when present). No per-group picker.
 Future<bool> runEnableKelolaSudoFlow({
   required BuildContext context,
   required WidgetRef ref,
   required Host host,
   HostFacts? facts,
-  Set<KelolaSudoersGroup>? preselected,
 }) async {
   await ref.read(enrollmentProvider.notifier).ensureKey();
   var resolved = facts ?? await ref.read(hostRepositoryProvider).facts(host.id);
@@ -62,26 +71,30 @@ Future<bool> runEnableKelolaSudoFlow({
     return false;
   }
 
-  final initial = preselected ?? defaultKelolaSudoersGroups(resolved);
-  final selection = await showModalBottomSheet<Set<KelolaSudoersGroup>>(
+  final groups = defaultKelolaSudoersGroups(resolved);
+  if (groups.isEmpty) {
+    return false;
+  }
+
+  final reviewed = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (ctx) => _EnableSudoPreviewSheet(
       user: host.username,
       facts: resolved!,
-      initial: initial,
+      groups: groups,
       fileExists: fileExists,
     ),
   );
-  if (selection == null || selection.isEmpty || !context.mounted) {
+  if (reviewed != true || !context.mounted) {
     return false;
   }
 
   final spec = buildKelolaSudoersSpec(
     user: host.username,
     facts: resolved,
-    groups: selection,
+    groups: groups,
   );
 
   final confirmed = await showModalBottomSheet<bool>(
@@ -98,14 +111,18 @@ Future<bool> runEnableKelolaSudoFlow({
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                fileExists ? 'Replace $kelolaSudoersPath?' : 'Write $kelolaSudoersPath?',
+                fileExists
+                    ? 'Replace $kelolaSudoersPath?'
+                    : 'Write $kelolaSudoersPath?',
                 style: KelolaType.display(color: ctx.kc.text, size: 16),
               ),
               const SizedBox(height: 8),
               Text(
-                'Mode $kelolaSudoersMode. Kelola will ask for your sudo password '
-                'once, validate with visudo, then discard the password. '
-                'Daily probes stay passwordless (sudo -n).',
+                'Mode $kelolaSudoersMode. Includes '
+                '${kelolaSudoersGroupsLabel(groups)}. '
+                'Kelola will ask for your sudo password once, validate with '
+                'visudo, then discard the password. Daily probes stay '
+                'passwordless (sudo -n).',
                 style: KelolaType.body(color: ctx.kc.muted, size: 13),
               ),
               const SizedBox(height: 14),
@@ -153,7 +170,7 @@ Future<bool> runEnableKelolaSudoFlow({
       return false;
     }
 
-    final groupsLabel = selection.map(kelolaSudoersGroupLabel).join(', ');
+    final groupsLabel = kelolaSudoersGroupsLabel(groups);
     try {
       await runHostProbe(
         ref: ref,
@@ -205,41 +222,26 @@ class _SudoPasswordLifecycle with WidgetsBindingObserver {
   }
 }
 
-class _EnableSudoPreviewSheet extends StatefulWidget {
+class _EnableSudoPreviewSheet extends StatelessWidget {
   const _EnableSudoPreviewSheet({
     required this.user,
     required this.facts,
-    required this.initial,
+    required this.groups,
     required this.fileExists,
   });
 
   final String user;
   final HostFacts facts;
-  final Set<KelolaSudoersGroup> initial;
+  final Set<KelolaSudoersGroup> groups;
   final bool fileExists;
-
-  @override
-  State<_EnableSudoPreviewSheet> createState() =>
-      _EnableSudoPreviewSheetState();
-}
-
-class _EnableSudoPreviewSheetState extends State<_EnableSudoPreviewSheet> {
-  late Set<KelolaSudoersGroup> _groups;
-
-  @override
-  void initState() {
-    super.initState();
-    _groups = {...widget.initial};
-  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
-    final available = defaultKelolaSudoersGroups(widget.facts);
     final spec = buildKelolaSudoersSpec(
-      user: widget.user,
-      facts: widget.facts,
-      groups: _groups,
+      user: user,
+      facts: facts,
+      groups: groups,
     );
     return KelolaSheet(
       child: Padding(
@@ -254,31 +256,11 @@ class _EnableSudoPreviewSheetState extends State<_EnableSudoPreviewSheet> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Writes $kelolaSudoersPath (mode $kelolaSudoersMode). '
-              '${widget.fileExists ? 'File already exists and will be replaced if you continue. ' : ''}'
+              'Writes $kelolaSudoersPath (mode $kelolaSudoersMode) for '
+              '${kelolaSudoersGroupsLabel(groups)}. '
+              '${fileExists ? 'File already exists and will be replaced if you continue. ' : ''}'
               'Optional — Kelola stays useful with zero sudo.',
               style: KelolaType.body(color: c.muted, size: 13),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 5,
-              runSpacing: 5,
-              children: [
-                for (final g in KelolaSudoersGroup.values)
-                  FilterPill(
-                    label: kelolaSudoersGroupLabel(g),
-                    selected: _groups.contains(g),
-                    enabled: available.contains(g) ||
-                        g == KelolaSudoersGroup.hostPower,
-                    onTap: () => setState(() {
-                      if (_groups.contains(g)) {
-                        _groups.remove(g);
-                      } else {
-                        _groups.add(g);
-                      }
-                    }),
-                  ),
-              ],
             ),
             const SizedBox(height: 12),
             Container(
@@ -299,13 +281,11 @@ class _EnableSudoPreviewSheetState extends State<_EnableSudoPreviewSheet> {
             ),
             const SizedBox(height: 14),
             FilledButton(
-              onPressed: _groups.isEmpty
-                  ? null
-                  : () => Navigator.of(context).pop(_groups),
+              onPressed: () => Navigator.of(context).pop(true),
               child: const Text('Review and apply'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
           ],
@@ -315,7 +295,7 @@ class _EnableSudoPreviewSheetState extends State<_EnableSudoPreviewSheet> {
   }
 }
 
-/// Opens enable flow with feature group preselected when possible.
+/// Opens the same full-set enable flow from a sudo hint (Packages / Firewall / host).
 Future<void> openEnableKelolaSudoFromHint({
   required BuildContext context,
   required WidgetRef ref,
@@ -323,20 +303,11 @@ Future<void> openEnableKelolaSudoFromHint({
   HostFacts? facts,
   SudoHintKind? kind,
 }) {
-  Set<KelolaSudoersGroup>? pre;
-  if (kind == SudoHintKind.packages) {
-    pre = {KelolaSudoersGroup.packages};
-  } else if (kind == SudoHintKind.firewall) {
-    pre = {KelolaSudoersGroup.firewall};
-  } else if (kind == SudoHintKind.hostReboot ||
-      kind == SudoHintKind.hostPoweroff) {
-    pre = {KelolaSudoersGroup.hostPower};
-  }
+  // [kind] is kept for call-site compatibility; apply is always the full set.
   return runEnableKelolaSudoFlow(
     context: context,
     ref: ref,
     host: host,
     facts: facts,
-    preselected: pre,
   ).then((_) {});
 }

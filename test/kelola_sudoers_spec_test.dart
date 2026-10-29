@@ -93,4 +93,23 @@ void main() {
     expect(spec.content.trim(), startsWith('#'));
     expect(spec.commands, isEmpty);
   });
+
+  test('default groups are the full available set for rocky', () {
+    final groups = defaultKelolaSudoersGroups(facts());
+    expect(
+      groups,
+      {
+        KelolaSudoersGroup.packages,
+        KelolaSudoersGroup.firewall,
+        KelolaSudoersGroup.hostPower,
+      },
+    );
+  });
+
+  test('default groups omit packages and firewall when facts lack them', () {
+    final groups = defaultKelolaSudoersGroups(
+      facts(pkg: PackageManager.unknown, fw: FirewallBackend.none),
+    );
+    expect(groups, {KelolaSudoersGroup.hostPower});
+  });
 }

@@ -1,1 +1,1 @@
-Settings Version now matches the installed AAB (name and build). Kubernetes home from 0.3.3 is unchanged: cluster health plus not-ready workloads, with CrashLoop and image-pull reasons.
+Enable Kelola sudo is one apply for every available group (Packages, Firewall, Host power). Preview still shows the exact drop-in; re-apply replaces /etc/sudoers.d/kelola. Hints open the same full set so Packages-only installs no longer leave Firewall password prompts.
