@@ -1,4 +1,6 @@
-# Kelola Android CI: analyze + unit/widget tests; Play AAB on versionName bump.
+# Kelola Android CI: analyze + unit/widget tests.
+# Play AAB/upload is manual only (workflow_dispatch). Version bumps no longer
+# auto-set track=internal.
 name: app
 
 on:
@@ -153,7 +155,9 @@ jobs:
                   echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US is ${chars} characters (max 500)."
                   exit 1
                 fi
-                track="internal"
+                # Auto Play upload disabled — use workflow_dispatch (play_track).
+                echo "::notice::versionName changed ($before_name → $version_name); Play upload is manual (workflow_dispatch). track=none."
+                track="none"
               fi
             fi
           else

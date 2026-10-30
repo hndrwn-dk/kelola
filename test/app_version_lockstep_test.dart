@@ -26,4 +26,12 @@ void main() {
     expect(wrap, contains('--dart-define=KELOLA_VERSION='));
     expect(wrap, contains('--dart-define=KELOLA_BUILD='));
   });
+
+  test('main push never auto-selects Play track=internal', () {
+    final workflow = File('.github/workflows/app.yml').readAsStringSync();
+    // Auto upload on versionName bump is disabled; only workflow_dispatch
+    // may set a non-none track via inputs.play_track.
+    expect(workflow, contains('Play upload is manual (workflow_dispatch)'));
+    expect(workflow, isNot(contains('track="internal"')));
+  });
 }

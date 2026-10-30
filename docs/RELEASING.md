@@ -39,17 +39,24 @@ with live codes ≤ 18.
 
 ## Tracks
 
-Normal flow on `main` when versionName changes:
+Push to `main` (including versionName bumps) always resolves
+`track=none` — CI does **not** auto-build or upload to Play. Version
+bumps still require `docs/store/whatsnew/whatsnew-en-US` and a
+strictly greater versionName.
 
-1. CI uploads a **completed** release to the **internal** track.
-2. Install that build on the Pixel 8 Pro (Internal testing) and verify
-   against lab SSH hosts / StrongBox.
+Play releases are **manual**:
+
+1. Build a private-billing AAB locally (`bash scripts/build_play_aab.sh`,
+   with `pubspec_overrides` → private `kelola-pro`) **or** run
+   `workflow_dispatch` on `main` with `play_track` set.
+2. Install on the Pixel 8 Pro (Internal testing) and verify against lab
+   SSH hosts / StrongBox.
 3. **Promote** the same artifact to production in Play Console (no
-   rebuild).
+   rebuild) when ready.
 
 `workflow_dispatch` (main only) can target `internal` / `alpha` /
-`beta` / `production`. Production uploads use `status: draft`; other
-tracks use `completed`.
+`beta` / `production` (or `none`). Production uploads use
+`status: draft`; other tracks use `completed`.
 
 ## Private billing gate
 

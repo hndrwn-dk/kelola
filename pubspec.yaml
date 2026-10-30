@@ -1,7 +1,7 @@
 name: kelola
 description: Agentless Linux server administration from a phone.
 publish_to: "none"
-version: 0.3.5+21
+version: 0.3.6+117
 
 environment:
   sdk: ^3.13.0
