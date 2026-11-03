@@ -205,7 +205,12 @@ String _lastTerminatedReason(Map<String, dynamic> status) {
       phase == 'Running' &&
       lastTerm.isNotEmpty &&
       restarts > 0) {
-    displayPhase = 'Running · last $lastTerm';
+    // kubelet reports reason `Unknown` when it lost the container's exit
+    // (typically a node or kubelet restart). "last Unknown" reads like a
+    // bug; say what it means.
+    displayPhase = lastTerm == 'Unknown'
+        ? 'Running · last exit unknown'
+        : 'Running · last $lastTerm';
   }
   return (
     ready: ready,

@@ -16,6 +16,7 @@ import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/presentation/destructive_auth.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/screens/container_detail_screen.dart';
+import 'package:kelola/presentation/screens/workload_detail_screen.dart';
 import 'package:kelola/presentation/screens/container_images_screen.dart';
 import 'package:kelola/presentation/widgets/confirm_compose_action.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
@@ -289,12 +290,14 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
     for (final group in view.groups) {
       children.add(
         SectionSlab(
-          group.label == 'STANDALONE'
-              ? 'STANDALONE'
-              : 'Stack · ${group.label}',
+          switch (group.label) {
+            kStandaloneGroup => 'STANDALONE',
+            kPodsGroup => 'Kubernetes pods',
+            _ => 'Stack · ${group.label}',
+          },
         ),
       );
-      if (group.label != 'STANDALONE') {
+      if (group.label != kStandaloneGroup && group.label != kPodsGroup) {
         children.addAll(_stackActions(group));
       }
       for (final row in group.rows) {
@@ -447,6 +450,20 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
   Future<void> _open(ContainerRow row) async {
     final host = _host;
     if (host == null) {
+      return;
+    }
+    if (isKubernetesPodRow(row)) {
+      // Pods are read through kubectl, not docker/podman inspect.
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => WorkloadDetailScreen(
+            host: host,
+            facts: factsForPodRow(_facts ?? HostFacts.undiscovered, row),
+            workload: podWorkloadFromRow(row),
+          ),
+        ),
+      );
+      await _load();
       return;
     }
     await Navigator.of(context).push(

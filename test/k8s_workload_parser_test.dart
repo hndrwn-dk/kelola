@@ -251,4 +251,27 @@ void main() {
     expect(surging.desired, 3);
     expect(surging.health, HealthStatus.healthy);
   });
+
+  test('last termination reason Unknown reads as an unknown exit', () {
+    const json = '''
+{"items": [{
+  "kind": "Pod",
+  "metadata": {"name": "nginx-7b8b87776c-tksjt", "namespace": "default"},
+  "status": {
+    "phase": "Running",
+    "containerStatuses": [{
+      "ready": true,
+      "restartCount": 5,
+      "lastState": {"terminated": {"reason": "Unknown", "exitCode": 255}}
+    }]
+  }
+}]}
+''';
+    final pod = parseWorkloadList(json).rows.single;
+    expect(pod.phase, 'Running · last exit unknown');
+    expect(
+      workloadMeta(pod),
+      'pod · 1/1 · Running · last exit unknown · 5 restarts',
+    );
+  });
 }

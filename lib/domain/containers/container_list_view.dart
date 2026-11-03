@@ -1,3 +1,5 @@
+import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/containers/container_row.dart';
 
 enum ContainerListFilter { running, stopped, unhealthy, all }
@@ -165,10 +167,27 @@ String _kickerEngine(List<ContainerRow> rows, List<String> engines) {
   return 'DOCKER';
 }
 
+/// Group label for containers outside any compose stack.
+const kStandaloneGroup = 'STANDALONE';
+
+/// Group label for Kubernetes pods listed via `kubectl get pods`. They are
+/// not Docker/Podman containers: no compose actions, and tapping one opens
+/// the Kubernetes workload screen instead of `inspect`.
+const kPodsGroup = 'PODS';
+
+/// A row that came from `kubectl get pods`, not from docker/podman/crictl.
+bool isKubernetesPodRow(ContainerRow r) =>
+    (r.engine == 'k8s' || r.engine == 'k3s') && r.namespace.isNotEmpty;
+
 List<ContainerStackGroup> groupContainersByCompose(List<ContainerRow> rows) {
   final stacks = <String, List<ContainerRow>>{};
   final standalone = <ContainerRow>[];
+  final pods = <ContainerRow>[];
   for (final r in rows) {
+    if (isKubernetesPodRow(r)) {
+      pods.add(r);
+      continue;
+    }
     final project = r.composeProject.trim();
     if (project.isEmpty) {
       standalone.add(r);
@@ -181,7 +200,8 @@ List<ContainerStackGroup> groupContainersByCompose(List<ContainerRow> rows) {
     for (final name in names)
       ContainerStackGroup(label: name, rows: stacks[name]!),
     if (standalone.isNotEmpty)
-      ContainerStackGroup(label: 'STANDALONE', rows: standalone),
+      ContainerStackGroup(label: kStandaloneGroup, rows: standalone),
+    if (pods.isNotEmpty) ContainerStackGroup(label: kPodsGroup, rows: pods),
   ];
 }
 
@@ -243,4 +263,31 @@ String? containerListPill(ContainerRow row) {
     return 'unhealthy';
   }
   return containerUptimePill(row);
+}
+
+/// The pod a Kubernetes row stands for, for the workload screen (describe,
+/// events, logs, exec, history). Ready counts are not in the pod listing,
+/// so a running pod reads 1/1 and anything else 0/1 until the screen loads.
+K8sWorkload podWorkloadFromRow(ContainerRow r) {
+  final running = r.state.toLowerCase() == 'running';
+  return K8sWorkload(
+    kind: K8sKind.pod,
+    namespace: r.namespace,
+    name: r.names,
+    ready: running ? 1 : 0,
+    desired: 1,
+    phase: r.status,
+    podPhase: r.status,
+  );
+}
+
+/// Facts that let the workload probes find kubectl. The container listing
+/// found kubectl/k3s itself; cached facts from an older version may not
+/// carry runtimes yet.
+HostFacts factsForPodRow(HostFacts facts, ContainerRow r) {
+  final runtime = r.engine == 'k3s' ? 'k3s' : 'kubectl';
+  if (facts.runtimes.contains('k3s') || facts.runtimes.contains('kubectl')) {
+    return facts;
+  }
+  return facts.copyWith(runtimes: [...facts.runtimes, runtime]);
 }
