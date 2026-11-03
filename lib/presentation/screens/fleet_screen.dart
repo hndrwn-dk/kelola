@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/presentation/fleet/fleet_k8s_read.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
@@ -170,6 +172,21 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
           facts: facts,
           scope: scope,
         );
+        if (!mounted) {
+          return;
+        }
+        final k8s = await readFleetK8s(
+          facts,
+          <T>(Probe<T> p) => runHostProbe(
+            ref: ref,
+            context: context,
+            host: host,
+            probe: p,
+            facts: facts,
+            scope: scope,
+          ),
+          previous: _byId[host.id]?.k8s,
+        );
         // Fleet probe is local-only; keep Packages-cache update counts.
         final cached = _byId[host.id];
         final live = FleetHostHealth(
@@ -190,6 +207,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
           rebootRequired: health.rebootRequired,
           fetchedAt: DateTime.now().toUtc(),
           outcome: HostProbeOutcome.healthy,
+          k8s: k8s,
         );
         await ref.read(hostRepositoryProvider).saveFleetCache(live);
         await ref.read(hostRepositoryProvider).updateAttention(
@@ -241,6 +259,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
               DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
           fromCache: cached != null,
           outcome: outcome,
+          k8s: cached?.k8s,
         );
         if (cached != null) {
           await ref.read(hostRepositoryProvider).saveFleetCache(unreachable);

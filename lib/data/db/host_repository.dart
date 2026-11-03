@@ -7,6 +7,7 @@ import 'package:kelola/domain/command_history/command_history.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/containers/container_row.dart';
+import 'package:kelola/domain/fleet/fleet_k8s.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -340,6 +341,7 @@ class HostRepository {
             journalAccess: Value(merged.journalAccess.name),
             arch: merged.arch,
             discoveredAt: DateTime.now().toUtc(),
+            runtimes: Value(merged.runtimes.join(',')),
           ),
         );
   }
@@ -366,6 +368,10 @@ class HostRepository {
       journalReadable: row.journalReadable,
       journalAccess: access,
       arch: row.arch,
+      runtimes: [
+        for (final r in row.runtimes.split(','))
+          if (r.trim().isNotEmpty) r.trim(),
+      ],
     );
   }
 
@@ -1311,6 +1317,7 @@ class HostRepository {
             containersUnhealthy: Value(health.containersUnhealthy),
             uptimeSeconds: Value(health.uptime?.inSeconds ?? -1),
             rebootRequired: Value(health.rebootRequired),
+            k8sJson: Value(health.k8s?.encode() ?? ''),
           ),
         );
   }
@@ -1341,6 +1348,7 @@ class HostRepository {
           rebootRequired: r.rebootRequired,
           fetchedAt: r.fetchedAt,
           fromCache: true,
+          k8s: FleetK8sSummary.decode(r.k8sJson),
         ),
     };
   }

@@ -113,17 +113,26 @@ void main() {
     );
     expect(
       _occurrenceFiles(p.join(root, 'lib'), 'isUnlocked(ProFeature.snippetMulti)'),
-      ['lib/presentation/screens/snippets_screen.dart x1'],
+      [
+        'lib/presentation/screens/snippets_screen.dart x1',
+        // M32 bulk restart rides the multi-exec unlock.
+        'lib/presentation/screens/workloads_screen.dart x1',
+      ],
     );
   });
 
-  test('isUnlocked(ProFeature.tunnels) has exactly one production read', () {
+  test('isUnlocked(ProFeature.tunnels) is read only at the two entry points',
+      () {
     expect(
       _occurrenceFiles(
         p.join(root, 'lib'),
         'isUnlocked(ProFeature.tunnels)',
       ),
-      ['lib/presentation/screens/host_dashboard_screen.dart x1'],
+      [
+        'lib/presentation/screens/host_dashboard_screen.dart x1',
+        // M32 Forward on the Service detail.
+        'lib/presentation/screens/k8s_resource_detail_screen.dart x1',
+      ],
     );
   });
 

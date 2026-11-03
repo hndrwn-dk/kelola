@@ -687,7 +687,7 @@ void main() {
     expect(find.textContaining('up 10m 10s'), findsOneWidget);
   });
 
-  test('dashboard is the sole production isUnlocked(ProFeature.tunnels) call site', () {
+  test('tunnels gate is read only on the dashboard and Service Forward', () {
     const needle = 'isUnlocked(ProFeature.tunnels)';
     final dash = File('lib/presentation/screens/host_dashboard_screen.dart')
         .readAsStringSync();
@@ -703,8 +703,10 @@ void main() {
         callSites.add(entity.path.replaceAll('\\', '/'));
       }
     }
+    callSites.sort();
     expect(callSites, [
       'lib/presentation/screens/host_dashboard_screen.dart',
+      'lib/presentation/screens/k8s_resource_detail_screen.dart',
     ]);
   });
 

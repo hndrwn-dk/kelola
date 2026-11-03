@@ -57,6 +57,10 @@ class CachedFacts extends Table {
   TextColumn get arch => text()();
   DateTimeColumn get discoveredAt => dateTime()();
 
+  /// Comma-separated `HostFacts.runtimes` (docker, kubectl, k3s, …). Fleet
+  /// reads cached facts only, so without this it never sees kubectl (M32).
+  TextColumn get runtimes => text().withDefault(const Constant(''))();
+
   @override
   Set<Column<Object>> get primaryKey => {hostId};
 }
@@ -214,6 +218,9 @@ class FleetCache extends Table {
   IntColumn get uptimeSeconds => integer().withDefault(const Constant(0))();
   BoolColumn get rebootRequired =>
       boolean().withDefault(const Constant(false))();
+
+  /// M32 `FleetK8sSummary` as JSON; empty = host has no kubectl.
+  TextColumn get k8sJson => text().withDefault(const Constant(''))();
 
   @override
   Set<Column<Object>> get primaryKey => {hostId};

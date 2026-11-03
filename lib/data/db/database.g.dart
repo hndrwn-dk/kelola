@@ -1651,6 +1651,18 @@ class $CachedFactsTable extends CachedFacts
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _runtimesMeta = const VerificationMeta(
+    'runtimes',
+  );
+  @override
+  late final GeneratedColumn<String> runtimes = GeneratedColumn<String>(
+    'runtimes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     hostId,
@@ -1666,6 +1678,7 @@ class $CachedFactsTable extends CachedFacts
     journalAccess,
     arch,
     discoveredAt,
+    runtimes,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1792,6 +1805,12 @@ class $CachedFactsTable extends CachedFacts
     } else if (isInserting) {
       context.missing(_discoveredAtMeta);
     }
+    if (data.containsKey('runtimes')) {
+      context.handle(
+        _runtimesMeta,
+        runtimes.isAcceptableOrUnknown(data['runtimes']!, _runtimesMeta),
+      );
+    }
     return context;
   }
 
@@ -1853,6 +1872,10 @@ class $CachedFactsTable extends CachedFacts
         DriftSqlType.dateTime,
         data['${effectivePrefix}discovered_at'],
       )!,
+      runtimes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}runtimes'],
+      )!,
     );
   }
 
@@ -1876,6 +1899,10 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
   final String journalAccess;
   final String arch;
   final DateTime discoveredAt;
+
+  /// Comma-separated `HostFacts.runtimes` (docker, kubectl, k3s, …). Fleet
+  /// reads cached facts only, so without this it never sees kubectl (M32).
+  final String runtimes;
   const CachedFactsRow({
     required this.hostId,
     required this.osId,
@@ -1890,6 +1917,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
     required this.journalAccess,
     required this.arch,
     required this.discoveredAt,
+    required this.runtimes,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1911,6 +1939,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
     map['journal_access'] = Variable<String>(journalAccess);
     map['arch'] = Variable<String>(arch);
     map['discovered_at'] = Variable<DateTime>(discoveredAt);
+    map['runtimes'] = Variable<String>(runtimes);
     return map;
   }
 
@@ -1933,6 +1962,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
       journalAccess: Value(journalAccess),
       arch: Value(arch),
       discoveredAt: Value(discoveredAt),
+      runtimes: Value(runtimes),
     );
   }
 
@@ -1955,6 +1985,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
       journalAccess: serializer.fromJson<String>(json['journalAccess']),
       arch: serializer.fromJson<String>(json['arch']),
       discoveredAt: serializer.fromJson<DateTime>(json['discoveredAt']),
+      runtimes: serializer.fromJson<String>(json['runtimes']),
     );
   }
   @override
@@ -1974,6 +2005,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
       'journalAccess': serializer.toJson<String>(journalAccess),
       'arch': serializer.toJson<String>(arch),
       'discoveredAt': serializer.toJson<DateTime>(discoveredAt),
+      'runtimes': serializer.toJson<String>(runtimes),
     };
   }
 
@@ -1991,6 +2023,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
     String? journalAccess,
     String? arch,
     DateTime? discoveredAt,
+    String? runtimes,
   }) => CachedFactsRow(
     hostId: hostId ?? this.hostId,
     osId: osId ?? this.osId,
@@ -2007,6 +2040,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
     journalAccess: journalAccess ?? this.journalAccess,
     arch: arch ?? this.arch,
     discoveredAt: discoveredAt ?? this.discoveredAt,
+    runtimes: runtimes ?? this.runtimes,
   );
   CachedFactsRow copyWithCompanion(CachedFactsCompanion data) {
     return CachedFactsRow(
@@ -2039,6 +2073,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
       discoveredAt: data.discoveredAt.present
           ? data.discoveredAt.value
           : this.discoveredAt,
+      runtimes: data.runtimes.present ? data.runtimes.value : this.runtimes,
     );
   }
 
@@ -2057,7 +2092,8 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
           ..write('journalReadable: $journalReadable, ')
           ..write('journalAccess: $journalAccess, ')
           ..write('arch: $arch, ')
-          ..write('discoveredAt: $discoveredAt')
+          ..write('discoveredAt: $discoveredAt, ')
+          ..write('runtimes: $runtimes')
           ..write(')'))
         .toString();
   }
@@ -2077,6 +2113,7 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
     journalAccess,
     arch,
     discoveredAt,
+    runtimes,
   );
   @override
   bool operator ==(Object other) =>
@@ -2094,7 +2131,8 @@ class CachedFactsRow extends DataClass implements Insertable<CachedFactsRow> {
           other.journalReadable == this.journalReadable &&
           other.journalAccess == this.journalAccess &&
           other.arch == this.arch &&
-          other.discoveredAt == this.discoveredAt);
+          other.discoveredAt == this.discoveredAt &&
+          other.runtimes == this.runtimes);
 }
 
 class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
@@ -2111,6 +2149,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
   final Value<String> journalAccess;
   final Value<String> arch;
   final Value<DateTime> discoveredAt;
+  final Value<String> runtimes;
   final Value<int> rowid;
   const CachedFactsCompanion({
     this.hostId = const Value.absent(),
@@ -2126,6 +2165,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
     this.journalAccess = const Value.absent(),
     this.arch = const Value.absent(),
     this.discoveredAt = const Value.absent(),
+    this.runtimes = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CachedFactsCompanion.insert({
@@ -2142,6 +2182,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
     this.journalAccess = const Value.absent(),
     required String arch,
     required DateTime discoveredAt,
+    this.runtimes = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : hostId = Value(hostId),
        osId = Value(osId),
@@ -2167,6 +2208,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
     Expression<String>? journalAccess,
     Expression<String>? arch,
     Expression<DateTime>? discoveredAt,
+    Expression<String>? runtimes,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2183,6 +2225,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
       if (journalAccess != null) 'journal_access': journalAccess,
       if (arch != null) 'arch': arch,
       if (discoveredAt != null) 'discovered_at': discoveredAt,
+      if (runtimes != null) 'runtimes': runtimes,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2201,6 +2244,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
     Value<String>? journalAccess,
     Value<String>? arch,
     Value<DateTime>? discoveredAt,
+    Value<String>? runtimes,
     Value<int>? rowid,
   }) {
     return CachedFactsCompanion(
@@ -2217,6 +2261,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
       journalAccess: journalAccess ?? this.journalAccess,
       arch: arch ?? this.arch,
       discoveredAt: discoveredAt ?? this.discoveredAt,
+      runtimes: runtimes ?? this.runtimes,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2263,6 +2308,9 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
     if (discoveredAt.present) {
       map['discovered_at'] = Variable<DateTime>(discoveredAt.value);
     }
+    if (runtimes.present) {
+      map['runtimes'] = Variable<String>(runtimes.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2285,6 +2333,7 @@ class CachedFactsCompanion extends UpdateCompanion<CachedFactsRow> {
           ..write('journalAccess: $journalAccess, ')
           ..write('arch: $arch, ')
           ..write('discoveredAt: $discoveredAt, ')
+          ..write('runtimes: $runtimes, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -6620,6 +6669,18 @@ class $FleetCacheTable extends FleetCache
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _k8sJsonMeta = const VerificationMeta(
+    'k8sJson',
+  );
+  @override
+  late final GeneratedColumn<String> k8sJson = GeneratedColumn<String>(
+    'k8s_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     hostId,
@@ -6637,6 +6698,7 @@ class $FleetCacheTable extends FleetCache
     containersUnhealthy,
     uptimeSeconds,
     rebootRequired,
+    k8sJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6781,6 +6843,12 @@ class $FleetCacheTable extends FleetCache
         ),
       );
     }
+    if (data.containsKey('k8s_json')) {
+      context.handle(
+        _k8sJsonMeta,
+        k8sJson.isAcceptableOrUnknown(data['k8s_json']!, _k8sJsonMeta),
+      );
+    }
     return context;
   }
 
@@ -6850,6 +6918,10 @@ class $FleetCacheTable extends FleetCache
         DriftSqlType.bool,
         data['${effectivePrefix}reboot_required'],
       )!,
+      k8sJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}k8s_json'],
+      )!,
     );
   }
 
@@ -6875,6 +6947,9 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
   final int containersUnhealthy;
   final int uptimeSeconds;
   final bool rebootRequired;
+
+  /// M32 `FleetK8sSummary` as JSON; empty = host has no kubectl.
+  final String k8sJson;
   const FleetCacheRow({
     required this.hostId,
     required this.reachable,
@@ -6891,6 +6966,7 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
     required this.containersUnhealthy,
     required this.uptimeSeconds,
     required this.rebootRequired,
+    required this.k8sJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6912,6 +6988,7 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
     map['containers_unhealthy'] = Variable<int>(containersUnhealthy);
     map['uptime_seconds'] = Variable<int>(uptimeSeconds);
     map['reboot_required'] = Variable<bool>(rebootRequired);
+    map['k8s_json'] = Variable<String>(k8sJson);
     return map;
   }
 
@@ -6934,6 +7011,7 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
       containersUnhealthy: Value(containersUnhealthy),
       uptimeSeconds: Value(uptimeSeconds),
       rebootRequired: Value(rebootRequired),
+      k8sJson: Value(k8sJson),
     );
   }
 
@@ -6960,6 +7038,7 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
       ),
       uptimeSeconds: serializer.fromJson<int>(json['uptimeSeconds']),
       rebootRequired: serializer.fromJson<bool>(json['rebootRequired']),
+      k8sJson: serializer.fromJson<String>(json['k8sJson']),
     );
   }
   @override
@@ -6981,6 +7060,7 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
       'containersUnhealthy': serializer.toJson<int>(containersUnhealthy),
       'uptimeSeconds': serializer.toJson<int>(uptimeSeconds),
       'rebootRequired': serializer.toJson<bool>(rebootRequired),
+      'k8sJson': serializer.toJson<String>(k8sJson),
     };
   }
 
@@ -7000,6 +7080,7 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
     int? containersUnhealthy,
     int? uptimeSeconds,
     bool? rebootRequired,
+    String? k8sJson,
   }) => FleetCacheRow(
     hostId: hostId ?? this.hostId,
     reachable: reachable ?? this.reachable,
@@ -7016,6 +7097,7 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
     containersUnhealthy: containersUnhealthy ?? this.containersUnhealthy,
     uptimeSeconds: uptimeSeconds ?? this.uptimeSeconds,
     rebootRequired: rebootRequired ?? this.rebootRequired,
+    k8sJson: k8sJson ?? this.k8sJson,
   );
   FleetCacheRow copyWithCompanion(FleetCacheCompanion data) {
     return FleetCacheRow(
@@ -7056,6 +7138,7 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
       rebootRequired: data.rebootRequired.present
           ? data.rebootRequired.value
           : this.rebootRequired,
+      k8sJson: data.k8sJson.present ? data.k8sJson.value : this.k8sJson,
     );
   }
 
@@ -7076,7 +7159,8 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
           ..write('containersDown: $containersDown, ')
           ..write('containersUnhealthy: $containersUnhealthy, ')
           ..write('uptimeSeconds: $uptimeSeconds, ')
-          ..write('rebootRequired: $rebootRequired')
+          ..write('rebootRequired: $rebootRequired, ')
+          ..write('k8sJson: $k8sJson')
           ..write(')'))
         .toString();
   }
@@ -7098,6 +7182,7 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
     containersUnhealthy,
     uptimeSeconds,
     rebootRequired,
+    k8sJson,
   );
   @override
   bool operator ==(Object other) =>
@@ -7117,7 +7202,8 @@ class FleetCacheRow extends DataClass implements Insertable<FleetCacheRow> {
           other.containersDown == this.containersDown &&
           other.containersUnhealthy == this.containersUnhealthy &&
           other.uptimeSeconds == this.uptimeSeconds &&
-          other.rebootRequired == this.rebootRequired);
+          other.rebootRequired == this.rebootRequired &&
+          other.k8sJson == this.k8sJson);
 }
 
 class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
@@ -7136,6 +7222,7 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
   final Value<int> containersUnhealthy;
   final Value<int> uptimeSeconds;
   final Value<bool> rebootRequired;
+  final Value<String> k8sJson;
   final Value<int> rowid;
   const FleetCacheCompanion({
     this.hostId = const Value.absent(),
@@ -7153,6 +7240,7 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
     this.containersUnhealthy = const Value.absent(),
     this.uptimeSeconds = const Value.absent(),
     this.rebootRequired = const Value.absent(),
+    this.k8sJson = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FleetCacheCompanion.insert({
@@ -7171,6 +7259,7 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
     this.containersUnhealthy = const Value.absent(),
     this.uptimeSeconds = const Value.absent(),
     this.rebootRequired = const Value.absent(),
+    this.k8sJson = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : hostId = Value(hostId),
        reachable = Value(reachable),
@@ -7195,6 +7284,7 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
     Expression<int>? containersUnhealthy,
     Expression<int>? uptimeSeconds,
     Expression<bool>? rebootRequired,
+    Expression<String>? k8sJson,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7214,6 +7304,7 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
         'containers_unhealthy': containersUnhealthy,
       if (uptimeSeconds != null) 'uptime_seconds': uptimeSeconds,
       if (rebootRequired != null) 'reboot_required': rebootRequired,
+      if (k8sJson != null) 'k8s_json': k8sJson,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7234,6 +7325,7 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
     Value<int>? containersUnhealthy,
     Value<int>? uptimeSeconds,
     Value<bool>? rebootRequired,
+    Value<String>? k8sJson,
     Value<int>? rowid,
   }) {
     return FleetCacheCompanion(
@@ -7252,6 +7344,7 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
       containersUnhealthy: containersUnhealthy ?? this.containersUnhealthy,
       uptimeSeconds: uptimeSeconds ?? this.uptimeSeconds,
       rebootRequired: rebootRequired ?? this.rebootRequired,
+      k8sJson: k8sJson ?? this.k8sJson,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7304,6 +7397,9 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
     if (rebootRequired.present) {
       map['reboot_required'] = Variable<bool>(rebootRequired.value);
     }
+    if (k8sJson.present) {
+      map['k8s_json'] = Variable<String>(k8sJson.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7328,6 +7424,7 @@ class FleetCacheCompanion extends UpdateCompanion<FleetCacheRow> {
           ..write('containersUnhealthy: $containersUnhealthy, ')
           ..write('uptimeSeconds: $uptimeSeconds, ')
           ..write('rebootRequired: $rebootRequired, ')
+          ..write('k8sJson: $k8sJson, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -10851,6 +10948,7 @@ typedef $$CachedFactsTableCreateCompanionBuilder =
       Value<String> journalAccess,
       required String arch,
       required DateTime discoveredAt,
+      Value<String> runtimes,
       Value<int> rowid,
     });
 typedef $$CachedFactsTableUpdateCompanionBuilder =
@@ -10868,6 +10966,7 @@ typedef $$CachedFactsTableUpdateCompanionBuilder =
       Value<String> journalAccess,
       Value<String> arch,
       Value<DateTime> discoveredAt,
+      Value<String> runtimes,
       Value<int> rowid,
     });
 
@@ -10942,6 +11041,11 @@ class $$CachedFactsTableFilterComposer
 
   ColumnFilters<DateTime> get discoveredAt => $composableBuilder(
     column: $table.discoveredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get runtimes => $composableBuilder(
+    column: $table.runtimes,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -11019,6 +11123,11 @@ class $$CachedFactsTableOrderingComposer
     column: $table.discoveredAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get runtimes => $composableBuilder(
+    column: $table.runtimes,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CachedFactsTableAnnotationComposer
@@ -11084,6 +11193,9 @@ class $$CachedFactsTableAnnotationComposer
     column: $table.discoveredAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get runtimes =>
+      $composableBuilder(column: $table.runtimes, builder: (column) => column);
 }
 
 class $$CachedFactsTableTableManager
@@ -11130,6 +11242,7 @@ class $$CachedFactsTableTableManager
                 Value<String> journalAccess = const Value.absent(),
                 Value<String> arch = const Value.absent(),
                 Value<DateTime> discoveredAt = const Value.absent(),
+                Value<String> runtimes = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CachedFactsCompanion(
                 hostId: hostId,
@@ -11145,6 +11258,7 @@ class $$CachedFactsTableTableManager
                 journalAccess: journalAccess,
                 arch: arch,
                 discoveredAt: discoveredAt,
+                runtimes: runtimes,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -11162,6 +11276,7 @@ class $$CachedFactsTableTableManager
                 Value<String> journalAccess = const Value.absent(),
                 required String arch,
                 required DateTime discoveredAt,
+                Value<String> runtimes = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CachedFactsCompanion.insert(
                 hostId: hostId,
@@ -11177,6 +11292,7 @@ class $$CachedFactsTableTableManager
                 journalAccess: journalAccess,
                 arch: arch,
                 discoveredAt: discoveredAt,
+                runtimes: runtimes,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -13246,6 +13362,7 @@ typedef $$FleetCacheTableCreateCompanionBuilder =
       Value<int> containersUnhealthy,
       Value<int> uptimeSeconds,
       Value<bool> rebootRequired,
+      Value<String> k8sJson,
       Value<int> rowid,
     });
 typedef $$FleetCacheTableUpdateCompanionBuilder =
@@ -13265,6 +13382,7 @@ typedef $$FleetCacheTableUpdateCompanionBuilder =
       Value<int> containersUnhealthy,
       Value<int> uptimeSeconds,
       Value<bool> rebootRequired,
+      Value<String> k8sJson,
       Value<int> rowid,
     });
 
@@ -13349,6 +13467,11 @@ class $$FleetCacheTableFilterComposer
 
   ColumnFilters<bool> get rebootRequired => $composableBuilder(
     column: $table.rebootRequired,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get k8sJson => $composableBuilder(
+    column: $table.k8sJson,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -13436,6 +13559,11 @@ class $$FleetCacheTableOrderingComposer
     column: $table.rebootRequired,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get k8sJson => $composableBuilder(
+    column: $table.k8sJson,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$FleetCacheTableAnnotationComposer
@@ -13513,6 +13641,9 @@ class $$FleetCacheTableAnnotationComposer
     column: $table.rebootRequired,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get k8sJson =>
+      $composableBuilder(column: $table.k8sJson, builder: (column) => column);
 }
 
 class $$FleetCacheTableTableManager
@@ -13561,6 +13692,7 @@ class $$FleetCacheTableTableManager
                 Value<int> containersUnhealthy = const Value.absent(),
                 Value<int> uptimeSeconds = const Value.absent(),
                 Value<bool> rebootRequired = const Value.absent(),
+                Value<String> k8sJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FleetCacheCompanion(
                 hostId: hostId,
@@ -13578,6 +13710,7 @@ class $$FleetCacheTableTableManager
                 containersUnhealthy: containersUnhealthy,
                 uptimeSeconds: uptimeSeconds,
                 rebootRequired: rebootRequired,
+                k8sJson: k8sJson,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -13597,6 +13730,7 @@ class $$FleetCacheTableTableManager
                 Value<int> containersUnhealthy = const Value.absent(),
                 Value<int> uptimeSeconds = const Value.absent(),
                 Value<bool> rebootRequired = const Value.absent(),
+                Value<String> k8sJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FleetCacheCompanion.insert(
                 hostId: hostId,
@@ -13614,6 +13748,7 @@ class $$FleetCacheTableTableManager
                 containersUnhealthy: containersUnhealthy,
                 uptimeSeconds: uptimeSeconds,
                 rebootRequired: rebootRequired,
+                k8sJson: k8sJson,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

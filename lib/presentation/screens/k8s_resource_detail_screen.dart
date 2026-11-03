@@ -5,10 +5,15 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
+import 'package:kelola/domain/k8s/service_forward.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/screens/k8s_resource_list_screen.dart';
+import 'package:kelola/presentation/screens/tunnels_screen.dart';
 import 'package:kelola/presentation/screens/workload_detail_screen.dart';
+import 'package:kelola/providers.dart';
+import 'package:uuid/uuid.dart';
 
 /// What Kubernetes home last read. Detail screens resolve links (pod,
 /// claim, volume) against it and never open their own SSH session.
@@ -117,10 +122,14 @@ class K8sServiceDetailScreen extends ConsumerWidget {
     super.key,
     required this.snapshot,
     required this.service,
+    this.openTunnels,
   });
 
   final K8sSnapshot snapshot;
   final K8sService service;
+
+  /// Test seam. Production pushes the host's Tunnels screen.
+  final void Function(BuildContext context, String hostId)? openTunnels;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -149,6 +158,15 @@ class K8sServiceDetailScreen extends ConsumerWidget {
             ServiceRow(risk: RiskLevel.read, name: p.label, meta: _portMeta(p)),
             const SizedBox(height: 6),
           ],
+          for (final p in forwardablePorts(s)) ...[
+            ServiceRow(
+              risk: RiskLevel.read,
+              name: 'Forward ${p.port}/TCP',
+              meta: 'pro · kubectl port-forward',
+              onTap: () => _forward(context, ref, p),
+            ),
+            const SizedBox(height: 6),
+          ],
         ],
         if (s.hasSelector) ...[
           const SizedBox(height: 10),
@@ -167,6 +185,46 @@ class K8sServiceDetailScreen extends ConsumerWidget {
           ],
         ],
       ],
+    );
+  }
+
+  /// Saves (or reuses) a kubectl tunnel target and opens Tunnels, where
+  /// the user starts it. Locked builds show the tunnels explainer only.
+  Future<void> _forward(
+    BuildContext context,
+    WidgetRef ref,
+    K8sServicePort port,
+  ) async {
+    final entitlement = ref.read(entitlementProvider);
+    if (!entitlement.isUnlocked(ProFeature.tunnels)) {
+      await showTunnelsLockedExplainer(
+        context,
+        priceLabel: entitlement.priceLabel,
+        onPurchase: () => entitlement.purchase(),
+      );
+      return;
+    }
+    final repo = ref.read(tunnelRepositoryProvider);
+    final target = serviceForwardTarget(
+      hostId: snapshot.hostId,
+      service: service,
+      port: port,
+      saved: await repo.listForHost(snapshot.hostId),
+      newId: () => const Uuid().v7(),
+    );
+    await repo.upsert(target);
+    if (!context.mounted) {
+      return;
+    }
+    final open = openTunnels;
+    if (open != null) {
+      open(context, snapshot.hostId);
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TunnelsScreen(hostId: snapshot.hostId),
+      ),
     );
   }
 

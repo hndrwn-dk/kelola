@@ -35,7 +35,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -251,6 +251,30 @@ WHERE id = 1
           final names = cols.map((r) => r.read<String>('name')).toSet();
           if (!names.contains('ssh_certificate')) {
             await m.addColumn(hosts, hosts.sshCertificate);
+          }
+        }
+      }
+      if (from < 25) {
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='fleet_cache'",
+        ).get();
+        if (tables.isNotEmpty) {
+          final cols =
+              await customSelect('PRAGMA table_info(fleet_cache)').get();
+          final names = cols.map((r) => r.read<String>('name')).toSet();
+          if (!names.contains('k8s_json')) {
+            await m.addColumn(fleetCache, fleetCache.k8sJson);
+          }
+        }
+        final factTables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='cached_facts'",
+        ).get();
+        if (factTables.isNotEmpty) {
+          final cols =
+              await customSelect('PRAGMA table_info(cached_facts)').get();
+          final names = cols.map((r) => r.read<String>('name')).toSet();
+          if (!names.contains('runtimes')) {
+            await m.addColumn(cachedFacts, cachedFacts.runtimes);
           }
         }
       }

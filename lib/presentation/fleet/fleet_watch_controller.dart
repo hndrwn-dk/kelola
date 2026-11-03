@@ -1,3 +1,5 @@
+import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/presentation/fleet/fleet_k8s_read.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/fleet/fleet_watch_bridge.dart';
 import 'package:kelola/data/fleet/fleet_watch_runner.dart';
@@ -105,6 +107,14 @@ class FleetWatchController {
       facts: facts,
       scope: scope,
     );
+    final k8s = health.reachable
+        ? await readFleetK8s(
+            facts,
+            <T>(Probe<T> p) =>
+                pool.execute(host, p, facts: facts, scope: scope),
+            previous: cached?.k8s,
+          )
+        : cached?.k8s;
     return FleetHostHealth(
       hostId: host.id,
       alias: host.alias,
@@ -122,6 +132,7 @@ class FleetWatchController {
       uptime: health.uptime,
       rebootRequired: health.rebootRequired,
       fetchedAt: DateTime.now().toUtc(),
+      k8s: k8s,
     );
   }
 }

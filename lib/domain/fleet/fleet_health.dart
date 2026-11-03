@@ -1,4 +1,5 @@
 import 'package:kelola/domain/facts/enums.dart';
+import 'package:kelola/domain/fleet/fleet_k8s.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/host_probe_outcome.dart';
 
@@ -13,6 +14,8 @@ enum FleetSeverity {
   unreachable,
   failedUnits,
   badContainers,
+  k8sDown,
+  k8sWorkloads,
   diskHigh,
   loadHigh,
   memHigh,
@@ -34,6 +37,8 @@ enum FleetIssueKind {
   unreachable,
   failedUnit,
   badContainer,
+  k8sDown,
+  k8sWorkloads,
   diskCritical,
   loadHigh,
   memHigh,
@@ -56,6 +61,8 @@ class FleetIssue {
   bool get isActionable =>
       kind == FleetIssueKind.failedUnit ||
       kind == FleetIssueKind.badContainer ||
+      kind == FleetIssueKind.k8sDown ||
+      kind == FleetIssueKind.k8sWorkloads ||
       kind == FleetIssueKind.diskCritical ||
       kind == FleetIssueKind.securityUpdates;
 }
@@ -94,6 +101,7 @@ class FleetHostHealth {
     this.rebootRequired = false,
     this.fromCache = false,
     this.outcome = HostProbeOutcome.pending,
+    this.k8s,
   });
 
   final String hostId;
@@ -116,6 +124,9 @@ class FleetHostHealth {
   final DateTime fetchedAt;
   final bool fromCache;
   final HostProbeOutcome outcome;
+
+  /// Null when the host has no kubectl (M32).
+  final FleetK8sSummary? k8s;
 
   static const loadRatioHigh = 1.0;
   static const loadHighFallback = 4.0;
@@ -206,6 +217,16 @@ class FleetHostHealth {
     if (rebootRequired) {
       cells.add(const FleetTileMetric(label: 'reboot', value: 'yes'));
     }
+    // Like the other trouble cells: only when something is wrong, and short
+    // enough for a 3-column phone grid. The full line is on the host sheet.
+    final cluster = k8s;
+    if (cluster != null && cluster.down) {
+      cells.add(const FleetTileMetric(label: 'k8s', value: 'down'));
+    } else if (cluster != null && cluster.workloadsFailing) {
+      cells.add(
+        FleetTileMetric(label: 'k8s', value: '${cluster.failedWorkloads} fail'),
+      );
+    }
     if (fromCache || isStale(now: now)) {
       cells.add(FleetTileMetric(label: 'cache', value: ageLabel(now: now)));
     }
@@ -267,6 +288,7 @@ class FleetHostHealth {
       fetchedAt: fetchedAt ?? this.fetchedAt,
       fromCache: fromCache ?? this.fromCache,
       outcome: outcome ?? this.outcome,
+      k8s: k8s,
     );
   }
 }
@@ -384,6 +406,27 @@ FleetAssessment assessFleetHost(
       ),
     );
   }
+  final cluster = health.k8s;
+  if (health.reachable && cluster != null && cluster.down) {
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.k8sDown,
+        label: 'Open Kubernetes',
+        meta: cluster.apiReachable
+            ? 'k8s ${cluster.nodesReady}/${cluster.nodesTotal} nodes ready'
+            : 'k8s API down',
+      ),
+    );
+  }
+  if (health.reachable && cluster != null && cluster.workloadsFailing) {
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.k8sWorkloads,
+        label: 'Open Kubernetes',
+        meta: 'k8s ${cluster.failedWorkloads} failed workloads',
+      ),
+    );
+  }
   if (health.reachable &&
       ((health.diskRootPercent ?? 0) >= thresholds.diskPercent ||
           health.highDiskMounts.isNotEmpty)) {
@@ -471,6 +514,8 @@ FleetSeverity _severityFromIssues(List<FleetIssue> issues) {
     FleetIssueKind.unreachable => FleetSeverity.unreachable,
     FleetIssueKind.failedUnit => FleetSeverity.failedUnits,
     FleetIssueKind.badContainer => FleetSeverity.badContainers,
+    FleetIssueKind.k8sDown => FleetSeverity.k8sDown,
+    FleetIssueKind.k8sWorkloads => FleetSeverity.k8sWorkloads,
     FleetIssueKind.diskCritical => FleetSeverity.diskHigh,
     FleetIssueKind.loadHigh => FleetSeverity.loadHigh,
     FleetIssueKind.memHigh => FleetSeverity.memHigh,
@@ -485,8 +530,10 @@ FleetTileHealth _tileHealth(FleetSeverity severity) {
     FleetSeverity.unreachable => FleetTileHealth.unknown,
     FleetSeverity.failedUnits ||
     FleetSeverity.badContainers ||
+    FleetSeverity.k8sDown ||
     FleetSeverity.loadHigh =>
       FleetTileHealth.failed,
+    FleetSeverity.k8sWorkloads ||
     FleetSeverity.diskHigh ||
     FleetSeverity.memHigh ||
     FleetSeverity.securityUpdates ||

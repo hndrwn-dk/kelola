@@ -5,12 +5,16 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/entitlement/entitlement.dart';
+import 'package:kelola/domain/k8s/bulk_restart.dart';
 import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_view.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/pro_locked_sheet.dart';
+import 'package:kelola/presentation/screens/k8s_bulk_restart_screen.dart';
 import 'package:kelola/presentation/screens/workload_detail_screen.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 import 'package:kelola/providers.dart';
@@ -212,6 +216,17 @@ class _WorkloadsScreenState extends ConsumerState<WorkloadsScreen> {
                     ),
                   ],
                 ),
+                if (_host != null &&
+                    _facts != null &&
+                    bulkRestartNamespaces(_inv.rows).isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ServiceRow(
+                    risk: RiskLevel.mutate,
+                    name: 'Restart namespace…',
+                    meta: 'pro · rollout restart, one namespace',
+                    onTap: _openBulkRestart,
+                  ),
+                ],
               ],
             ),
           ),
@@ -230,6 +245,38 @@ class _WorkloadsScreenState extends ConsumerState<WorkloadsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// M32 bulk restart rides the multi-exec unlock (`snippetMulti`).
+  Future<void> _openBulkRestart() async {
+    final host = _host;
+    final facts = _facts;
+    if (host == null || facts == null) {
+      return;
+    }
+    final entitlement = ref.read(entitlementProvider);
+    if (!entitlement.isUnlocked(ProFeature.snippetMulti)) {
+      await showProLockedSheet(
+        context,
+        title: 'Restart namespace',
+        body: 'Roll several Deployments, StatefulSets and DaemonSets in one '
+            'namespace after a per-workload preview. This build keeps '
+            'multi-exec locked.',
+        priceLabel: entitlement.priceLabel,
+        onPurchase: () => entitlement.purchase(),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => K8sBulkRestartScreen(
+          host: host,
+          facts: facts,
+          workloads: _inv.rows,
+          initialNamespace: _namespace,
+        ),
       ),
     );
   }

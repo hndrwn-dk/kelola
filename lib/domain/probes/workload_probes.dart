@@ -126,3 +126,53 @@ class WorkloadTopProbe extends Probe<List<K8sTopRow>> {
   @override
   RiskLevel get risk => RiskLevel.read;
 }
+
+/// Waits for a rollout to finish (`kubectl rollout status`). Read-only.
+/// Bulk restart runs it between restarts so a namespace is rolled one
+/// workload at a time instead of all at once.
+class WorkloadRolloutStatusProbe extends Probe<void> {
+  const WorkloadRolloutStatusProbe({
+    required this.workload,
+    this.wait = const Duration(minutes: 2),
+  });
+
+  final K8sWorkload workload;
+  final Duration wait;
+
+  @override
+  String get auditTitle => 'Waited for rollout of ${workload.title}';
+
+  @override
+  String command(HostFacts facts) {
+    final ns = shellSingleQuote(workload.namespace);
+    final res = shellSingleQuote('${workload.kind.resource}/${workload.name}');
+    return 'LC_ALL=C ${kubectlRun(facts, '-n $ns rollout status $res --timeout=${wait.inSeconds}s')}';
+  }
+
+  @override
+  void parse(String stdout, String stderr, int exitCode) {
+    if (exitCode != 0) {
+      final why = stderr.trim().isEmpty ? stdout.trim() : stderr.trim();
+      throw RolloutNotReady(why.split('\n').last);
+    }
+  }
+
+  @override
+  bool get needsSudo => false;
+
+  @override
+  RiskLevel get risk => RiskLevel.read;
+
+  @override
+  Duration get timeout => wait + const Duration(seconds: 30);
+}
+
+/// A rollout did not become ready in time.
+class RolloutNotReady implements Exception {
+  RolloutNotReady(this.detail);
+
+  final String detail;
+
+  @override
+  String toString() => detail.isEmpty ? 'not ready in time' : detail;
+}

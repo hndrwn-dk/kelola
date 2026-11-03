@@ -6,6 +6,8 @@ const Set<FleetIssueKind> kFleetWatchKinds = {
   FleetIssueKind.unreachable,
   FleetIssueKind.failedUnit,
   FleetIssueKind.badContainer,
+  FleetIssueKind.k8sDown,
+  FleetIssueKind.k8sWorkloads,
   FleetIssueKind.diskCritical,
   FleetIssueKind.memHigh,
   FleetIssueKind.rebootRequired,

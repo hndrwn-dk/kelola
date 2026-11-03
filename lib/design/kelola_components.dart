@@ -2407,7 +2407,9 @@ class KelolaPrimaryButton extends StatelessWidget {
   });
 
   final String label;
-  final VoidCallback onTap;
+
+  /// Null disables the button (e.g. nothing selected yet).
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

@@ -9,6 +9,7 @@ import 'package:kelola/domain/probes/metrics_probe.dart';
 import 'package:kelola/domain/probes/unit_action_probe.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/screens/kubernetes_home_screen.dart';
 import 'package:kelola/presentation/screens/disk_screen.dart';
 import 'package:kelola/presentation/screens/host_dashboard_screen.dart';
 import 'package:kelola/presentation/screens/packages_screen.dart';
@@ -151,6 +152,17 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
               builder: (_) => ContainersScreen(hostId: widget.host.id),
             ),
           );
+        case FleetIssueKind.k8sDown:
+        case FleetIssueKind.k8sWorkloads:
+          if (!mounted) {
+            return;
+          }
+          Navigator.of(context).pop();
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => KubernetesHomeScreen(hostId: widget.host.id),
+            ),
+          );
         case FleetIssueKind.diskCritical:
           if (!mounted) {
             return;
@@ -203,8 +215,10 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
       FleetIssueKind.unreachable ||
       FleetIssueKind.failedUnit ||
       FleetIssueKind.badContainer ||
+      FleetIssueKind.k8sDown ||
       FleetIssueKind.loadHigh =>
         HealthStatus.failed,
+      FleetIssueKind.k8sWorkloads ||
       FleetIssueKind.diskCritical ||
       FleetIssueKind.memHigh ||
       FleetIssueKind.securityUpdates ||

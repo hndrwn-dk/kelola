@@ -47,6 +47,7 @@ class FleetWatchRunner {
           rebootRequired: cached?.rebootRequired ?? false,
           fetchedAt: now.toUtc(),
           outcome: HostProbeOutcome.unreachable,
+          k8s: cached?.k8s,
         );
       }
       await _hosts.saveFleetCache(live);
