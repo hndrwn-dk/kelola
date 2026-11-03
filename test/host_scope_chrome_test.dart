@@ -23,6 +23,8 @@ final hostScopedScreenFiles = [
   'lib/presentation/screens/host_details_screen.dart',
   'lib/presentation/screens/host_key_mismatch_screen.dart',
   'lib/presentation/screens/journal_screen.dart',
+  'lib/presentation/screens/k8s_resource_detail_screen.dart',
+  'lib/presentation/screens/k8s_resource_list_screen.dart',
   'lib/presentation/screens/kubernetes_home_screen.dart',
   'lib/presentation/screens/metrics_screen.dart',
   'lib/presentation/screens/network_screen.dart',

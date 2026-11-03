@@ -2,8 +2,8 @@
 # Build a Play Store release AAB only when private kelola_pro billing is wired.
 # Copy the signed AAB into gitignored bundles_release/v<version>/.
 #
-# Manual Play uploads must pass --build-number higher than the last CI
-# versionCode (github.run_number + 100). See docs/RELEASING.md.
+# versionCode comes only from pubspec `version: name+N`. Bump +N above the
+# highest versionCode Play has ever accepted. See docs/RELEASING.md.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,8 +24,23 @@ if [[ -z "$VERSION_NAME" || -z "$VERSION_CODE" || "$VERSION_NAME" == "$VERSION" 
 fi
 
 # Keep Settings Version identical to the package metadata in this AAB.
-# Callers may still pass --build-number=… after -- to raise above CI codes;
-# when they do, also pass matching --dart-define=KELOLA_BUILD=….
+# Do not pass --build-number here: bump pubspec +N instead so the AAB,
+# Settings, and lib/app_version.dart stay on one number.
+prev=""
+for arg in "$@"; do
+  case "$arg" in
+    --build-number*|--build-name*|--dart-define=KELOLA_*|--dart-define-from-file*)
+      echo "build_play_aab: $arg is not allowed; bump pubspec.yaml version instead" >&2
+      exit 1
+      ;;
+  esac
+  # Space form: `--dart-define KELOLA_BUILD=...` arrives as two arguments.
+  if [[ "$prev" == "--dart-define" && "$arg" == KELOLA_* ]]; then
+    echo "build_play_aab: --dart-define $arg is not allowed; bump pubspec.yaml version instead" >&2
+    exit 1
+  fi
+  prev="$arg"
+done
 flutter build appbundle --release \
   --build-name="$VERSION_NAME" \
   --build-number="$VERSION_CODE" \

@@ -82,9 +82,22 @@ Follow `docs/RELEASING.md`. Hard rules:
   updates `lib/app_version.dart` defaults to the same name/`+N`, and
   **replaces** `docs/store/whatsnew/whatsnew-en-US` for that version
   only (≤ 500 chars). Never bump one without the others. Settings Version
-  must match the AAB (CI injects KELOLA_VERSION / KELOLA_BUILD).
+  must match the AAB (`scripts/build_play_aab.sh` injects KELOLA_VERSION /
+  KELOLA_BUILD from pubspec; CI no longer builds or uploads AABs).
 - Every feature or bug-fix change adds unit/widget tests for what it
   changes. CI runs `flutter test` only — no emulator / integration_test.
 - Never commit `pubspec_overrides.yaml`, keystores, service-account
   JSON, or `.gate_tmp_kelola_pro/`. Play builds must pass
   `scripts/check_play_billing.dart` against private `kelola-pro`.
+- Paid features: gate them with an existing `ProFeature` value
+  (`tunnels`, `fleetUnlimited`, `fleetWatch`, `snippetMulti`,
+  `vaultSync`), checked in presentation/controllers only, never in
+  `lib/domain` or `lib/data`. A new `ProFeature` value needs the same
+  change in the stub and in private `kelola-pro` (the enums must match).
+  `test/pro_entitlement_architecture_test.dart` pins every gate call
+  site: add a new site there on purpose. Never move a shipped free
+  feature behind the gate.
+- Release AABs come only from `scripts/build_play_aab.sh`. The stub
+  unlocks everything, so before uploading, install the AAB build and
+  check the hosts colophon shows `ext` (billing build), not `std`
+  (stub). A `std` AAB must never be uploaded.

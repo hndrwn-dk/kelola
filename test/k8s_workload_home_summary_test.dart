@@ -101,4 +101,46 @@ void main() {
     );
     expect(coreDnsReadyFromWorkloads(const []), isNull);
   });
+
+  test('counts pending, crashloop, and restarting pods separately', () {
+    final summary = WorkloadHomeSummary.from(const [
+      K8sWorkload(
+        kind: K8sKind.pod,
+        namespace: 'a',
+        name: 'crash',
+        ready: 0,
+        desired: 1,
+        phase: 'Init:CrashLoopBackOff',
+        health: HealthStatus.failed,
+        restarts: 9,
+        podPhase: 'Pending',
+      ),
+      K8sWorkload(
+        kind: K8sKind.pod,
+        namespace: 'a',
+        name: 'wait',
+        ready: 0,
+        desired: 1,
+        phase: 'Pending · Unschedulable',
+        health: HealthStatus.warning,
+        podPhase: 'Pending',
+      ),
+      K8sWorkload(
+        kind: K8sKind.pod,
+        namespace: 'a',
+        name: 'done',
+        ready: 0,
+        desired: 1,
+        phase: 'Succeeded',
+        health: HealthStatus.healthy,
+        podPhase: 'Succeeded',
+      ),
+    ]);
+    expect(summary.pods, 3);
+    expect(summary.notReadyCount, 2);
+    expect(summary.pendingCount, 2);
+    expect(summary.crashLoopCount, 1);
+    expect(summary.restartingCount, 1);
+    expect(summary.worst.map((w) => w.name), ['crash', 'wait']);
+  });
 }

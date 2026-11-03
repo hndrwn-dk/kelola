@@ -20,7 +20,9 @@ class ClusterHealthProbe extends Probe<ClusterHealth> {
       'echo ---HOSTNAME---',
       'hostname -s 2>/dev/null || hostname',
       'echo ---READYZ---',
-      '${kubectlTry(facts, 'get --raw=/readyz')} || echo ---READYZ_FAIL---',
+      // --raw prints no trailing newline; the echo keeps the next marker
+      // on its own line.
+      '{ ${kubectlTry(facts, 'get --raw=/readyz')} || echo ---READYZ_FAIL---; }; echo',
       'echo ---NODES---',
       kubectlTry(facts, 'get nodes -o json'),
     ].join('\n');

@@ -5,8 +5,11 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/k8s/cluster_policy.dart';
+import 'package:kelola/domain/k8s/cluster_resources.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_actions.dart';
+import 'package:kelola/domain/probes/cluster_resource_probes.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/workload_action_probe.dart';
 import 'package:kelola/domain/probes/workload_logs_probe.dart';
@@ -26,11 +29,15 @@ class WorkloadDetailScreen extends ConsumerStatefulWidget {
     required this.host,
     required this.facts,
     required this.workload,
+    this.now,
   });
 
   final Host host;
   final HostFacts facts;
   final K8sWorkload workload;
+
+  /// Test seam for revision ages. Production uses the wall clock.
+  final DateTime Function()? now;
 
   @override
   ConsumerState<WorkloadDetailScreen> createState() =>
@@ -43,6 +50,9 @@ class _WorkloadDetailScreenState extends ConsumerState<WorkloadDetailScreen> {
   List<K8sEvent> _events = const [];
   List<K8sTopRow> _top = const [];
   String _logs = '';
+  List<K8sRevision> _history = const [];
+  String? _historyError;
+  bool _historyErrorFromServer = false;
   String? _error;
   bool _busy = true;
 
@@ -67,6 +77,9 @@ class _WorkloadDetailScreenState extends ConsumerState<WorkloadDetailScreen> {
       String describe = '';
       var events = const <K8sEvent>[];
       var top = const <K8sTopRow>[];
+      var history = const <K8sRevision>[];
+      String? historyError;
+      var historyErrorFromServer = false;
       String? error;
 
       try {
@@ -121,6 +134,24 @@ class _WorkloadDetailScreenState extends ConsumerState<WorkloadDetailScreen> {
         // metrics-server is optional; describe and events still stand.
       }
 
+      if (workloadHasHistory(row.kind) && mounted) {
+        try {
+          final revs = await runHostProbe(
+            ref: ref,
+            context: context,
+            host: widget.host,
+            probe: RolloutHistoryProbe(namespace: row.namespace),
+            facts: widget.facts,
+          );
+          history = revisionsOf(revs, row);
+        } on K8sReadException catch (e) {
+          historyError = e.toString();
+          historyErrorFromServer = true;
+        } catch (e) {
+          historyError = describeSshError(e);
+        }
+      }
+
       if (!mounted) {
         return;
       }
@@ -128,6 +159,9 @@ class _WorkloadDetailScreenState extends ConsumerState<WorkloadDetailScreen> {
         _describe = describe;
         _events = events;
         _top = top;
+        _history = history;
+        _historyError = historyError;
+        _historyErrorFromServer = historyErrorFromServer;
         _error = error;
       });
     } catch (e) {
@@ -291,6 +325,35 @@ class _WorkloadDetailScreenState extends ConsumerState<WorkloadDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
+                  if (_row.config != null &&
+                      _row.config!.containers.isNotEmpty) ...[
+                    const SectionSlab('Containers'),
+                    const SizedBox(height: 6),
+                    for (final ct in _row.config!.containers)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: ServiceRow(
+                          risk: RiskLevel.read,
+                          status: containerHygieneOk(_row, ct)
+                              ? HealthStatus.healthy
+                              : HealthStatus.warning,
+                          name: ct.init ? '${ct.name} (init)' : ct.name,
+                          meta: ct.resourcesLabel,
+                          // Flags first: the line ellipsizes, and the flags
+                          // are why the row may be amber. The image ref is
+                          // long and goes last.
+                          detail: [
+                            if (ct.privileged) 'privileged',
+                            if (!ct.init)
+                              'readiness ${ct.readinessProbe ? 'yes' : 'no'}',
+                            if (!ct.init)
+                              'liveness ${ct.livenessProbe ? 'yes' : 'no'}',
+                            if (ct.image.isNotEmpty) ct.image,
+                          ].join(' · '),
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                  ],
                   if (_describe.isNotEmpty) ...[
                     const SectionSlab('Describe'),
                     const SizedBox(height: 6),
@@ -321,6 +384,58 @@ class _WorkloadDetailScreenState extends ConsumerState<WorkloadDetailScreen> {
                           kicker: ev.when.isEmpty ? ev.type : ev.when,
                         ),
                       ),
+                  ],
+                  if (workloadHasHistory(row.kind) &&
+                      (_historyError != null || !_busy)) ...[
+                    const SectionSlab('History'),
+                    const SizedBox(height: 6),
+                    if (_historyError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          _historyError!,
+                          style: _historyErrorFromServer
+                              ? KelolaType.mono(color: c.muted, size: 12)
+                              : KelolaType.body(color: c.muted, size: 13),
+                        ),
+                      )
+                    else if (_history.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          'No rollout history kept',
+                          style: KelolaType.body(color: c.muted, size: 13),
+                        ),
+                      )
+                    else ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          _history.length == 1
+                              ? 'Last revision kept by the cluster'
+                              : 'Last ${_history.length} revisions kept by the cluster',
+                          style: KelolaType.body(color: c.muted, size: 12),
+                        ),
+                      ),
+                      for (final r in _history)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: ServiceRow(
+                            risk: RiskLevel.read,
+                            status: r.current ? row.health : null,
+                            kicker: [
+                              if (r.current) 'current',
+                              r.ageLabel(
+                                widget.now?.call() ?? DateTime.now().toUtc(),
+                              ),
+                            ].where((s) => s.isNotEmpty).join(' · '),
+                            name: 'revision ${r.revision}',
+                            meta: r.changeLabel,
+                            detail:
+                                r.changeCause.isEmpty ? null : r.changeCause,
+                          ),
+                        ),
+                    ],
                   ],
                   if (_top.isNotEmpty) ...[
                     const SectionSlab('Top'),

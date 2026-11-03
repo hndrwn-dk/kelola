@@ -61,6 +61,17 @@ $_nodesJson
     expect(health.overall, HealthStatus.healthy);
   });
 
+  test('readyz ok without trailing newline is still reachable', () {
+    // Real kubectl: `get --raw=/readyz` prints "ok" with no newline, so the
+    // next marker lands on the same line.
+    final out = '---HOSTNAME---\nrocky-lab\n---READYZ---\nok---NODES---\n'
+        '$_nodesJson';
+    final health = parseClusterHealth(out);
+    expect(health.apiReachable, isTrue);
+    expect(health.controlPlaneReady, 1);
+    expect(health.overall, HealthStatus.healthy);
+  });
+
   test('readyz failure marks cluster failed', () {
     final out = '''
 ---HOSTNAME---
@@ -104,5 +115,81 @@ $nodes
     final health = parseClusterHealth(out);
     expect(health.thisHost?.ready, isFalse);
     expect(health.overall, HealthStatus.warning);
+  });
+
+  test('counts every node, names NotReady ones, and surfaces pressure', () {
+    const out = r'''
+---HOSTNAME---
+cp-1
+---READYZ---
+ok
+---NODES---
+{
+  "kind": "List",
+  "items": [
+    {
+      "kind": "Node",
+      "metadata": {"name": "cp-1", "labels": {"node-role.kubernetes.io/control-plane": ""}},
+      "status": {
+        "conditions": [
+          {"type": "MemoryPressure", "status": "False"},
+          {"type": "DiskPressure", "status": "False"},
+          {"type": "Ready", "status": "True"}
+        ],
+        "nodeInfo": {"kubeletVersion": "v1.31.0", "containerRuntimeVersion": "containerd://1.7.22"}
+      }
+    },
+    {
+      "kind": "Node",
+      "metadata": {"name": "worker-1", "labels": {}},
+      "status": {
+        "conditions": [
+          {"type": "DiskPressure", "status": "True"},
+          {"type": "Ready", "status": "True"}
+        ],
+        "nodeInfo": {"kubeletVersion": "v1.31.0", "containerRuntimeVersion": "containerd://1.7.22"}
+      }
+    },
+    {
+      "kind": "Node",
+      "metadata": {"name": "worker-2", "labels": {}},
+      "status": {
+        "conditions": [{"type": "Ready", "status": "Unknown"}],
+        "nodeInfo": {"kubeletVersion": "v1.30.4", "containerRuntimeVersion": "cri-o://1.30.1"}
+      }
+    }
+  ]
+}
+''';
+    final health = parseClusterHealth(out);
+    expect(health.nodesTotal, 3);
+    expect(health.nodesReady, 2);
+    expect(health.nodesLabel, '2/3 Ready');
+    expect(health.notReadyNodes, ['worker-2']);
+    expect(health.pressuredNodes, ['worker-1: DiskPressure']);
+    expect(health.controlPlaneLabel, '1/1 Ready');
+    expect(health.thisHost?.membershipLabel,
+        'Ready · kubelet v1.31.0 · containerd 1.7.22');
+    expect(health.overall, HealthStatus.warning);
+  });
+
+  test('withCoreDns keeps the node list', () {
+    const out = '''
+---HOSTNAME---
+rocky-lab
+---READYZ---
+ok
+---NODES---
+$_nodesJson
+''';
+    final health = parseClusterHealth(out).withCoreDns(true);
+    expect(health.nodesLabel, '1/1 Ready');
+    expect(health.coreDnsReady, isTrue);
+    expect(health.overall, HealthStatus.healthy);
+  });
+
+  test('runtimeLabel splits scheme and version', () {
+    expect(runtimeLabel('containerd://1.7.22'), 'containerd 1.7.22');
+    expect(runtimeLabel('docker'), 'docker');
   });
 }

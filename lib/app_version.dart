@@ -9,8 +9,8 @@ const kelolaAppVersion = String.fromEnvironment(
   defaultValue: '0.3.6',
 );
 
-/// Build number from pubspec `version:` after `+`, or the CI Play versionCode
-/// when injected via `KELOLA_BUILD`.
+/// Build number (Play versionCode) from pubspec `version:` after `+`.
+/// `scripts/build_play_aab.sh` injects the same value via `KELOLA_BUILD`.
 const kelolaVersionCode = String.fromEnvironment(
   'KELOLA_BUILD',
   defaultValue: '117',

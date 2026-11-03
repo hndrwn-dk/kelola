@@ -28,6 +28,18 @@ class WorkloadListView {
   }
 }
 
+/// `pod · 0/1 · CrashLoopBackOff · 14 restarts`
+String workloadMeta(K8sWorkload row) {
+  final parts = <String>[
+    row.kind.short,
+    row.readyLabel,
+    if (row.phase.isNotEmpty) row.phase,
+    if (row.restarts > 0)
+      '${row.restarts} restart${row.restarts == 1 ? '' : 's'}',
+  ];
+  return parts.join(' · ');
+}
+
 List<String> workloadNamespaces(List<K8sWorkload> rows) {
   final set = {for (final row in rows) row.namespace};
   final list = set.where((n) => n.isNotEmpty).toList()..sort();

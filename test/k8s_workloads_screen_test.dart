@@ -15,8 +15,10 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/k8s/cluster_resources.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_view.dart';
+import 'package:kelola/domain/probes/cluster_resource_probes.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/domain/probes/workload_logs_probe.dart';
@@ -167,7 +169,15 @@ void main() {
       isA<WorkloadDescribeProbe>(),
       isA<WorkloadEventsProbe>(),
       isA<WorkloadTopProbe>(),
+      isA<RolloutHistoryProbe>(),
     ]);
+    // History is read for this namespace and filtered to this workload.
+    expect((pool.probes.last as RolloutHistoryProbe).namespace, 'prod');
+    expect(find.text('HISTORY'), findsOneWidget);
+    expect(find.text('Last revision kept by the cluster'), findsOneWidget);
+    expect(find.text('revision 7'), findsOneWidget);
+    expect(find.text('web nginx:1.25 → nginx:1.27'), findsOneWidget);
+    expect(find.text('revision 2'), findsNothing);
     expect(pool.scopes, everyElement(ProbeScope.host));
     expect(find.text('Exec'), findsNothing);
     expect(find.text('YAML'), findsOneWidget);
@@ -310,6 +320,26 @@ class _WorkloadPool extends SshSessionPool {
     }
     if (probe is WorkloadTopProbe) {
       return top as T;
+    }
+    if (probe is RolloutHistoryProbe) {
+      return const <K8sRevision>[
+        K8sRevision(
+          ownerKind: K8sKind.deployment,
+          namespace: 'prod',
+          ownerName: 'web',
+          revision: 7,
+          changes: ['web nginx:1.25 → nginx:1.27'],
+          current: true,
+        ),
+        K8sRevision(
+          ownerKind: K8sKind.deployment,
+          namespace: 'prod',
+          ownerName: 'api',
+          revision: 2,
+          changes: ['created'],
+          current: true,
+        ),
+      ] as T;
     }
     if (probe is WorkloadLogsProbe) {
       return logs as T;

@@ -58,6 +58,7 @@ ClusterHealth parseClusterHealth(
     thisHost: thisHost,
     thisHostMatched: matched,
     coreDnsReady: coreDnsReady,
+    nodes: nodes,
   );
 }
 
@@ -115,11 +116,17 @@ ClusterNodeMembership _node(Map<String, dynamic> raw) {
   final status = _map(raw['status']);
   final conditions = status['conditions'];
   var ready = false;
+  final pressures = <String>[];
   if (conditions is List) {
     for (final c in conditions) {
-      if (c is Map && c['type'] == 'Ready') {
+      if (c is! Map) {
+        continue;
+      }
+      final type = c['type'] as String? ?? '';
+      if (type == 'Ready') {
         ready = c['status'] == 'True';
-        break;
+      } else if (type.isNotEmpty && c['status'] == 'True') {
+        pressures.add(type);
       }
     }
   }
@@ -130,6 +137,7 @@ ClusterNodeMembership _node(Map<String, dynamic> raw) {
     kubeletVersion: info['kubeletVersion'] as String? ?? '',
     containerRuntime: info['containerRuntimeVersion'] as String? ?? '',
     controlPlane: controlPlane,
+    pressures: pressures,
   );
 }
 
@@ -156,7 +164,9 @@ String? _section(String stdout, String name) {
   if (from < stdout.length && stdout[from] == '\n') {
     from++;
   }
-  final next = RegExp(r'\n---[A-Z0-9_]+---').firstMatch(stdout.substring(from));
+  // Newline optional: `kubectl get --raw` output has none, so the next
+  // marker can follow the body on the same line.
+  final next = RegExp(r'\n?---[A-Z0-9_]+---').firstMatch(stdout.substring(from));
   if (next == null) {
     return stdout.substring(from);
   }

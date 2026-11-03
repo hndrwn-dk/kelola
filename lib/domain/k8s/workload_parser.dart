@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/k8s/workload.dart';
+import 'package:kelola/domain/k8s/workload_config.dart';
 
 WorkloadInventory parseWorkloadList(String stdout) {
   if (stdout.contains('---NO_KUBECTL---')) {
@@ -51,6 +52,166 @@ K8sWorkload? _item(Map<String, dynamic> raw) {
     desired: rollup.desired,
     phase: rollup.phase,
     health: rollup.health,
+    restarts: kind == K8sKind.pod ? _podRestarts(status) : 0,
+    podPhase: kind == K8sKind.pod ? status['phase'] as String? ?? '' : '',
+    config: _podConfig(kind, meta, spec),
+  );
+}
+
+K8sPodConfig? _podConfig(
+  K8sKind kind,
+  Map<String, dynamic> meta,
+  Map<String, dynamic> spec,
+) {
+  final Map<String, dynamic> podSpec = switch (kind) {
+    K8sKind.pod => spec,
+    K8sKind.cronJob => _map(
+        _map(_map(_map(spec['jobTemplate'])['spec'])['template'])['spec'],
+      ),
+    _ => _map(_map(spec['template'])['spec']),
+  };
+  if (podSpec.isEmpty) {
+    return null;
+  }
+  final owners = meta['ownerReferences'];
+  return parsePodSpec(
+    podSpec,
+    ownedByController: owners is List && owners.isNotEmpty,
+  );
+}
+
+/// Waiting reasons that will not fix themselves without a change.
+const _failedWaiting = {
+  'CrashLoopBackOff',
+  'ImagePullBackOff',
+  'ErrImagePull',
+  'InvalidImageName',
+  'CreateContainerConfigError',
+  'CreateContainerError',
+  'RunContainerError',
+};
+
+({String reason, bool init}) _waitingReason(Map<String, dynamic> status) {
+  for (final key in ['initContainerStatuses', 'containerStatuses']) {
+    final list = status[key];
+    if (list is! List) {
+      continue;
+    }
+    for (final c in list) {
+      if (c is! Map) {
+        continue;
+      }
+      final waiting = _map(_map(c['state'])['waiting']);
+      final reason = waiting['reason'] as String? ?? '';
+      // PodInitializing is the normal wait while init containers run.
+      if (reason.isNotEmpty && reason != 'PodInitializing') {
+        return (reason: reason, init: key == 'initContainerStatuses');
+      }
+    }
+  }
+  return (reason: '', init: false);
+}
+
+int _podRestarts(Map<String, dynamic> status) {
+  var total = 0;
+  for (final key in ['initContainerStatuses', 'containerStatuses']) {
+    final list = status[key];
+    if (list is! List) {
+      continue;
+    }
+    for (final c in list) {
+      if (c is Map) {
+        total += _int(c['restartCount']) ?? 0;
+      }
+    }
+  }
+  return total;
+}
+
+/// `OOMKilled` / `Error` from the last terminated container, if any.
+String _lastTerminatedReason(Map<String, dynamic> status) {
+  final list = status['containerStatuses'];
+  if (list is! List) {
+    return '';
+  }
+  for (final c in list) {
+    if (c is! Map) {
+      continue;
+    }
+    final term = _map(_map(c['lastState'])['terminated']);
+    final reason = term['reason'] as String? ?? '';
+    if (reason.isNotEmpty) {
+      return reason;
+    }
+  }
+  return '';
+}
+
+({int ready, int desired, String phase, HealthStatus health}) _podRollup(
+  Map<String, dynamic> status,
+) {
+  final phase = status['phase'] as String? ?? '';
+  final containers = status['containerStatuses'];
+  var ready = 0;
+  var desired = 0;
+  if (containers is List) {
+    desired = containers.length;
+    for (final c in containers) {
+      if (c is Map && c['ready'] == true) {
+        ready++;
+      }
+    }
+  }
+  final waiting = _waitingReason(status);
+  final restarts = _podRestarts(status);
+  final lastTerm = _lastTerminatedReason(status);
+
+  var displayPhase = phase;
+  if (waiting.reason.isNotEmpty) {
+    displayPhase = waiting.init ? 'Init:${waiting.reason}' : waiting.reason;
+  } else if (phase == 'Pending') {
+    // Unschedulable / Insufficient cpu reads better than bare Pending.
+    final conditions = status['conditions'];
+    if (conditions is List) {
+      for (final c in conditions) {
+        if (c is Map &&
+            c['type'] == 'PodScheduled' &&
+            c['status'] == 'False' &&
+            (c['reason'] as String? ?? '').isNotEmpty) {
+          displayPhase = 'Pending · ${c['reason']}';
+          break;
+        }
+      }
+    }
+  }
+
+  final HealthStatus health;
+  if (_failedWaiting.contains(waiting.reason) ||
+      phase == 'Failed' ||
+      phase == 'Unknown') {
+    health = HealthStatus.failed;
+  } else {
+    health = switch (phase) {
+      'Pending' => HealthStatus.warning,
+      'Succeeded' => HealthStatus.healthy,
+      'Running' => ready == desired && desired > 0 && restarts < kRestartWarn
+          ? HealthStatus.healthy
+          : HealthStatus.warning,
+      _ => HealthStatus.unknown,
+    };
+  }
+  if (health != HealthStatus.healthy &&
+      waiting.reason.isEmpty &&
+      phase == 'Running' &&
+      lastTerm.isNotEmpty &&
+      restarts > 0) {
+    displayPhase = 'Running · last $lastTerm';
+  }
+  return (
+    ready: ready,
+    desired: desired,
+    phase: displayPhase,
+    health: health,
   );
 }
 
@@ -61,50 +222,7 @@ K8sWorkload? _item(Map<String, dynamic> raw) {
 ) {
   switch (kind) {
     case K8sKind.pod:
-      final phase = status['phase'] as String? ?? '';
-      final containers = status['containerStatuses'];
-      var ready = 0;
-      var desired = 0;
-      var waitingReason = '';
-      if (containers is List) {
-        desired = containers.length;
-        for (final c in containers) {
-          if (c is! Map) {
-            continue;
-          }
-          if (c['ready'] == true) {
-            ready++;
-          }
-          final state = _map(c['state']);
-          final waiting = _map(state['waiting']);
-          final reason = waiting['reason'] as String? ?? '';
-          if (reason.isNotEmpty && waitingReason.isEmpty) {
-            waitingReason = reason;
-          }
-        }
-      }
-      final displayPhase =
-          waitingReason.isNotEmpty ? waitingReason : phase;
-      final crashy = waitingReason == 'CrashLoopBackOff' ||
-          waitingReason == 'ImagePullBackOff' ||
-          waitingReason == 'ErrImagePull';
-      final health = crashy || phase == 'Failed' || phase == 'Unknown'
-          ? HealthStatus.failed
-          : switch (phase) {
-              'Pending' => HealthStatus.warning,
-              'Succeeded' => HealthStatus.healthy,
-              'Running' =>
-                ready == desired && desired > 0
-                    ? HealthStatus.healthy
-                    : HealthStatus.warning,
-              _ => HealthStatus.unknown,
-            };
-      return (
-        ready: ready,
-        desired: desired,
-        phase: displayPhase,
-        health: health,
-      );
+      return _podRollup(status);
     case K8sKind.daemonSet:
       final desired = _int(status['desiredNumberScheduled']) ?? 0;
       final ready = _int(status['numberReady']) ?? 0;
@@ -137,9 +255,19 @@ K8sWorkload? _item(Map<String, dynamic> raw) {
       );
     case K8sKind.deployment:
     case K8sKind.statefulSet:
+      // spec.replicas is what the owner asked for; status.replicas can sit
+      // above it mid-rollout (surge) and hide a short count.
       final desired =
-          _int(status['replicas']) ?? _int(spec['replicas']) ?? 0;
+          _int(spec['replicas']) ?? _int(status['replicas']) ?? 0;
       final ready = _int(status['readyReplicas']) ?? 0;
+      if (desired == 0) {
+        return (
+          ready: ready,
+          desired: 0,
+          phase: 'scaled to 0',
+          health: HealthStatus.healthy,
+        );
+      }
       return (
         ready: ready,
         desired: desired,

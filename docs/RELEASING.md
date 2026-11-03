@@ -24,86 +24,57 @@ and must not rewrite whatsnew.
 Longer optional changelog stays in `docs/play/release-notes-*.md`.
 Play Console only receives `docs/store/whatsnew/`.
 
-## versionCode (CI offset)
+## versionCode
 
-CI sets:
+`versionCode` is **only** the `+N` in `pubspec.yaml` `version: name+N`.
+`scripts/build_play_aab.sh` passes it as `--build-number` and as
+`--dart-define=KELOLA_BUILD`, so the AAB package metadata, Play Console,
+and Settings → Version all show the same number. The script refuses
+`--build-number` / `--build-name` overrides.
 
-```text
-versionCode = github.run_number + 100
-```
+On every versionName bump, raise `+N` above the highest versionCode Play
+has ever accepted (any track). The old CI uploads used
+`run_number + 100`, which is why 0.3.6 jumped to `+117`. CI fails a
+release bump whose `+N` does not increase.
 
-`OFFSET=100` exists because no Actions workflow had run while Play
-already had versionCode **18** (0.3.2). The first CI release therefore
-starts at **101** (or higher once run_number grows), never colliding
-with live codes ≤ 18.
+## Building and uploading (manual)
 
-## Tracks
+CI does **not** build or upload AABs (the Play jobs were removed: there
+is no device/test server in Actions, and a second versionCode formula
+in CI drifted from pubspec).
 
-Push to `main` (including versionName bumps) always resolves
-`track=none` — CI does **not** auto-build or upload to Play. Version
-bumps still require `docs/store/whatsnew/whatsnew-en-US` and a
-strictly greater versionName.
-
-Play releases are **manual**:
-
-1. Build a private-billing AAB locally (`bash scripts/build_play_aab.sh`,
-   with `pubspec_overrides` → private `kelola-pro`) **or** run
-   `workflow_dispatch` on `main` with `play_track` set.
-2. Install on the Pixel 8 Pro (Internal testing) and verify against lab
-   SSH hosts / StrongBox.
-3. **Promote** the same artifact to production in Play Console (no
+1. Wire the private billing package (see below) and
+   `android/key.properties` locally.
+2. `bash scripts/build_play_aab.sh` → `bundles_release/v<version>/`.
+3. Upload the AAB in Play Console → Internal testing. Paste
+   `docs/store/whatsnew/whatsnew-en-US` as release notes and upload
+   `build/app/outputs/mapping/release/mapping.txt` for deobfuscation.
+4. Install on the Pixel 8 Pro and verify against lab SSH hosts /
+   StrongBox. Settings → Version must read `name (+N)` from pubspec.
+5. **Promote** the same artifact to production in Play Console (no
    rebuild) when ready.
-
-`workflow_dispatch` (main only) can target `internal` / `alpha` /
-`beta` / `production` (or `none`). Production uploads use
-`status: draft`; other tracks use `completed`.
 
 ## Private billing gate
 
 Play AABs must **not** ship the in-repo `packages/kelola_pro` stub
 (OpenEntitlement / label `std` / all Pro unlocked).
 
-Release builds:
+Local release builds:
 
-1. Check out `hndrwn-dk/kelola-pro` into `.gate_tmp_kelola_pro/` with
-   deploy key `KELOLA_PRO_DEPLOY_KEY`.
+1. Check out `hndrwn-dk/kelola-pro` into `.gate_tmp_kelola_pro/`.
 2. Write gitignored `pubspec_overrides.yaml` pointing `kelola_pro` at
    that path.
-3. Run `dart run scripts/check_play_billing.dart` — failure stops the
-   job.
+3. `scripts/build_play_aab.sh` runs the billing gate first — failure
+   stops the build.
 
 Never commit `pubspec_overrides.yaml`, keystores, or
-`.gate_tmp_kelola_pro/`. Never print overrides or private package
-contents in public Actions logs.
+`.gate_tmp_kelola_pro/`.
 
-Analyze/test on PRs and non-release pushes use the stub (no secret).
+Analyze/test in CI always use the stub (no secrets).
 
-## Secrets (`play` environment, main only)
-
-| Secret | Purpose |
-|--------|---------|
-| `ANDROID_KEYSTORE_BASE64` | Upload keystore (base64) |
-| `ANDROID_KEYSTORE_PASSWORD` | Store password |
-| `ANDROID_KEY_ALIAS` | Key alias |
-| `ANDROID_KEY_PASSWORD` | Key password |
-| `PLAY_SERVICE_ACCOUNT_JSON` | Play Developer API service account |
-| `KELOLA_PRO_DEPLOY_KEY` | Read-only deploy key for `kelola-pro` |
-
-## Manual fallback
-
-`bash scripts/build_play_aab.sh` remains the local path (requires
-`pubspec_overrides.yaml` + billing gate + `android/key.properties`).
-
-For a manual Play upload, pass a `--build-number` **higher** than the
-last CI versionCode (`run_number + 100`), or Play rejects the AAB.
-
-Example:
-
-```bash
-bash scripts/build_play_aab.sh --build-number=200
-```
-
-(`build_play_aab.sh` forwards args to `flutter build appbundle`.)
+The `play` GitHub environment and its secrets (`ANDROID_KEYSTORE_*`,
+`ANDROID_KEY_*`, `PLAY_SERVICE_ACCOUNT_JSON`, `KELOLA_PRO_DEPLOY_KEY`)
+are no longer read by any workflow and can be deleted.
 
 ## Reading CI
 
@@ -113,8 +84,8 @@ Job **Analyze & test** always runs. Annotations (`::error` /
 existing infos/warnings do not fail the job; only analyzer **errors**
 fail CI.
 
-Jobs **Build Play AAB** and **Upload to Google Play** run only when
-`track != none`, under the `play` environment.
+Step **Release metadata gate** fails a versionName bump that lacks
+fresh whatsnew notes, a greater versionName, or a greater `+N`.
 
 ## Device verification
 

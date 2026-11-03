@@ -1,24 +1,14 @@
-# Kelola Android CI: analyze + unit/widget tests.
-# Play AAB/upload is manual only (workflow_dispatch). Version bumps no longer
-# auto-set track=internal.
+# Kelola Android CI: release-metadata gate + analyze + unit/widget tests.
+#
+# CI never builds or uploads a Play AAB. Releases are built locally with
+# scripts/build_play_aab.sh and uploaded by hand in Play Console, so the
+# versionCode is always pubspec `version: name+N` (single source of truth).
 name: app
 
 on:
   push:
   pull_request:
   workflow_dispatch:
-    inputs:
-      play_track:
-        description: Play track (main only)
-        required: true
-        type: choice
-        options:
-          - none
-          - internal
-          - alpha
-          - beta
-          - production
-        default: internal
 
 permissions:
   contents: read
@@ -34,35 +24,30 @@ jobs:
   analyze:
     name: Analyze & test
     runs-on: ubuntu-latest
-    outputs:
-      track: ${{ steps.track.outputs.track }}
-      version_name: ${{ steps.track.outputs.version_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
-      - name: Release or build only?
-        id: track
+      - name: Release metadata gate
         shell: bash
         run: |
           set -euo pipefail
-          version_line="$(awk -F': ' '/^version:/ {gsub(/\r/, "", $2); gsub(/ /, "", $2); print $2; exit}' pubspec.yaml)"
-          version_name="${version_line%%+*}"
-          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
-
-          pubspec_version_at() {
+          # A release = versionName (before `+`) changes. It must ship with
+          # fresh whatsnew notes, a strictly greater versionName, and a
+          # strictly greater versionCode (+N) — Play rejects a manual upload
+          # whose versionCode is not higher than the last one.
+          read_version() {
+            awk -F': ' '/^version:/ {gsub(/\r/, "", $2); gsub(/ /, "", $2); print $2; exit}'
+          }
+          version_at() {
             local ref="$1"
             if ! git cat-file -e "${ref}:pubspec.yaml" 2>/dev/null; then
               echo ""
               return
             fi
-            git show "${ref}:pubspec.yaml" | awk -F': ' '/^version:/ {gsub(/\r/, "", $2); gsub(/ /, "", $2); print $2; exit}'
-          }
-          name_only() {
-            local v="$1"
-            echo "${v%%+*}"
+            git show "${ref}:pubspec.yaml" | read_version
           }
           semver_gt() {
             python3 - "$1" "$2" <<'PY'
@@ -70,7 +55,6 @@ jobs:
           def parts(s):
               return [int(x) for x in s.split(".")]
           a, b = parts(sys.argv[1]), parts(sys.argv[2])
-          # pad
           n = max(len(a), len(b))
           a += [0] * (n - len(a))
           b += [0] * (n - len(b))
@@ -78,94 +62,57 @@ jobs:
           PY
           }
 
-          event="${{ github.event_name }}"
-          track="none"
-
-          if [[ "$event" == "pull_request" ]]; then
-            base_ref="${{ github.event.pull_request.base.sha }}"
-            before_line="$(pubspec_version_at "$base_ref")"
-            before_name="$(name_only "$before_line")"
-            if [[ -n "$before_name" && "$before_name" != "$version_name" ]]; then
-              if ! git diff --name-only "$base_ref" HEAD | grep -qx 'docs/store/whatsnew/whatsnew-en-US'; then
-                echo "::error file=docs/store/whatsnew/whatsnew-en-US::PR changes versionName ($before_name → $version_name) but whatsnew-en-US was not updated."
-                exit 1
-              fi
-              notes="$(tr -d '\r' < docs/store/whatsnew/whatsnew-en-US)"
-              if [[ -z "${notes// }" ]]; then
-                echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US is empty."
-                exit 1
-              fi
-              chars="$(printf '%s' "$notes" | wc -c)"
-              if (( chars > 500 )); then
-                echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US is ${chars} characters (max 500)."
-                exit 1
-              fi
-              if ! semver_gt "$version_name" "$before_name"; then
-                echo "::error file=pubspec.yaml::versionName $version_name must be strictly greater than $before_name."
-                exit 1
-              fi
-            fi
-            track="none"
-          elif [[ "$event" == "workflow_dispatch" ]]; then
-            if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
-              echo "::error file=.github/workflows/app.yml::workflow_dispatch Play tracks are only allowed from main."
-              exit 1
-            fi
-            track="${{ inputs.play_track }}"
-            if [[ "$track" != "none" ]]; then
-              notes="$(tr -d '\r' < docs/store/whatsnew/whatsnew-en-US 2>/dev/null || true)"
-              if [[ -z "${notes// }" ]]; then
-                echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US required for a Play upload."
-                exit 1
-              fi
-            fi
-          elif [[ "$event" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
-            before="${{ github.event.before }}"
-            if [[ -z "$before" || "$before" =~ ^0+$ ]]; then
-              echo "::warning::github.event.before missing or all zeros; treating as build-only (track=none)."
-              track="none"
-            elif ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
-              echo "::warning::before commit $before not in history; treating as build-only (track=none)."
-              track="none"
-            else
-              before_line="$(pubspec_version_at "$before")"
-              before_name="$(name_only "$before_line")"
-              if [[ -z "$before_name" ]]; then
-                echo "::warning::could not read version at $before; track=none."
-                track="none"
-              elif [[ "$before_name" == "$version_name" ]]; then
-                echo "::notice::No release — versionName unchanged ($version_name)."
-                track="none"
-              else
-                if ! semver_gt "$version_name" "$before_name"; then
-                  echo "::error file=pubspec.yaml::versionName $version_name must be strictly greater than $before_name."
-                  exit 1
-                fi
-                if ! git diff --name-only "$before" HEAD | grep -qx 'docs/store/whatsnew/whatsnew-en-US'; then
-                  echo "::error file=docs/store/whatsnew/whatsnew-en-US::versionName changed ($before_name → $version_name) but docs/store/whatsnew/ was not updated. Write whatsnew-en-US for this version."
-                  exit 1
-                fi
-                notes="$(tr -d '\r' < docs/store/whatsnew/whatsnew-en-US)"
-                if [[ -z "${notes// }" ]]; then
-                  echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US is empty."
-                  exit 1
-                fi
-                chars="$(printf '%s' "$notes" | wc -c)"
-                if (( chars > 500 )); then
-                  echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US is ${chars} characters (max 500)."
-                  exit 1
-                fi
-                # Auto Play upload disabled — use workflow_dispatch (play_track).
-                echo "::notice::versionName changed ($before_name → $version_name); Play upload is manual (workflow_dispatch). track=none."
-                track="none"
-              fi
-            fi
-          else
-            track="none"
+          version_line="$(read_version < pubspec.yaml)"
+          version_name="${version_line%%+*}"
+          version_code="${version_line##*+}"
+          if [[ "$version_name" == "$version_line" || ! "$version_code" =~ ^[0-9]+$ ]]; then
+            echo "::error file=pubspec.yaml::version must be name+N (got $version_line)."
+            exit 1
           fi
 
-          echo "track=$track" >> "$GITHUB_OUTPUT"
-          echo "Resolved track=$track version_name=$version_name"
+          event="${{ github.event_name }}"
+          base=""
+          if [[ "$event" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          elif [[ "$event" == "push" ]]; then
+            base="${{ github.event.before }}"
+          fi
+          if [[ -z "$base" || "$base" =~ ^0+$ ]] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "::notice::No comparable base commit; version $version_line not gated."
+            exit 0
+          fi
+
+          before_line="$(version_at "$base")"
+          before_name="${before_line%%+*}"
+          before_code="${before_line##*+}"
+          if [[ -z "$before_name" || "$before_name" == "$version_name" ]]; then
+            echo "::notice::No release — versionName unchanged ($version_line)."
+            exit 0
+          fi
+
+          if ! semver_gt "$version_name" "$before_name"; then
+            echo "::error file=pubspec.yaml::versionName $version_name must be strictly greater than $before_name."
+            exit 1
+          fi
+          if [[ "$before_code" =~ ^[0-9]+$ ]] && (( version_code <= before_code )); then
+            echo "::error file=pubspec.yaml::versionCode +$version_code must be strictly greater than +$before_code."
+            exit 1
+          fi
+          if ! git diff --name-only "$base" HEAD | grep -qx 'docs/store/whatsnew/whatsnew-en-US'; then
+            echo "::error file=docs/store/whatsnew/whatsnew-en-US::versionName changed ($before_name → $version_name) but whatsnew-en-US was not updated."
+            exit 1
+          fi
+          notes="$(tr -d '\r' < docs/store/whatsnew/whatsnew-en-US)"
+          if [[ -z "${notes// }" ]]; then
+            echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US is empty."
+            exit 1
+          fi
+          chars="$(printf '%s' "$notes" | wc -c)"
+          if (( chars > 500 )); then
+            echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US is ${chars} characters (max 500)."
+            exit 1
+          fi
+          echo "::notice::Release $before_line → $version_line. Build locally with scripts/build_play_aab.sh and upload the AAB in Play Console."
 
       - name: Install SQLite (Drift)
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
@@ -262,266 +209,3 @@ jobs:
           sys.exit(1)
           PY
           fi
-
-  build:
-    name: Build Play AAB
-    needs: analyze
-    if: needs.analyze.outputs.track != 'none'
-    runs-on: ubuntu-latest
-    environment: play
-    outputs:
-      track: ${{ needs.analyze.outputs.track }}
-      version_name: ${{ needs.analyze.outputs.version_name }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - name: Checkout private kelola-pro
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          repository: hndrwn-dk/kelola-pro
-          path: .gate_tmp_kelola_pro
-          ssh-key: ${{ secrets.KELOLA_PRO_DEPLOY_KEY }}
-          persist-credentials: false
-
-      - name: Wire pubspec_overrides for billing gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! -d .gate_tmp_kelola_pro/.git && ! -f .gate_tmp_kelola_pro/pubspec.yaml ]]; then
-            echo "::error file=.github/workflows/app.yml::Private kelola-pro checkout missing (is KELOLA_PRO_DEPLOY_KEY set?)."
-            exit 1
-          fi
-          # Do not print this file — public Actions logs.
-          printf '%s\n' \
-            'dependency_overrides:' \
-            '  kelola_pro:' \
-            '    path: .gate_tmp_kelola_pro' \
-            > pubspec_overrides.yaml
-
-      - name: Install SQLite (Drift)
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-
-      - name: Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - name: Billing gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! dart run scripts/check_play_billing.dart; then
-            echo "::error file=scripts/check_play_billing.dart::Play billing gate failed — refusing stub AAB."
-            exit 1
-          fi
-
-      - name: Java 17
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Decode keystore
-        id: keystore
-        shell: bash
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          missing=0
-          for s in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
-            if [[ -z "${!s}" ]]; then
-              echo "::error file=.github/workflows/app.yml::Missing secret $s"
-              missing=1
-            fi
-          done
-          if [[ "$missing" -ne 0 ]]; then
-            exit 1
-          fi
-          KEYSTORE_PATH="$RUNNER_TEMP/kelola-upload.jks"
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
-          echo "path=$KEYSTORE_PATH" >> "$GITHUB_OUTPUT"
-
-      - name: Build App Bundle
-        id: bundle
-        shell: bash
-        env:
-          CI: "true"
-          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          VERSION_NAME="${{ needs.analyze.outputs.version_name }}"
-          BUILD_NUMBER=$((GITHUB_RUN_NUMBER + 100))
-          LOG="$RUNNER_TEMP/aab-build.log"
-          trap 'code=$?; if [[ $code -ne 0 ]]; then
-            tail=$(grep -v "^[[:space:]]*$" "$LOG" 2>/dev/null | tail -n 25 | sed "s/%/%25/g;s/\r//g" | awk "{printf \"%s%%0A\", \$0}")
-            echo "::error file=.github/workflows/app.yml::AAB build failed:%0A${tail}"
-          fi; exit $code' ERR
-          # Same name/build as Android package metadata so Settings Version matches the AAB.
-          flutter build appbundle --release \
-            --build-name="$VERSION_NAME" \
-            --build-number="$BUILD_NUMBER" \
-            --dart-define=KELOLA_VERSION="$VERSION_NAME" \
-            --dart-define=KELOLA_BUILD="$BUILD_NUMBER" \
-            2>&1 | tee "$LOG"
-
-      - name: Require mapping.txt and native debug symbols
-        shell: bash
-        run: |
-          set -euo pipefail
-          MAP="build/app/outputs/mapping/release/mapping.txt"
-          AAB="build/app/outputs/bundle/release/app-release.aab"
-          if [[ ! -f "$MAP" ]]; then
-            echo "::error file=.github/workflows/app.yml::mapping.txt missing at $MAP (R8 minify required)."
-            exit 1
-          fi
-          if [[ ! -f "$AAB" ]]; then
-            echo "::error file=.github/workflows/app.yml::AAB missing at $AAB"
-            exit 1
-          fi
-          python3 - "$AAB" <<'PY'
-          import sys, zipfile
-          aab = sys.argv[1]
-          need_flutter = False
-          need_app = False
-          prefix = "BUNDLE-METADATA/com.android.tools.build.debugsymbols/"
-          with zipfile.ZipFile(aab) as z:
-              names = z.namelist()
-          sym = [n for n in names if n.startswith(prefix)]
-          for n in sym:
-              # Local FULL symbols appear as libflutter.so.dbg / libapp.so.dbg
-              base = n.rsplit("/", 1)[-1]
-              if base.startswith("libflutter.so"):
-                  need_flutter = True
-              if base.startswith("libapp.so"):
-                  need_app = True
-          if not need_flutter or not need_app:
-              print("::error file=.github/workflows/app.yml::AAB missing native debug symbols for libflutter.so and/or libapp.so under BUNDLE-METADATA/com.android.tools.build.debugsymbols/")
-              print("Found:", "\n".join(sym[:40]) or "(none)")
-              sys.exit(1)
-          print("Native debug symbols OK")
-          PY
-
-      - name: Upload AAB artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: kelola-aab
-          path: |
-            build/app/outputs/bundle/release/app-release.aab
-            build/app/outputs/mapping/release/mapping.txt
-          retention-days: 1
-          if-no-files-found: error
-
-      - name: Scrub keystore
-        if: always()
-        shell: bash
-        run: |
-          rm -f "${{ steps.keystore.outputs.path }}" || true
-          rm -f pubspec_overrides.yaml || true
-
-  play:
-    name: Upload to Google Play
-    needs: build
-    if: needs.build.outputs.track != 'none' && needs.build.result == 'success'
-    runs-on: ubuntu-latest
-    environment: play
-    steps:
-      - name: Checkout (whatsnew)
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - name: Download AAB artifact
-        id: dl
-        continue-on-error: true
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: kelola-aab
-          path: play-artifacts
-
-      - name: Preflight checks
-        shell: bash
-        env:
-          TRACK: ${{ needs.build.outputs.track }}
-          # Never inline the SA JSON into bash — PEM "PRIVATE KEY" breaks [[ -z "..." ]].
-          HAS_PLAY_SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
-            echo "::error file=.github/workflows/app.yml::Play upload refused: ref is ${{ github.ref }}, expected refs/heads/main."
-            exit 1
-          fi
-          AAB="play-artifacts/app-release.aab"
-          MAP="play-artifacts/mapping.txt"
-          # download-artifact v8 may nest paths
-          if [[ ! -f "$AAB" ]]; then
-            AAB="$(find play-artifacts -name 'app-release.aab' -print -quit | head -1 || true)"
-          fi
-          if [[ ! -f "$MAP" ]]; then
-            MAP="$(find play-artifacts -name 'mapping.txt' -print -quit | head -1 || true)"
-          fi
-          if [[ -z "$AAB" || ! -f "$AAB" ]]; then
-            echo "::error file=.github/workflows/app.yml::AAB artifact missing (download may have failed)."
-            exit 1
-          fi
-          if [[ -z "$MAP" || ! -f "$MAP" ]]; then
-            echo "::error file=.github/workflows/app.yml::mapping.txt artifact missing."
-            exit 1
-          fi
-          if [[ "$HAS_PLAY_SA" != "true" ]]; then
-            echo "::error file=.github/workflows/app.yml::PLAY_SERVICE_ACCOUNT_JSON secret is missing."
-            exit 1
-          fi
-          NOTES="docs/store/whatsnew/whatsnew-en-US"
-          if [[ ! -f "$NOTES" ]]; then
-            echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US missing."
-            exit 1
-          fi
-          body="$(tr -d '\r' < "$NOTES")"
-          if [[ -z "${body// }" ]]; then
-            echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US is empty."
-            exit 1
-          fi
-          chars="$(printf '%s' "$body" | wc -c)"
-          if (( chars > 500 )); then
-            echo "::error file=docs/store/whatsnew/whatsnew-en-US::whatsnew-en-US is ${chars} characters (max 500)."
-            exit 1
-          fi
-          echo "::notice::Play track=$TRACK notes ($chars chars): $body"
-          echo "AAB_PATH=$AAB" >> "$GITHUB_ENV"
-          echo "MAP_PATH=$MAP" >> "$GITHUB_ENV"
-          if [[ "$TRACK" == "production" ]]; then
-            echo "PLAY_STATUS=draft" >> "$GITHUB_ENV"
-          else
-            echo "PLAY_STATUS=completed" >> "$GITHUB_ENV"
-          fi
-
-      - name: Write service account JSON
-        shell: bash
-        env:
-          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-        run: |
-          set -euo pipefail
-          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/play-sa.json"
-
-      - name: Upload to Google Play
-        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
-        with:
-          serviceAccountJson: ${{ runner.temp }}/play-sa.json
-          packageName: com.tursinalabs.kelola
-          releaseFiles: ${{ env.AAB_PATH }}
-          mappingFile: ${{ env.MAP_PATH }}
-          whatsNewDirectory: docs/store/whatsnew
-          track: ${{ needs.build.outputs.track }}
-          status: ${{ env.PLAY_STATUS }}
-
-      - name: Scrub service account
-        if: always()
-        run: rm -f "$RUNNER_TEMP/play-sa.json" || true

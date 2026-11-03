@@ -2229,23 +2229,40 @@ class FactEntry {
 }
 
 /// Grouped definition list: section header + one card of label/value rows.
+/// [heading] null drops the header; [framed] false drops the card so the
+/// rows can sit inside a [RiskBand] that already is one.
 class FactGroup extends StatelessWidget {
   const FactGroup({
     super.key,
     required this.heading,
     required this.entries,
+    this.framed = true,
   });
 
-  final String heading;
+  final String? heading;
   final List<FactEntry> entries;
+  final bool framed;
 
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
+    if (!framed) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (heading != null) SectionSlab(heading!),
+          for (final e in entries)
+            _FactRow(
+              entry: e,
+              padding: const EdgeInsets.symmetric(vertical: 3),
+            ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionSlab(heading),
+        if (heading != null) SectionSlab(heading!),
         Container(
           decoration: BoxDecoration(
             color: c.surface,
@@ -2268,15 +2285,19 @@ class FactGroup extends StatelessWidget {
 }
 
 class _FactRow extends StatelessWidget {
-  const _FactRow({required this.entry});
+  const _FactRow({
+    required this.entry,
+    this.padding = const EdgeInsets.fromLTRB(12, 10, 12, 10),
+  });
 
   final FactEntry entry;
+  final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
     final row = Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: padding,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

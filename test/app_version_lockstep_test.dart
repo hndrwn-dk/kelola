@@ -15,23 +15,25 @@ void main() {
     expect(kelolaVersionCode, parts[1]);
   });
 
-  test('CI and local AAB builds inject the same defines the Settings row reads',
-      () {
-    final workflow = File('.github/workflows/app.yml').readAsStringSync();
-    expect(workflow, contains('--dart-define=KELOLA_VERSION='));
-    expect(workflow, contains('--dart-define=KELOLA_BUILD='));
-    expect(workflow, contains('--build-number='));
-
+  test('local AAB build injects the same defines the Settings row reads', () {
     final wrap = File('scripts/build_play_aab.sh').readAsStringSync();
-    expect(wrap, contains('--dart-define=KELOLA_VERSION='));
-    expect(wrap, contains('--dart-define=KELOLA_BUILD='));
+    expect(wrap, contains('--build-name="\$VERSION_NAME"'));
+    expect(wrap, contains('--build-number="\$VERSION_CODE"'));
+    expect(wrap, contains('--dart-define=KELOLA_VERSION="\$VERSION_NAME"'));
+    expect(wrap, contains('--dart-define=KELOLA_BUILD="\$VERSION_CODE"'));
+    // No second versionCode source: overrides are refused.
+    expect(wrap, contains('--build-number*|--build-name*'));
+    expect(wrap, contains('--dart-define-from-file*'));
+    // The space form `--dart-define KELOLA_BUILD=…` is refused too.
+    expect(wrap, contains('"\$prev" == "--dart-define" && "\$arg" == KELOLA_*'));
   });
 
-  test('main push never auto-selects Play track=internal', () {
+  test('CI never builds or uploads a Play AAB', () {
     final workflow = File('.github/workflows/app.yml').readAsStringSync();
-    // Auto upload on versionName bump is disabled; only workflow_dispatch
-    // may set a non-none track via inputs.play_track.
-    expect(workflow, contains('Play upload is manual (workflow_dispatch)'));
-    expect(workflow, isNot(contains('track="internal"')));
+    expect(workflow, isNot(contains('flutter build appbundle')));
+    expect(workflow, isNot(contains('upload-google-play')));
+    expect(workflow, isNot(contains('GITHUB_RUN_NUMBER')));
+    expect(workflow, isNot(contains('play_track')));
+    expect(workflow, contains('versionCode +'));
   });
 }

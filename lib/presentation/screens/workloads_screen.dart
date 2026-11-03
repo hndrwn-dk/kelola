@@ -262,8 +262,7 @@ class _WorkloadsScreenState extends ConsumerState<WorkloadsScreen> {
             risk: RiskLevel.read,
             status: row.health,
             name: row.title,
-            meta: '${row.kind.short} · ${row.readyLabel}'
-                '${row.phase.isEmpty ? '' : ' · ${row.phase}'}',
+            meta: workloadMeta(row),
             onTap: () {
               final host = _host;
               final facts = _facts;

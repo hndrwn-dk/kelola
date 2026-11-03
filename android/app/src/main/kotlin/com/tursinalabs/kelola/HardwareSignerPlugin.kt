@@ -240,7 +240,7 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         prompt.authenticate(
             BiometricPrompt.PromptInfo.Builder()
                 .setTitle(reason)
-                .setSubtitle("Required for destructive actions")
+                .setSubtitle("Confirm it's you")
                 .setNegativeButtonText("Cancel")
                 .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
                 .build(),

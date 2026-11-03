@@ -9,6 +9,9 @@ class WorkloadHomeSummary {
     required this.pods,
     required this.notReadyCount,
     required this.worst,
+    this.pendingCount = 0,
+    this.crashLoopCount = 0,
+    this.restartingCount = 0,
   });
 
   final int deployments;
@@ -18,6 +21,15 @@ class WorkloadHomeSummary {
   final int notReadyCount;
   final List<K8sWorkload> worst;
 
+  /// Pods in phase Pending (unscheduled, pulling, creating).
+  final int pendingCount;
+
+  /// Pods whose container (or init container) is in CrashLoopBackOff.
+  final int crashLoopCount;
+
+  /// Pods with at least [kRestartWarn] restarts.
+  final int restartingCount;
+
   factory WorkloadHomeSummary.from(
     List<K8sWorkload> rows, {
     int worstLimit = 3,
@@ -26,6 +38,9 @@ class WorkloadHomeSummary {
     var statefulSets = 0;
     var daemonSets = 0;
     var pods = 0;
+    var pending = 0;
+    var crashLoop = 0;
+    var restarting = 0;
     final notReady = <K8sWorkload>[];
     for (final row in rows) {
       switch (row.kind) {
@@ -41,6 +56,15 @@ class WorkloadHomeSummary {
         case K8sKind.cronJob:
           break;
       }
+      if (row.pending) {
+        pending++;
+      }
+      if (row.crashLooping) {
+        crashLoop++;
+      }
+      if (row.restarting) {
+        restarting++;
+      }
       if (row.notReady) {
         notReady.add(row);
       }
@@ -53,6 +77,9 @@ class WorkloadHomeSummary {
       pods: pods,
       notReadyCount: notReady.length,
       worst: notReady.take(worstLimit).toList(growable: false),
+      pendingCount: pending,
+      crashLoopCount: crashLoop,
+      restartingCount: restarting,
     );
   }
 }
@@ -61,6 +88,10 @@ int _worstFirst(K8sWorkload a, K8sWorkload b) {
   final rank = _healthRank(a.health).compareTo(_healthRank(b.health));
   if (rank != 0) {
     return rank;
+  }
+  final restarts = b.restarts.compareTo(a.restarts);
+  if (restarts != 0) {
+    return restarts;
   }
   return a.title.compareTo(b.title);
 }
