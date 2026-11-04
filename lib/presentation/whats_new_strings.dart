@@ -11,8 +11,7 @@ abstract final class WhatsNewStrings {
   static String label(String version) => "What's new · $version";
 
   static const notes = <String>[
-    'Tap a pod in Containers to open its Kubernetes screen: describe, events, logs, exec and history.',
-    'Pods get their own group in Containers.',
-    'A pod restarted after a node reboot reads "last exit unknown".',
+    'OpenShift support: the Kubernetes screen shows version, operators, machine config pools and pending CSRs.',
+    'OpenShift (RHCOS) nodes can be added as hosts, read-only, with a link back to their cluster.',
   ];
 }
