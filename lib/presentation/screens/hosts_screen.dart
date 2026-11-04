@@ -30,6 +30,7 @@ import 'package:kelola/presentation/screens/settings_screen.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
 import 'package:kelola/presentation/widgets/host_list_actions.dart';
 import 'package:kelola/presentation/widgets/incident_sheet.dart';
+import 'package:kelola/presentation/whats_new_strings.dart';
 import 'package:kelola/providers.dart';
 
 /// User-facing copy for a failed host list. Never the exception text.
@@ -394,6 +395,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     Set<String> selected,
   ) {
     final view = displayed.monitored;
+    final whatsNew = ref.watch(whatsNewProvider).valueOrNull ?? false;
     return RefreshIndicator(
       color: c.amber,
       onRefresh: () => _refresh(list),
@@ -404,6 +406,17 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             padding: kelolaScrollPadding(context, top: 12, left: 16, right: 16),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
+                if (whatsNew) ...[
+                  WhatsNewCard(
+                    label: WhatsNewStrings.label(ref.watch(appVersionProvider)),
+                    title: WhatsNewStrings.title,
+                    notes: WhatsNewStrings.notes,
+                    closeTooltip: WhatsNewStrings.close,
+                    onClose: () =>
+                        ref.read(whatsNewProvider.notifier).dismiss(),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 if (auditInsightKind(_audit) != AuditInsightKind.empty) ...[
                   AuditInsightRow(
                     summary: _audit,

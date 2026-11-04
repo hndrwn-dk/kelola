@@ -70,6 +70,19 @@ jobs:
             exit 1
           fi
 
+          # Play limits release notes to 500 characters per language. Checked
+          # on every run, not only on a release, so an oversized note fails
+          # the PR that writes it.
+          shopt -s nullglob
+          for f in docs/store/whatsnew/whatsnew-*; do
+            n="$(tr -d '\r' < "$f" | wc -c)"
+            if (( n > 500 )); then
+              echo "::error file=$f::$f is ${n} characters (max 500)."
+              exit 1
+            fi
+          done
+          shopt -u nullglob
+
           event="${{ github.event_name }}"
           base=""
           if [[ "$event" == "pull_request" ]]; then

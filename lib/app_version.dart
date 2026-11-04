@@ -18,3 +18,12 @@ const kelolaVersionCode = String.fromEnvironment(
 
 /// Flutter SDK line from README. Keep in lockstep; not read from the device.
 const kelolaFlutterVersion = '3.47';
+
+/// versionName of a release build, for the What's new card only.
+///
+/// Empty unless the build passes `--dart-define=APP_VERSION=<versionName>`
+/// (`scripts/build_play_aab.sh` does). Debug builds, `flutter run` and tests
+/// leave it empty, so the card never shows there unless a test overrides
+/// `appVersionProvider`. Deliberately no default: unlike [kelolaAppVersion]
+/// this must not fall back to the pubspec value.
+const kelolaReleaseVersion = String.fromEnvironment('APP_VERSION');

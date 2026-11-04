@@ -32,7 +32,7 @@ void main() {
     expect(find.byType(StatCard), findsNWidgets(4));
     expect(find.byType(ServiceRow), findsNWidgets(8));
     expect(find.byType(HelpTopic), findsOneWidget);
-    expect(find.byType(SectionSlab), findsNWidgets(5));
+    expect(find.byType(SectionSlab), findsNWidgets(6));
     expect(find.byType(OsIcon), findsNWidgets(11));
     expect(find.byType(ToolTile), findsNWidgets(2));
     expect(find.byType(FilterPill), findsNWidgets(5));
@@ -48,6 +48,7 @@ void main() {
     expect(find.byType(HostHeroCard), findsOneWidget);
     expect(find.byType(FactGroup), findsOneWidget);
     expect(find.byType(AuditInsightRow), findsOneWidget);
+    expect(find.byType(WhatsNewCard), findsOneWidget);
     expect(find.byType(HostsChromeAccent), findsOneWidget);
     expect(find.byType(HostGroupTray), findsWidgets);
     expect(find.byType(CollapsedHostGroup), findsOneWidget);

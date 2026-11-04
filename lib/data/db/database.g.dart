@@ -4209,6 +4209,18 @@ class $AppSettingsTable extends AppSettings
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _seenVersionMeta = const VerificationMeta(
+    'seenVersion',
+  );
+  @override
+  late final GeneratedColumn<String> seenVersion = GeneratedColumn<String>(
+    'seen_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4238,6 +4250,7 @@ class $AppSettingsTable extends AppSettings
     fleetWatchLastTickAt,
     deviceId,
     vaultIncludeSecrets,
+    seenVersion,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4476,6 +4489,15 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('seen_version')) {
+      context.handle(
+        _seenVersionMeta,
+        seenVersion.isAcceptableOrUnknown(
+          data['seen_version']!,
+          _seenVersionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4593,6 +4615,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.bool,
         data['${effectivePrefix}vault_include_secrets'],
       )!,
+      seenVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}seen_version'],
+      )!,
     );
   }
 
@@ -4640,6 +4666,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   final DateTime? fleetWatchLastTickAt;
   final String? deviceId;
   final bool vaultIncludeSecrets;
+
+  /// Last versionName whose What's new card was closed (or skipped on first
+  /// run). Empty for builds that predate the card, so upgraders still see it.
+  final String seenVersion;
   const AppSettingsRow({
     required this.id,
     this.lastHostId,
@@ -4668,6 +4698,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     this.fleetWatchLastTickAt,
     this.deviceId,
     required this.vaultIncludeSecrets,
+    required this.seenVersion,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4727,6 +4758,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       map['device_id'] = Variable<String>(deviceId);
     }
     map['vault_include_secrets'] = Variable<bool>(vaultIncludeSecrets);
+    map['seen_version'] = Variable<String>(seenVersion);
     return map;
   }
 
@@ -4785,6 +4817,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ? const Value.absent()
           : Value(deviceId),
       vaultIncludeSecrets: Value(vaultIncludeSecrets),
+      seenVersion: Value(seenVersion),
     );
   }
 
@@ -4837,6 +4870,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       vaultIncludeSecrets: serializer.fromJson<bool>(
         json['vaultIncludeSecrets'],
       ),
+      seenVersion: serializer.fromJson<String>(json['seenVersion']),
     );
   }
   @override
@@ -4874,6 +4908,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       ),
       'deviceId': serializer.toJson<String?>(deviceId),
       'vaultIncludeSecrets': serializer.toJson<bool>(vaultIncludeSecrets),
+      'seenVersion': serializer.toJson<String>(seenVersion),
     };
   }
 
@@ -4905,6 +4940,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
     Value<String?> deviceId = const Value.absent(),
     bool? vaultIncludeSecrets,
+    String? seenVersion,
   }) => AppSettingsRow(
     id: id ?? this.id,
     lastHostId: lastHostId.present ? lastHostId.value : this.lastHostId,
@@ -4948,6 +4984,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
         : this.fleetWatchLastTickAt,
     deviceId: deviceId.present ? deviceId.value : this.deviceId,
     vaultIncludeSecrets: vaultIncludeSecrets ?? this.vaultIncludeSecrets,
+    seenVersion: seenVersion ?? this.seenVersion,
   );
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
@@ -5024,6 +5061,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       vaultIncludeSecrets: data.vaultIncludeSecrets.present
           ? data.vaultIncludeSecrets.value
           : this.vaultIncludeSecrets,
+      seenVersion: data.seenVersion.present
+          ? data.seenVersion.value
+          : this.seenVersion,
     );
   }
 
@@ -5056,7 +5096,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('fleetWatchReboot: $fleetWatchReboot, ')
           ..write('fleetWatchLastTickAt: $fleetWatchLastTickAt, ')
           ..write('deviceId: $deviceId, ')
-          ..write('vaultIncludeSecrets: $vaultIncludeSecrets')
+          ..write('vaultIncludeSecrets: $vaultIncludeSecrets, ')
+          ..write('seenVersion: $seenVersion')
           ..write(')'))
         .toString();
   }
@@ -5090,6 +5131,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     fleetWatchLastTickAt,
     deviceId,
     vaultIncludeSecrets,
+    seenVersion,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -5121,7 +5163,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.fleetWatchReboot == this.fleetWatchReboot &&
           other.fleetWatchLastTickAt == this.fleetWatchLastTickAt &&
           other.deviceId == this.deviceId &&
-          other.vaultIncludeSecrets == this.vaultIncludeSecrets);
+          other.vaultIncludeSecrets == this.vaultIncludeSecrets &&
+          other.seenVersion == this.seenVersion);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
@@ -5152,6 +5195,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<DateTime?> fleetWatchLastTickAt;
   final Value<String?> deviceId;
   final Value<bool> vaultIncludeSecrets;
+  final Value<String> seenVersion;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.lastHostId = const Value.absent(),
@@ -5180,6 +5224,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.fleetWatchLastTickAt = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.vaultIncludeSecrets = const Value.absent(),
+    this.seenVersion = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -5209,6 +5254,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.fleetWatchLastTickAt = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.vaultIncludeSecrets = const Value.absent(),
+    this.seenVersion = const Value.absent(),
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
@@ -5238,6 +5284,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Expression<DateTime>? fleetWatchLastTickAt,
     Expression<String>? deviceId,
     Expression<bool>? vaultIncludeSecrets,
+    Expression<String>? seenVersion,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -5275,6 +5322,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (deviceId != null) 'device_id': deviceId,
       if (vaultIncludeSecrets != null)
         'vault_include_secrets': vaultIncludeSecrets,
+      if (seenVersion != null) 'seen_version': seenVersion,
     });
   }
 
@@ -5306,6 +5354,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<DateTime?>? fleetWatchLastTickAt,
     Value<String?>? deviceId,
     Value<bool>? vaultIncludeSecrets,
+    Value<String>? seenVersion,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -5338,6 +5387,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       fleetWatchLastTickAt: fleetWatchLastTickAt ?? this.fleetWatchLastTickAt,
       deviceId: deviceId ?? this.deviceId,
       vaultIncludeSecrets: vaultIncludeSecrets ?? this.vaultIncludeSecrets,
+      seenVersion: seenVersion ?? this.seenVersion,
     );
   }
 
@@ -5435,6 +5485,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     if (vaultIncludeSecrets.present) {
       map['vault_include_secrets'] = Variable<bool>(vaultIncludeSecrets.value);
     }
+    if (seenVersion.present) {
+      map['seen_version'] = Variable<String>(seenVersion.value);
+    }
     return map;
   }
 
@@ -5467,7 +5520,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('fleetWatchReboot: $fleetWatchReboot, ')
           ..write('fleetWatchLastTickAt: $fleetWatchLastTickAt, ')
           ..write('deviceId: $deviceId, ')
-          ..write('vaultIncludeSecrets: $vaultIncludeSecrets')
+          ..write('vaultIncludeSecrets: $vaultIncludeSecrets, ')
+          ..write('seenVersion: $seenVersion')
           ..write(')'))
         .toString();
   }
@@ -12129,6 +12183,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<DateTime?> fleetWatchLastTickAt,
       Value<String?> deviceId,
       Value<bool> vaultIncludeSecrets,
+      Value<String> seenVersion,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -12159,6 +12214,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<DateTime?> fleetWatchLastTickAt,
       Value<String?> deviceId,
       Value<bool> vaultIncludeSecrets,
+      Value<String> seenVersion,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -12302,6 +12358,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<bool> get vaultIncludeSecrets => $composableBuilder(
     column: $table.vaultIncludeSecrets,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get seenVersion => $composableBuilder(
+    column: $table.seenVersion,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -12449,6 +12510,11 @@ class $$AppSettingsTableOrderingComposer
     column: $table.vaultIncludeSecrets,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get seenVersion => $composableBuilder(
+    column: $table.seenVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -12586,6 +12652,11 @@ class $$AppSettingsTableAnnotationComposer
     column: $table.vaultIncludeSecrets,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get seenVersion => $composableBuilder(
+    column: $table.seenVersion,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -12646,6 +12717,7 @@ class $$AppSettingsTableTableManager
                 Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
                 Value<bool> vaultIncludeSecrets = const Value.absent(),
+                Value<String> seenVersion = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 lastHostId: lastHostId,
@@ -12674,6 +12746,7 @@ class $$AppSettingsTableTableManager
                 fleetWatchLastTickAt: fleetWatchLastTickAt,
                 deviceId: deviceId,
                 vaultIncludeSecrets: vaultIncludeSecrets,
+                seenVersion: seenVersion,
               ),
           createCompanionCallback:
               ({
@@ -12704,6 +12777,7 @@ class $$AppSettingsTableTableManager
                 Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
                 Value<bool> vaultIncludeSecrets = const Value.absent(),
+                Value<String> seenVersion = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 lastHostId: lastHostId,
@@ -12732,6 +12806,7 @@ class $$AppSettingsTableTableManager
                 fleetWatchLastTickAt: fleetWatchLastTickAt,
                 deviceId: deviceId,
                 vaultIncludeSecrets: vaultIncludeSecrets,
+                seenVersion: seenVersion,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

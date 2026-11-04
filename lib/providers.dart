@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kelola/app_version.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
 import 'package:kelola/data/hosts/coreos_ack_store.dart';
@@ -38,6 +39,7 @@ import 'package:kelola/domain/search/inventory_search.dart';
 import 'package:kelola/domain/tunnels/active_tunnel.dart';
 import 'package:kelola/domain/tunnels/tunnel_close_reason.dart';
 import 'package:kelola/domain/tunnels/tunnel_target.dart';
+import 'package:kelola/domain/whats_new/whats_new.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -149,6 +151,20 @@ class EnrollmentController extends Notifier<EnrollmentState> {
       return;
     }
     await _generateAndStore();
+    if (stored == null) {
+      // First-run setup finished: this install starts on the current
+      // version, so its What's new card is already "seen".
+      await _markWhatsNewSeen();
+    }
+  }
+
+  Future<void> _markWhatsNewSeen() async {
+    final version = ref.read(appVersionProvider);
+    if (version.isEmpty) {
+      return;
+    }
+    await ref.read(hostRepositoryProvider).setSeenVersion(version);
+    ref.invalidate(whatsNewProvider);
   }
 
   Future<void> regenerateKey() async {
@@ -432,3 +448,37 @@ final recentsProvider = StreamProvider<List<Host>>((ref) {
 final lastHostIdProvider = StreamProvider<String?>((ref) {
   return ref.watch(hostRepositoryProvider).watchLastHostId();
 });
+
+/// Release versionName for the What's new card. `''` unless the build passed
+/// `--dart-define=APP_VERSION`; tests override it to exercise the card.
+final appVersionProvider = Provider<String>((ref) => kelolaReleaseVersion);
+
+/// Whether the Hosts screen shows the What's new card for this version.
+final whatsNewProvider = AsyncNotifierProvider<WhatsNewController, bool>(
+  WhatsNewController.new,
+);
+
+class WhatsNewController extends AsyncNotifier<bool> {
+  @override
+  Future<bool> build() async {
+    final version = ref.watch(appVersionProvider);
+    if (version.isEmpty) {
+      return false;
+    }
+    final repo = ref.watch(hostRepositoryProvider);
+    final onboarded = await repo.loadDeviceKey() != null;
+    final seen = await repo.seenVersion();
+    return whatsNewDue(onboarded, seen, version);
+  }
+
+  /// X on the card: hide now and persist, so a restart on the same version
+  /// never brings it back.
+  Future<void> dismiss() async {
+    final version = ref.read(appVersionProvider);
+    state = const AsyncData(false);
+    if (version.isEmpty) {
+      return;
+    }
+    await ref.read(hostRepositoryProvider).setSeenVersion(version);
+  }
+}

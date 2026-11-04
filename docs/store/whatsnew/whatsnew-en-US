@@ -1,1 +1,3 @@
-On a Kubernetes node, tapping a pod in Containers now opens its Kubernetes screen with describe, events, logs, exec and history, instead of an empty inspect page. Pods get their own group. A pod restarted after a node reboot now reads "last exit unknown".
+- Tap a pod in Containers to open its Kubernetes screen: describe, events, logs, exec and history.
+- Pods get their own group in Containers.
+- A pod restarted after a node reboot reads "last exit unknown".

@@ -12,17 +12,33 @@ Together with the versionName bump you **must**:
    `+N` (Settings reads these; AAB builds also inject matching
    `--dart-define=KELOLA_VERSION` / `KELOLA_BUILD`).
 2. Replace `docs/store/whatsnew/whatsnew-en-US` with notes for **this
-   version only** (plain text, ≤ 500 characters, no language tags).
-   Never paste older releases' notes into that file.
+   version only** (plain text, ≤ 500 characters, no language tags, one
+   `- ` line per point, at most three points). Never paste older
+   releases' notes into that file.
+3. Replace `WhatsNewStrings.notes` in
+   `lib/presentation/whats_new_strings.dart` with the same lines minus
+   the leading `- `. The Hosts screen shows them once in the What's new
+   card after the update. `test/whats_new_test.dart` fails if the file and
+   the list differ.
 
 `test/app_version_lockstep_test.dart` fails CI if defaults drift from
 pubspec or if the AAB build drops the dart-defines.
 
 Other changes (docs, tests, CI, refactors) must not bump versionName
-and must not rewrite whatsnew.
+and must not rewrite whatsnew or `WhatsNewStrings.notes`.
 
 Longer optional changelog stays in `docs/play/release-notes-*.md`.
 Play Console only receives `docs/store/whatsnew/`.
+
+## What's new card
+
+The card only appears in builds that pass
+`--dart-define=APP_VERSION=<versionName>` (`scripts/build_play_aab.sh`
+does, and refuses overrides). Debug builds, `flutter run` and tests leave
+it empty, so the card stays hidden there. It shows when the device key
+exists (setup finished) and `AppSettings.seenVersion` differs from
+`APP_VERSION`; closing it stores the version. A fresh install stores its
+version when the first device key is created, so it never sees the card.
 
 ## versionCode
 

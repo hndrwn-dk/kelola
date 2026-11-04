@@ -72,4 +72,7 @@ Password auth exists only as a non-pooled bootstrap that installs the key (`runP
   - replace `docs/store/whatsnew/whatsnew-en-US` with notes for this version only, at most 500 chars.
   - raise `+N` strictly. Play rejects a versionCode that isn't higher.
 - **What isn't a release:** docs, tests, CI and refactors do not bump the version.
+- **What's new card (Hosts screen):** shows once per version after an update, only in builds made with `--dart-define=APP_VERSION=<versionName>` (`scripts/build_play_aab.sh` passes it; debug, `flutter run` and tests leave it empty, so the card stays hidden unless a test overrides `appVersionProvider`). The rule is `whatsNewDue` in `lib/domain/whats_new/whats_new.dart`; the closed version is `AppSettings.seenVersion`. A fresh install marks its version seen when the first device key is created, so only upgraders see the card.
+  - A release PR bumps `version:` **and** replaces both `docs/store/whatsnew/whatsnew-en-US` (one `- ` line per point, at most 3 points, ≤ 500 chars, this version only) and `WhatsNewStrings.notes` in `lib/presentation/whats_new_strings.dart`. `test/whats_new_test.dart` fails if the two differ.
+  - Every other PR leaves `version:`, the whatsnew file and `WhatsNewStrings.notes` alone.
 - **Builds are manual.** CI does not build or upload AABs. The versionCode is only the pubspec `+N`. `scripts/build_play_aab.sh` passes it as `--build-number` and `--dart-define=KELOLA_BUILD`, and refuses overrides. Upload in Play Console.

@@ -157,6 +157,10 @@ class AppSettings extends Table {
   BoolColumn get vaultIncludeSecrets =>
       boolean().withDefault(const Constant(false))();
 
+  /// Last versionName whose What's new card was closed (or skipped on first
+  /// run). Empty for builds that predate the card, so upgraders still see it.
+  TextColumn get seenVersion => text().withDefault(const Constant(''))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

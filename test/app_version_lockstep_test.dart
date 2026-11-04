@@ -21,11 +21,19 @@ void main() {
     expect(wrap, contains('--build-number="\$VERSION_CODE"'));
     expect(wrap, contains('--dart-define=KELOLA_VERSION="\$VERSION_NAME"'));
     expect(wrap, contains('--dart-define=KELOLA_BUILD="\$VERSION_CODE"'));
+    // What's new card: release builds only, name without +build.
+    expect(wrap, contains('--dart-define=APP_VERSION="\$VERSION_NAME"'));
+    expect(wrap, contains('--dart-define=APP_VERSION*'));
     // No second versionCode source: overrides are refused.
     expect(wrap, contains('--build-number*|--build-name*'));
     expect(wrap, contains('--dart-define-from-file*'));
     // The space form `--dart-define KELOLA_BUILD=…` is refused too.
-    expect(wrap, contains('"\$prev" == "--dart-define" && "\$arg" == KELOLA_*'));
+    expect(
+      wrap,
+      contains(
+        '"\$prev" == "--dart-define" && ( "\$arg" == KELOLA_* || "\$arg" == APP_VERSION* )',
+      ),
+    );
   });
 
   test('CI never builds or uploads a Play AAB', () {

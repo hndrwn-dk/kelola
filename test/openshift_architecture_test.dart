@@ -91,9 +91,25 @@ void main() {
     }
   });
 
-  test('schemaVersion is unchanged by M48', () {
-    final src = File('lib/data/db/database.dart').readAsStringSync();
-    expect(src, contains('int get schemaVersion => 25;'));
+  // M48 shipped with no schema change. Pinning the literal schemaVersion
+  // broke on the next unrelated migration, so pin the M48 files instead:
+  // none of them may define a Drift table or touch schemaVersion.
+  test('M48 adds no Drift table and no schema change', () {
+    for (final path in [
+      'lib/domain/k8s/openshift_health.dart',
+      'lib/domain/k8s/openshift_health_parser.dart',
+      'lib/domain/k8s/coreos_node.dart',
+      'lib/domain/probes/openshift_health_probe.dart',
+      'lib/domain/probes/coreos_node_probe.dart',
+      'lib/presentation/widgets/ocp_operator_sheet.dart',
+      'lib/presentation/widgets/coreos_notice_sheet.dart',
+      'lib/data/hosts/coreos_ack_store.dart',
+    ]) {
+      final src = File(path).readAsStringSync();
+      expect(src, isNot(contains('extends Table')), reason: path);
+      expect(src, isNot(contains('schemaVersion')), reason: path);
+      expect(src, isNot(contains('MigrationStrategy')), reason: path);
+    }
   });
 
   test('M48 sheets avoid AlertDialog and hardcoded colours', () {

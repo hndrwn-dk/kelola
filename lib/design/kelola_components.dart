@@ -2464,6 +2464,114 @@ class AuditInsightRow extends StatelessWidget {
   }
 }
 
+/// Once-per-version release notes on the Hosts screen. Same section shape
+/// as [AuditInsightRow]: [SectionSlab] label over a [HostGroupTray] with an
+/// amber-banded [RiskBand] (amber is decorative here, not a warning).
+///
+/// Not tappable as a whole; only the close button (where other rows carry
+/// the chevron) dismisses it. Notes are human-written copy, so body type
+/// (not mono), and wrap instead of clipping so large text scales stay
+/// readable. Copy comes from the caller.
+class WhatsNewCard extends StatelessWidget {
+  const WhatsNewCard({
+    super.key,
+    required this.label,
+    required this.title,
+    required this.notes,
+    required this.closeTooltip,
+    required this.onClose,
+  });
+
+  final String label;
+  final String title;
+  final List<String> notes;
+  final String closeTooltip;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.kc;
+    return HostGroupTray(
+      label: label,
+      child: RiskBand.forHealth(
+        status: HealthStatus.warning,
+        padding: const EdgeInsets.fromLTRB(12, 8, 0, 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        const ExcludeSemantics(child: HostsAssistIcon()),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Semantics(
+                            container: true,
+                            header: true,
+                            child: Text(
+                              title,
+                              style: KelolaType.display(
+                                color: c.text,
+                                size: 12.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    for (final note in notes)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ExcludeSemantics(
+                              child: Text(
+                                '•',
+                                style: KelolaType.body(
+                                  color: c.dim,
+                                  size: 11,
+                                ).copyWith(height: 1.35),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                note,
+                                style: KelolaType.body(
+                                  color: c.muted,
+                                  size: 11,
+                                ).copyWith(height: 1.35),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: closeTooltip,
+              onPressed: onClose,
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              padding: EdgeInsets.zero,
+              icon: Icon(Icons.close_rounded, size: 16, color: c.muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// App chrome atmosphere: amber wash + three 1px concentric arcs from
 /// outside the top-right corner. Clipped, not hit-tested, sits behind
 /// trays and rows. Mount only via [KelolaWashScaffold] / [KelolaPage].

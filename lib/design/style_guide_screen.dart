@@ -479,6 +479,22 @@ class StyleGuideScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
+            'WHATSNEWCARD',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          WhatsNewCard(
+            label: "What's new · 0.5.0",
+            title: "What's new in Kelola",
+            notes: const [
+              'Pods open their Kubernetes screen from Containers.',
+              'A rebooted pod reads "last exit unknown".',
+            ],
+            closeTooltip: 'Close',
+            onClose: () {},
+          ),
+          const SizedBox(height: 18),
+          Text(
             'PROLOCKEDCARD',
             style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
           ),

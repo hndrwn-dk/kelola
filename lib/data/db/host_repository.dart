@@ -1396,6 +1396,19 @@ class HostRepository {
         );
   }
 
+  /// versionName whose What's new card was last closed. `''` before the
+  /// card existed (and on a fresh database).
+  Future<String> seenVersion() async {
+    return (await _settings())?.seenVersion ?? '';
+  }
+
+  Future<void> setSeenVersion(String version) async {
+    final existing = await _settings();
+    await _db.into(_db.appSettings).insertOnConflictUpdate(
+          _appSettingsWrite(existing, seenVersion: Value(version)),
+        );
+  }
+
   Future<int> appLockTimeoutSec() async {
     return (await _settings())?.appLockTimeoutSec ?? 0;
   }
@@ -1647,6 +1660,7 @@ class HostRepository {
     Value<DateTime?> fleetWatchLastTickAt = const Value.absent(),
     Value<String?> deviceId = const Value.absent(),
     Value<bool> vaultIncludeSecrets = const Value.absent(),
+    Value<String> seenVersion = const Value.absent(),
   }) {
     return AppSettingsCompanion(
       id: const Value(1),
@@ -1719,6 +1733,9 @@ class HostRepository {
       vaultIncludeSecrets: vaultIncludeSecrets.present
           ? vaultIncludeSecrets
           : Value(existing?.vaultIncludeSecrets ?? false),
+      seenVersion: seenVersion.present
+          ? seenVersion
+          : Value(existing?.seenVersion ?? ''),
     );
   }
 

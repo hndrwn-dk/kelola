@@ -24,18 +24,19 @@ if [[ -z "$VERSION_NAME" || -z "$VERSION_CODE" || "$VERSION_NAME" == "$VERSION" 
 fi
 
 # Keep Settings Version identical to the package metadata in this AAB.
+# APP_VERSION turns on the Hosts What's new card (release builds only).
 # Do not pass --build-number here: bump pubspec +N instead so the AAB,
 # Settings, and lib/app_version.dart stay on one number.
 prev=""
 for arg in "$@"; do
   case "$arg" in
-    --build-number*|--build-name*|--dart-define=KELOLA_*|--dart-define-from-file*)
+    --build-number*|--build-name*|--dart-define=KELOLA_*|--dart-define=APP_VERSION*|--dart-define-from-file*)
       echo "build_play_aab: $arg is not allowed; bump pubspec.yaml version instead" >&2
       exit 1
       ;;
   esac
   # Space form: `--dart-define KELOLA_BUILD=...` arrives as two arguments.
-  if [[ "$prev" == "--dart-define" && "$arg" == KELOLA_* ]]; then
+  if [[ "$prev" == "--dart-define" && ( "$arg" == KELOLA_* || "$arg" == APP_VERSION* ) ]]; then
     echo "build_play_aab: --dart-define $arg is not allowed; bump pubspec.yaml version instead" >&2
     exit 1
   fi
@@ -46,6 +47,7 @@ flutter build appbundle --release \
   --build-number="$VERSION_CODE" \
   --dart-define=KELOLA_VERSION="$VERSION_NAME" \
   --dart-define=KELOLA_BUILD="$VERSION_CODE" \
+  --dart-define=APP_VERSION="$VERSION_NAME" \
   "$@"
 
 DEST="$ROOT/bundles_release/v${VERSION}"
