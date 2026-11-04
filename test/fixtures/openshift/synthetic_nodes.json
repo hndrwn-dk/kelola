@@ -1,0 +1,16 @@
+{
+  "_synthetic": "M48 synthetic: master Done, worker Working with update pending, worker Degraded with reason, plus infra label",
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {"metadata": {"name": "master-0", "labels": {"node-role.kubernetes.io/master": "", "node-role.kubernetes.io/control-plane": "", "kubernetes.io/hostname": "master-0"},
+      "annotations": {"machineconfiguration.openshift.io/state": "Done", "machineconfiguration.openshift.io/currentConfig": "rendered-master-a1", "machineconfiguration.openshift.io/desiredConfig": "rendered-master-a1", "machineconfiguration.openshift.io/reason": ""}},
+     "status": {"conditions": [{"type": "MemoryPressure", "status": "False"}, {"type": "Ready", "status": "True"}], "nodeInfo": {"kubeletVersion": "v1.30.5", "containerRuntimeVersion": "cri-o://1.30.6-3.rhaos4.17"}}},
+    {"metadata": {"name": "worker-1", "labels": {"node-role.kubernetes.io/worker": "", "node-role.kubernetes.io/infra": ""},
+      "annotations": {"machineconfiguration.openshift.io/state": "Working", "machineconfiguration.openshift.io/currentConfig": "rendered-worker-b1", "machineconfiguration.openshift.io/desiredConfig": "rendered-worker-b2"}},
+     "status": {"conditions": [{"type": "Ready", "status": "True"}], "nodeInfo": {"kubeletVersion": "v1.30.5", "containerRuntimeVersion": "cri-o://1.30.6-3.rhaos4.17"}}},
+    {"metadata": {"name": "worker-2", "labels": {"node-role.kubernetes.io/worker": ""},
+      "annotations": {"machineconfiguration.openshift.io/state": "Degraded", "machineconfiguration.openshift.io/currentConfig": "rendered-worker-b1", "machineconfiguration.openshift.io/desiredConfig": "rendered-worker-b2", "machineconfiguration.openshift.io/reason": "unexpected on-disk state validating against rendered-worker-b2"}},
+     "status": {"conditions": [{"type": "Ready", "status": "True"}], "nodeInfo": {"kubeletVersion": "v1.30.5", "containerRuntimeVersion": "cri-o://1.30.6-3.rhaos4.17"}}}
+  ]
+}

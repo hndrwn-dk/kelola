@@ -2,7 +2,34 @@ import 'dart:convert';
 
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
+import 'package:kelola/domain/k8s/openshift_health.dart';
 import 'package:kelola/domain/k8s/workload.dart';
+
+/// M48 §4: the host id of a bastion whose cached cluster node list contains
+/// [hostname] (short name, or FQDN either way). Cached data only.
+String? clusterBastionFor(
+  String hostname,
+  Map<String, FleetK8sSummary?> summariesByHostId, {
+  String? selfHostId,
+}) {
+  final h = hostname.trim().toLowerCase();
+  if (h.isEmpty) {
+    return null;
+  }
+  final ids = summariesByHostId.keys.toList()..sort();
+  for (final id in ids) {
+    if (id == selfHostId) {
+      continue;
+    }
+    for (final node in summariesByHostId[id]?.nodes ?? const <String>[]) {
+      final n = node.toLowerCase();
+      if (n == h || n.startsWith('$h.') || h.startsWith('$n.')) {
+        return id;
+      }
+    }
+  }
+  return null;
+}
 
 /// M32: what the fleet refresh learned about a host's cluster. Built from
 /// the same `ClusterHealthProbe` + `WorkloadListProbe` Kubernetes home runs.
@@ -14,6 +41,8 @@ class FleetK8sSummary {
     this.nodesTotal = 0,
     this.failedWorkloads = 0,
     this.warningWorkloads = 0,
+    this.nodes = const [],
+    this.ocp,
   });
 
   /// The cluster's state is known: kubectl answered with JSON, or the API
@@ -25,6 +54,37 @@ class FleetK8sSummary {
   final int nodesTotal;
   final int failedWorkloads;
   final int warningWorkloads;
+
+  /// M48: node names from the last cluster read. Lets an RHCOS host find
+  /// "its" bastion from cached data only (no SSH to the bastion).
+  final List<String> nodes;
+
+  /// M48 §5: OpenShift health from fleet. Null off OpenShift or when the
+  /// OpenShift read failed; the rest of the summary stands either way.
+  final FleetOcpSummary? ocp;
+
+  /// Same summary with [names] as the cached node list.
+  FleetK8sSummary withNodes(List<String> names) => FleetK8sSummary(
+        read: read,
+        apiReachable: apiReachable,
+        nodesReady: nodesReady,
+        nodesTotal: nodesTotal,
+        failedWorkloads: failedWorkloads,
+        warningWorkloads: warningWorkloads,
+        nodes: names,
+        ocp: ocp,
+      );
+
+  FleetK8sSummary withOcp(FleetOcpSummary? value) => FleetK8sSummary(
+        read: read,
+        apiReachable: apiReachable,
+        nodesReady: nodesReady,
+        nodesTotal: nodesTotal,
+        failedWorkloads: failedWorkloads,
+        warningWorkloads: warningWorkloads,
+        nodes: nodes,
+        ocp: value,
+      );
 
   static const unreadable = FleetK8sSummary(read: false);
 
@@ -45,6 +105,7 @@ class FleetK8sSummary {
           inv.rows.where((w) => w.health == HealthStatus.failed).length,
       warningWorkloads:
           inv.rows.where((w) => w.health == HealthStatus.warning).length,
+      nodes: [for (final n in cluster.nodes) n.name],
     );
   }
 
@@ -75,6 +136,8 @@ class FleetK8sSummary {
         'nodesTotal': nodesTotal,
         'failed': failedWorkloads,
         'warn': warningWorkloads,
+        if (nodes.isNotEmpty) 'nodes': nodes,
+        if (ocp != null) 'ocp': ocp!.toJson(),
       });
 
   /// Null for empty (host has no kubectl) or junk.
@@ -95,9 +158,127 @@ class FleetK8sSummary {
         nodesTotal: n(m['nodesTotal']),
         failedWorkloads: n(m['failed']),
         warningWorkloads: n(m['warn']),
+        nodes: [
+          if (m['nodes'] is List)
+            for (final v in m['nodes'] as List)
+              if (v is String) v,
+        ],
+        ocp: FleetOcpSummary.fromJson(m['ocp']),
       );
     } on FormatException {
       return null;
     }
+  }
+}
+
+
+/// M48 §5: what fleet keeps of an OpenShift read.
+class FleetOcpSummary {
+  const FleetOcpSummary({
+    this.version = '',
+    this.operatorsDegraded = 0,
+    this.operatorsUnavailable = 0,
+    this.poolsDegraded = 0,
+    this.pendingCsrs = 0,
+    this.versionFailing = false,
+    this.poolsPaused = 0,
+  });
+
+  factory FleetOcpSummary.from(OpenShiftHealth h) {
+    return FleetOcpSummary(
+      version: h.version?.version ?? '',
+      operatorsDegraded: h.operatorsDegraded,
+      operatorsUnavailable: h.operatorsUnavailable,
+      poolsDegraded: h.poolsDegraded,
+      pendingCsrs: h.csrs?.count ?? 0,
+      versionFailing: h.version?.failing ?? false,
+      poolsPaused: (h.pools ?? const []).where((p) => p.paused).length,
+    );
+  }
+
+  final String version;
+  final int operatorsDegraded;
+  final int operatorsUnavailable;
+  final int poolsDegraded;
+  final int pendingCsrs;
+  final bool versionFailing;
+  final int poolsPaused;
+
+  /// Failed per the M48 §2d table; warning for paused pools / pending CSRs.
+  bool get failed =>
+      versionFailing ||
+      operatorsDegraded > 0 ||
+      operatorsUnavailable > 0 ||
+      poolsDegraded > 0;
+
+  bool get attention => !failed && (pendingCsrs > 0 || poolsPaused > 0);
+
+  HealthStatus get health => failed
+      ? HealthStatus.failed
+      : attention
+          ? HealthStatus.warning
+          : HealthStatus.healthy;
+
+  /// `OCP 4.17.3 · 2 operators degraded`, or `OCP 4.17.3` when healthy.
+  String get tileLine {
+    String n(int count, String one) =>
+        '$count $one${count == 1 ? '' : 's'}';
+    return [
+      version.isEmpty ? 'OCP' : 'OCP $version',
+      if (versionFailing) 'version failing',
+      if (operatorsDegraded > 0) '${n(operatorsDegraded, 'operator')} degraded',
+      if (operatorsUnavailable > 0)
+        '${n(operatorsUnavailable, 'operator')} unavailable',
+      if (poolsDegraded > 0) '${n(poolsDegraded, 'pool')} degraded',
+      if (poolsPaused > 0) '${n(poolsPaused, 'pool')} paused',
+      if (pendingCsrs > 0) '${n(pendingCsrs, 'CSR')} pending',
+    ].join(' · ');
+  }
+
+  /// Short value for the tile's `ocp` cell (3-column phone grid).
+  String get tileValue {
+    final ops = operatorsDegraded + operatorsUnavailable;
+    if (ops > 0) {
+      return '$ops op deg';
+    }
+    if (poolsDegraded > 0) {
+      return '$poolsDegraded mcp deg';
+    }
+    if (versionFailing) {
+      return 'failing';
+    }
+    if (pendingCsrs > 0) {
+      return '$pendingCsrs csr';
+    }
+    if (poolsPaused > 0) {
+      return 'mcp paused';
+    }
+    return version.isEmpty ? 'ok' : version;
+  }
+
+  Map<String, Object?> toJson() => {
+        'v': version,
+        'opDeg': operatorsDegraded,
+        'opUnavail': operatorsUnavailable,
+        'mcpDeg': poolsDegraded,
+        'csr': pendingCsrs,
+        'cvFail': versionFailing,
+        'mcpPaused': poolsPaused,
+      };
+
+  static FleetOcpSummary? fromJson(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    int n(Object? v) => v is int ? v : 0;
+    return FleetOcpSummary(
+      version: raw['v'] is String ? raw['v'] as String : '',
+      operatorsDegraded: n(raw['opDeg']),
+      operatorsUnavailable: n(raw['opUnavail']),
+      poolsDegraded: n(raw['mcpDeg']),
+      pendingCsrs: n(raw['csr']),
+      versionFailing: raw['cvFail'] == true,
+      poolsPaused: n(raw['mcpPaused']),
+    );
   }
 }

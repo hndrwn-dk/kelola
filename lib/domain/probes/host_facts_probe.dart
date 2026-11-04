@@ -27,7 +27,8 @@ fi
 echo "---ARCH---"
 uname -m
 echo "---RUNTIME---"
-command -v k3s kubectl docker podman crictl nerdctl 2>/dev/null
+command -v k3s kubectl oc docker podman crictl nerdctl 2>/dev/null
+[ -x "$HOME/.crc/bin/oc/oc" ] && echo "$HOME/.crc/bin/oc/oc"
 echo "---NPROC---"
 nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || true
 echo "---DMI---"

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/domain/probes/probe.dart';
@@ -186,6 +188,12 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
             scope: scope,
           ),
           previous: _byId[host.id]?.k8s,
+          onClusterKind: (h) => unawaited(
+            ref.read(clusterKindStoreProvider.future).then(
+                  (s) => s.recordRead(host.id, h, DateTime.now().toUtc()),
+                  onError: (_) {},
+                ),
+          ),
         );
         // Fleet probe is local-only; keep Packages-cache update counts.
         final cached = _byId[host.id];

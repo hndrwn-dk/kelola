@@ -1,0 +1,1 @@
+{"_synthetic":"M48 synthetic: rpm-ostree status --json with a booted and a staged deployment","deployments":[{"id":"rhcos-b","osname":"rhcos","version":"417.94.202411201403-0","staged":true,"booted":false},{"id":"rhcos-a","osname":"rhcos","version":"417.94.202410090854-0","staged":false,"booted":true}],"transaction":null,"cached-update":null,"update-driver":null}

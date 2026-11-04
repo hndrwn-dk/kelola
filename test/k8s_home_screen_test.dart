@@ -173,7 +173,11 @@ void main() {
     );
 
     expect(find.textContaining('Kubernetes'), findsWidgets);
-    expect(find.text('CLUSTER'), findsOneWidget);
+    // M48 §3: the vanilla cluster band is titled `Kubernetes` (was
+    // `Cluster`); OpenShift clusters get `OpenShift <version> · <channel>`.
+    expect(find.text('KUBERNETES'), findsOneWidget);
+    expect(find.text('CoreDNS'), findsOneWidget);
+    expect(find.text('OPENSHIFT'), findsNothing);
     expect(find.text('reachable'), findsOneWidget);
     expect(find.text('1/1 Ready'), findsOneWidget);
     expect(find.text('running'), findsOneWidget);

@@ -176,7 +176,9 @@ void main() {
     expect(
       File('lib/presentation/screens/host_dashboard_screen.dart')
           .readAsStringSync(),
-      contains("label: 'Kubernetes'"),
+      // M48: the tile label follows the cached cluster kind
+      // (`Kubernetes` unless the cluster is known to be OpenShift).
+      contains('clusterKindLabel('),
     );
   });
 

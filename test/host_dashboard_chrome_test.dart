@@ -84,8 +84,10 @@ void main() {
     final src = File('lib/presentation/screens/host_dashboard_screen.dart')
         .readAsStringSync();
     expect(src, contains("label: 'Network'"));
-    expect(src, contains("label: 'Kubernetes'"));
-    expect(src, contains("meta: 'cluster'"));
+    // M48: label follows the cached cluster kind; meta stays `cluster`
+    // (plus the age once the cached read is stale).
+    expect(src, contains('label: _clusterKind?.label ?? clusterKindLabel(null)'));
+    expect(src, contains("'cluster',"));
     expect(src, isNot(contains('CpuTickProbe')));
     expect(src, isNot(contains('} catch (_) {}')));
   });

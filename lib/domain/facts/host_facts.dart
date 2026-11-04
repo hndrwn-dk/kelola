@@ -179,7 +179,13 @@ class HostFacts {
   }
 
   bool get hasK8s =>
-      runtimes.contains('k3s') || runtimes.contains('kubectl');
+      runtimes.contains('k3s') ||
+      runtimes.contains('kubectl') ||
+      runtimes.contains('oc');
+
+  /// M48: Red Hat CoreOS / CentOS Stream CoreOS / Fedora CoreOS. Selects the
+  /// read-only OpenShift node path; never runs oc or kubectl there.
+  bool get isCoreOsNode => const {'rhcos', 'scos', 'fcos'}.contains(osId);
 
   bool get hasContainers =>
       hasK8s ||

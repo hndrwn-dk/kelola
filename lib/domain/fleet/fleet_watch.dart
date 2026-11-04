@@ -8,6 +8,8 @@ const Set<FleetIssueKind> kFleetWatchKinds = {
   FleetIssueKind.badContainer,
   FleetIssueKind.k8sDown,
   FleetIssueKind.k8sWorkloads,
+  // M48 §5: new OpenShift failed states page through the same path.
+  FleetIssueKind.ocpDegraded,
   FleetIssueKind.diskCritical,
   FleetIssueKind.memHigh,
   FleetIssueKind.rebootRequired,

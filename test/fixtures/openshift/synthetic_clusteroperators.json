@@ -1,0 +1,28 @@
+{
+  "_synthetic": "M48 synthetic: one healthy, one Degraded=True, one Available=False, one Progressing=True, one Upgradeable=False-only operator",
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {"metadata": {"name": "dns"}, "status": {"versions": [{"name": "operator", "version": "4.17.3"}], "conditions": [
+      {"type": "Available", "status": "True", "reason": "AsExpected", "message": "DNS \"default\" is available."},
+      {"type": "Progressing", "status": "False", "reason": "AsExpected"},
+      {"type": "Degraded", "status": "False", "reason": "AsExpected"}]}},
+    {"metadata": {"name": "authentication"}, "status": {"versions": [{"name": "oauth-apiserver", "version": "4.17.3"}, {"name": "operator", "version": "4.17.3"}], "conditions": [
+      {"type": "Available", "status": "True", "reason": "AsExpected"},
+      {"type": "Progressing", "status": "False", "reason": "AsExpected"},
+      {"type": "Degraded", "status": "True", "reason": "OAuthServerRouteEndpointAccessibleController_SyncError", "message": "OAuthServerRouteEndpointAccessibleControllerDegraded: Get \"https://oauth-openshift.apps-crc.testing/healthz\": EOF"}]}},
+    {"metadata": {"name": "ingress"}, "status": {"versions": [{"name": "operator", "version": "4.17.3"}], "conditions": [
+      {"type": "Available", "status": "False", "reason": "IngressUnavailable", "message": "The \"default\" ingress controller reports Available=False"},
+      {"type": "Progressing", "status": "False"},
+      {"type": "Degraded", "status": "False"}]}},
+    {"metadata": {"name": "machine-config"}, "status": {"versions": [{"name": "operator", "version": "4.17.3"}], "conditions": [
+      {"type": "Available", "status": "True"},
+      {"type": "Progressing", "status": "True", "message": "Working towards 4.17.3"},
+      {"type": "Degraded", "status": "False"}]}},
+    {"metadata": {"name": "monitoring"}, "status": {"versions": [{"name": "operator", "version": "4.17.3"}], "conditions": [
+      {"type": "Available", "status": "True"},
+      {"type": "Progressing", "status": "False"},
+      {"type": "Degraded", "status": "False"},
+      {"type": "Upgradeable", "status": "False", "reason": "Unmanaged"}]}}
+  ]
+}

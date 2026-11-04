@@ -1,5 +1,9 @@
 import 'package:kelola/design/kelola_theme.dart';
 
+/// M48: Machine Config Daemon state from the node annotation
+/// `machineconfiguration.openshift.io/state`. Null off OpenShift.
+enum McdState { done, working, degraded }
+
 class ClusterNodeMembership {
   const ClusterNodeMembership({
     required this.name,
@@ -8,6 +12,11 @@ class ClusterNodeMembership {
     required this.containerRuntime,
     this.controlPlane = false,
     this.pressures = const [],
+    this.mcdState,
+    this.updatePending = false,
+    this.mcdReason = '',
+    this.roles = const [],
+    this.labels = const {},
   });
 
   final String name;
@@ -19,6 +28,61 @@ class ClusterNodeMembership {
   /// Node conditions other than Ready that are currently True, e.g.
   /// `DiskPressure`, `MemoryPressure`, `PIDPressure`, `NetworkUnavailable`.
   final List<String> pressures;
+
+  /// M48. Null when the node carries no MCD annotation (not OpenShift).
+  final McdState? mcdState;
+
+  /// `currentConfig` differs from `desiredConfig`.
+  final bool updatePending;
+
+  /// MCD `reason` annotation; shown when [mcdState] is degraded.
+  final String mcdReason;
+
+  /// From `node-role.kubernetes.io/*`: master, control-plane, worker, infra.
+  final List<String> roles;
+
+  /// Node labels, kept so a MachineConfigPool's `nodeSelector` can be
+  /// matched against nodes already read (no extra call).
+  final Map<String, String> labels;
+
+  /// `Ready · Done`, `Ready · Working (update pending)`,
+  /// `Ready · Degraded: <reason>`. Plain `Ready` off OpenShift.
+  String get mcdLabel {
+    final parts = <String>[ready ? 'Ready' : 'NotReady'];
+    final state = mcdState;
+    if (state != null) {
+      parts.add(switch (state) {
+        McdState.done => updatePending ? 'Done (update pending)' : 'Done',
+        McdState.working =>
+          updatePending ? 'Working (update pending)' : 'Working',
+        McdState.degraded => mcdReason.trim().isEmpty
+            ? 'Degraded'
+            : 'Degraded: ${mcdReason.trim()}',
+      });
+    } else if (updatePending) {
+      parts.add('update pending');
+    }
+    return parts.join(' · ');
+  }
+
+  /// Node row meta: `master, worker · Ready · Done`.
+  String get nodeRowMeta {
+    return [
+      if (roles.isNotEmpty) roles.join(', '),
+      mcdLabel,
+      if (pressures.isNotEmpty) pressures.join(', '),
+    ].join(' · ');
+  }
+
+  HealthStatus get nodeHealth {
+    if (!ready || mcdState == McdState.degraded) {
+      return HealthStatus.failed;
+    }
+    if (pressures.isNotEmpty) {
+      return HealthStatus.warning;
+    }
+    return HealthStatus.healthy;
+  }
 
   /// `Ready · kubelet v1.31.0 · containerd 1.7.22`
   String get membershipLabel {
@@ -52,6 +116,9 @@ class ClusterHealth {
     this.coreDnsReady,
     this.missingKubectl = false,
     this.nodes = const [],
+    this.isOpenShift,
+    this.authExpired = false,
+    this.kubeContext = '',
   });
 
   final bool apiReachable;
@@ -66,6 +133,24 @@ class ClusterHealth {
 
   /// Every node `kubectl get nodes` returned (control plane + workers).
   final List<ClusterNodeMembership> nodes;
+
+  /// M48: the API serves `config.openshift.io/v1`. Null = unknown (section
+  /// missing or junk). Not a host fact: it follows the kubeconfig context.
+  final bool? isOpenShift;
+
+  /// M48: readyz failed and the CLI said the login is no longer valid
+  /// (`oc login` token expired). The API answered, so this is never
+  /// "API down".
+  final bool authExpired;
+
+  /// `config current-context` on the host. Empty when unknown.
+  final String kubeContext;
+
+  /// Nodes whose MCD state is Degraded (OpenShift only).
+  List<ClusterNodeMembership> get mcdDegradedNodes => [
+        for (final n in nodes)
+          if (n.mcdState == McdState.degraded) n,
+      ];
 
   int get nodesTotal => nodes.length;
 
@@ -91,6 +176,10 @@ class ClusterHealth {
 
   HealthStatus get overall {
     if (missingKubectl) {
+      return HealthStatus.unknown;
+    }
+    // A distinct state, shown on its own; not a dead API.
+    if (authExpired) {
       return HealthStatus.unknown;
     }
     if (!apiReachable) {
@@ -131,6 +220,9 @@ class ClusterHealth {
       coreDnsReady: ready,
       missingKubectl: missingKubectl,
       nodes: nodes,
+      isOpenShift: isOpenShift,
+      authExpired: authExpired,
+      kubeContext: kubeContext,
     );
   }
 }

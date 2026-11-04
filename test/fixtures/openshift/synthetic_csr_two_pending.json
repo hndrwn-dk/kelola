@@ -1,0 +1,10 @@
+{
+  "_synthetic": "M48 synthetic: one approved CSR and two pending (no Approved/Denied condition)",
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {"metadata": {"name": "csr-approved"}, "spec": {"username": "system:node:crc"}, "status": {"conditions": [{"type": "Approved", "status": "True", "reason": "AutoApproved"}], "certificate": "LS0t"}},
+    {"metadata": {"name": "csr-p1"}, "spec": {"username": "system:serviceaccount:openshift-machine-config-operator:node-bootstrapper"}, "status": {}},
+    {"metadata": {"name": "csr-p2"}, "spec": {"username": "system:node:worker-2"}, "status": {"conditions": []}}
+  ]
+}

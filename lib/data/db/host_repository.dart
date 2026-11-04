@@ -1297,6 +1297,26 @@ class HostRepository {
     );
   }
 
+  /// M48: the Kubernetes home keeps the fleet cache's cluster node list
+  /// current, so RHCOS hosts can link to this bastion. Only an existing
+  /// fleet row is touched (its numbers are kept); a host fleet never read
+  /// gets no placeholder row, which would read as "0 updates pending".
+  Future<void> saveClusterNodeNames({
+    required String hostId,
+    required FleetK8sSummary summary,
+  }) async {
+    final existing = (await loadFleetCacheByHost())[hostId];
+    if (existing == null) {
+      return;
+    }
+    final k8s = existing.k8s;
+    await saveFleetCache(
+      existing.copyWith(
+        k8s: k8s == null ? summary : k8s.withNodes(summary.nodes),
+      ),
+    );
+  }
+
   Future<void> saveFleetCache(FleetHostHealth health) async {
     await _db
         .into(_db.fleetCache)

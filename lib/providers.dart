@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
+import 'package:kelola/data/hosts/coreos_ack_store.dart';
+import 'package:kelola/data/k8s/cluster_kind_store.dart';
 import 'package:kelola/data/fleet/fleet_watch_bridge.dart';
 import 'package:kelola/data/vault/vault_store.dart';
 import 'package:kelola/presentation/fleet/fleet_watch_controller.dart';
@@ -322,6 +324,41 @@ final fleetProbeSelectionStoreProvider =
   }
 });
 
+/// M48: RHCOS first-connect acknowledgements, same storage shape as the
+/// fleet selection (JSON file; memory in widget tests).
+final coreOsAckStoreProvider = FutureProvider<CoreOsAckStore>((ref) async {
+  try {
+    final dir = await getApplicationSupportDirectory();
+    return CoreOsAckStore(File(p.join(dir.path, 'coreos_node_ack.json')));
+  } on MissingPluginException {
+    return CoreOsAckStore.memory();
+  }
+});
+
+/// M48: last trustworthy OpenShift/Kubernetes read per host, so the
+/// dashboard tile matches the Kubernetes home title without SSH.
+final clusterKindStoreProvider =
+    FutureProvider<ClusterKindStore>((ref) async {
+  try {
+    final dir = await getApplicationSupportDirectory();
+    return ClusterKindStore(File(p.join(dir.path, 'cluster_kind.json')));
+  } on MissingPluginException {
+    return ClusterKindStore.memory();
+  }
+});
+
+/// M48: drop a removed host's cluster-kind entry. Cache only; never throws.
+Future<void> forgetClusterKind(
+  Future<ClusterKindStore> store,
+  String hostId,
+) async {
+  try {
+    await (await store).remove(hostId);
+  } catch (_) {
+    // Cache only.
+  }
+}
+
 class FleetProbeSelectionController extends AsyncNotifier<Set<String>?> {
   @override
   Future<Set<String>?> build() async {
@@ -357,6 +394,7 @@ final fleetWatchControllerProvider = Provider<FleetWatchController>((ref) {
     entitlement: ref.watch(entitlementProvider),
     selectedHostIds: () async =>
         ref.read(fleetProbeSelectionProvider).valueOrNull,
+    clusterKinds: () => ref.read(clusterKindStoreProvider.future),
   );
   bridge.setTickHandler(controller.maybeTick);
   ref.onDispose(() {
@@ -371,6 +409,8 @@ final vaultStoreProvider = Provider<VaultStore>((ref) {
     hosts: ref.watch(hostRepositoryProvider),
     tunnels: ref.watch(tunnelRepositoryProvider),
     selectionOf: () => ref.read(fleetProbeSelectionStoreProvider.future),
+    coreOsAckOf: () => ref.read(coreOsAckStoreProvider.future),
+    clusterKindOf: () => ref.read(clusterKindStoreProvider.future),
   );
 });
 

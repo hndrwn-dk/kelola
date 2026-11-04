@@ -1,0 +1,1 @@
+{"_synthetic":"M48 synthetic: sudo -n crictl ps -o json, three running containers","containers":[{"id":"a","state":"CONTAINER_RUNNING"},{"id":"b","state":"CONTAINER_RUNNING"},{"id":"c","state":"CONTAINER_RUNNING"}]}

@@ -3,6 +3,8 @@ import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/db/tunnel_repository.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
+import 'package:kelola/data/hosts/coreos_ack_store.dart';
+import 'package:kelola/data/k8s/cluster_kind_store.dart';
 import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
 import 'package:kelola/domain/tunnels/tunnel_target.dart';
@@ -15,15 +17,25 @@ class VaultStore {
     required HostRepository hosts,
     required TunnelRepository tunnels,
     required Future<FleetProbeSelectionStore> Function() selectionOf,
+    Future<CoreOsAckStore> Function()? coreOsAckOf,
+    Future<ClusterKindStore> Function()? clusterKindOf,
   }) : _db = db,
        _hosts = hosts,
        _tunnels = tunnels,
-       _selectionOf = selectionOf;
+       _selectionOf = selectionOf,
+       _coreOsAckOf = coreOsAckOf,
+       _clusterKindOf = clusterKindOf;
 
   final KelolaDatabase _db;
   final HostRepository _hosts;
   final TunnelRepository _tunnels;
   final Future<FleetProbeSelectionStore> Function() _selectionOf;
+
+  /// M48: RHCOS first-connect acknowledgements (host prefs).
+  final Future<CoreOsAckStore> Function()? _coreOsAckOf;
+
+  /// M48: cluster-kind cache entry dies with its host.
+  final Future<ClusterKindStore> Function()? _clusterKindOf;
   final _uuid = const Uuid();
 
   Future<String> deviceId() async {
@@ -191,6 +203,10 @@ class VaultStore {
     final row = await _settings();
     final live = {for (final host in await _hosts.list()) host.id};
     final selected = await (await _selectionOf()).read(live);
+    final ackOf = _coreOsAckOf;
+    final acks = ackOf == null
+        ? null
+        : (await (await ackOf()).read()).intersection(live);
     return [
       VaultRecord(
         id: 'prefs',
@@ -204,6 +220,7 @@ class VaultStore {
           'tunnelIdleMinutes': row?.tunnelIdleMinutes ?? 10,
           'fleetWatchEnabled': row?.fleetWatchEnabled ?? false,
           'fleetSelection': selected?.toList(),
+          if (acks != null) 'coreOsAck': (acks.toList()..sort()),
         },
       ),
     ];
@@ -388,6 +405,14 @@ class VaultStore {
         fleetWatchEnabled: Value(payload['fleetWatchEnabled'] as bool? ?? false),
       ),
     );
+    final acks = payload['coreOsAck'];
+    final ackOf = _coreOsAckOf;
+    if (acks is List && ackOf != null) {
+      await (await ackOf()).merge([
+        for (final id in acks)
+          if (id is String) id,
+      ]);
+    }
     final selected = payload['fleetSelection'];
     if (selected is List) {
       await (await _selectionOf()).write({
@@ -413,6 +438,14 @@ class VaultStore {
     switch (record.kind) {
       case VaultRecordKind.host:
         await _hosts.delete(record.id);
+        final kinds = _clusterKindOf;
+        if (kinds != null) {
+          try {
+            await (await kinds()).remove(record.id);
+          } catch (_) {
+            // Cache only.
+          }
+        }
       case VaultRecordKind.snippet:
         await _hosts.deleteSnippet(record.id);
       case VaultRecordKind.hostTag:

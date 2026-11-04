@@ -1,0 +1,23 @@
+{
+  "_synthetic": "M48 synthetic: Failing=True ClusterVersion mid-upgrade with available updates, one override, Upgradeable=False",
+  "apiVersion": "config.openshift.io/v1",
+  "kind": "ClusterVersion",
+  "metadata": {"name": "version"},
+  "spec": {
+    "channel": "stable-4.17",
+    "clusterID": "00000000-0000-0000-0000-000000000000",
+    "overrides": [
+      {"kind": "Deployment", "group": "apps", "name": "cluster-monitoring-operator", "namespace": "openshift-monitoring", "unmanaged": true}
+    ]
+  },
+  "status": {
+    "desired": {"version": "4.17.3", "image": "quay.io/openshift-release-dev/ocp-release@sha256:0"},
+    "availableUpdates": [{"version": "4.17.4"}, {"version": "4.17.5"}],
+    "conditions": [
+      {"type": "Available", "status": "True"},
+      {"type": "Failing", "status": "True", "reason": "ClusterOperatorDegraded", "message": "Cluster operator authentication is degraded"},
+      {"type": "Progressing", "status": "True", "message": "Working towards 4.17.3: 712 of 863 done (82% complete)"},
+      {"type": "Upgradeable", "status": "False", "reason": "ClusterVersionOverridesSet", "message": "Disabling ownership via cluster version overrides prevents upgrades."}
+    ]
+  }
+}

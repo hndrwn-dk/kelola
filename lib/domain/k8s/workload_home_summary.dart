@@ -105,13 +105,16 @@ int _healthRank(HealthStatus h) {
   };
 }
 
-/// null when no CoreDNS-shaped pod is in the inventory.
+/// null when no CoreDNS-shaped pod is in the inventory. M48: OpenShift runs
+/// `dns-default-*` pods in `openshift-dns` instead of CoreDNS in kube-system.
 bool? coreDnsReadyFromWorkloads(List<K8sWorkload> rows) {
   final dns = [
     for (final row in rows)
       if (row.kind == K8sKind.pod &&
-          row.namespace == 'kube-system' &&
-          row.name.toLowerCase().contains('coredns'))
+          ((row.namespace == 'kube-system' &&
+                  row.name.toLowerCase().contains('coredns')) ||
+              (row.namespace == 'openshift-dns' &&
+                  row.name.toLowerCase().startsWith('dns-default'))))
         row,
   ];
   if (dns.isEmpty) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
@@ -10,6 +12,10 @@ import 'package:kelola/domain/facts/serial_mask.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/domain/hosts/dashboard_status.dart';
+import 'package:kelola/domain/fleet/fleet_k8s.dart';
+import 'package:kelola/domain/k8s/cluster_kind.dart';
+import 'package:kelola/domain/k8s/coreos_node.dart';
+import 'package:kelola/domain/probes/coreos_node_probe.dart';
 import 'package:kelola/domain/probes/dashboard_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/widget/publish_home_widget.dart';
@@ -43,6 +49,7 @@ import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/domain/tunnels/active_tunnel.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
+import 'package:kelola/presentation/widgets/coreos_notice_sheet.dart';
 import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/diagnostic_pack_sheet.dart';
 import 'package:kelola/presentation/widgets/incident_sheet.dart';
@@ -160,6 +167,15 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   var _openedDeepLink = false;
   List<Snippet> _startup = const [];
 
+  // M48: RHCOS node band. Read-only; null off CoreOS.
+  CoreOsNodeStatus? _node;
+  String? _nodeError;
+  String? _bastionId;
+
+  /// M48: cached cluster kind for the Kubernetes tile label. Null until the
+  /// Kubernetes home has read this host's cluster once.
+  ClusterKindRecord? _clusterKind;
+
   @override
   void initState() {
     super.initState();
@@ -180,6 +196,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       }
       _host = host;
       _hostsById = {for (final h in await repo.list()) h.id: h};
+      unawaited(_reloadClusterKind());
       final startup = startupSnippetsForHost(
         await repo.listSnippetsForHost(host),
         host,
@@ -210,6 +227,27 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       }
       final knownFacts = facts!;
       _facts = knownFacts;
+      // M48 §4: the facts read was the first login; nothing else runs on
+      // an OpenShift node until the operator acknowledges the notice.
+      if (knownFacts.isCoreOsNode) {
+        final acks = await ref.read(coreOsAckStoreProvider.future);
+        if (!await acks.isAcknowledged(host.id)) {
+          if (!mounted) {
+            return;
+          }
+          final ok = await showCoreOsNoticeSheet(context);
+          if (!ok) {
+            if (mounted) {
+              await Navigator.of(context).maybePop();
+            }
+            return;
+          }
+          await acks.acknowledge(host.id);
+        }
+      }
+      if (!mounted) {
+        return;
+      }
       final dash = await runHostProbe(
         ref: ref,
         context: context,
@@ -219,6 +257,29 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       );
       final fleetCache = await repo.loadFleetCacheByHost();
       final pending = fleetCache[host.id]?.pendingUpdates;
+      CoreOsNodeStatus? node;
+      String? nodeError;
+      String? bastionId;
+      if (knownFacts.isCoreOsNode && mounted) {
+        try {
+          node = await runHostProbe(
+            ref: ref,
+            context: context,
+            host: host,
+            probe: const CoreOsNodeProbe(),
+            facts: knownFacts,
+          );
+        } catch (e) {
+          nodeError = describeSshError(e);
+        }
+        // Cached node lists only; never SSH to the bastion from here.
+        final hostname = node?.hostname ?? '';
+        bastionId = clusterBastionFor(
+          hostname.isNotEmpty ? hostname : host.alias,
+          {for (final e in fleetCache.entries) e.key: e.value.k8s},
+          selfHostId: host.id,
+        );
+      }
       sw.stop();
       final now = DateTime.now().toUtc();
       final attention = switch (dash.attention) {
@@ -247,6 +308,9 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         _host = updated ?? host;
         _startup = startup;
         _error = dashboardErrorAfterSuccessfulPoll(_error);
+        _node = node;
+        _nodeError = nodeError;
+        _bastionId = bastionId;
       });
     } on HostKeyMismatchException catch (e) {
       if (!mounted) {
@@ -387,6 +451,11 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 name: jumpViaLabel(host, _hostsById)!,
                 meta: 'jump host',
               ),
+              const SizedBox(height: 8),
+            ],
+            if (facts != null && facts.isCoreOsNode &&
+                (_node != null || _nodeError != null)) ...[
+              _clusterNodeBand(c),
               const SizedBox(height: 8),
             ],
             if (dash != null && dash.failedUnitCount > 0) ...[
@@ -656,8 +725,10 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 const SizedBox(width: 7),
                 Expanded(
                   child: ToolTile(
-                    label: 'Kubernetes',
-                    meta: 'cluster',
+                    key: const ValueKey('dashboard-k8s-tile'),
+                    label: _clusterKind?.label ?? clusterKindLabel(null),
+                    meta: _clusterKind?.toolMeta(DateTime.now().toUtc()) ??
+                        'cluster',
                     onTap: () =>
                         _open((id) => KubernetesHomeScreen(hostId: id)),
                   ),
@@ -799,6 +870,81 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     return HealthStatus.healthy;
   }
 
+  /// M48 §4: "Cluster node" band for an RHCOS host. Read-only.
+  Widget _clusterNodeBand(KelolaColors c) {
+    final node = _node;
+    final bastion = _bastionId == null ? null : _hostsById[_bastionId];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionSlab('Cluster node'),
+        RiskBand.forHealth(
+          status: node?.health ?? HealthStatus.unknown,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (node == null)
+                Text(
+                  _nodeError ?? 'Not read yet',
+                  style: KelolaType.body(color: c.muted, size: 13),
+                )
+              else ...[
+                FactGroup(
+                  heading: null,
+                  framed: false,
+                  entries: [
+                    FactEntry(
+                      label: 'Booted',
+                      value: node.bootedVersion.isEmpty
+                          ? 'unknown'
+                          : node.bootedVersion,
+                    ),
+                    FactEntry(label: 'Update', value: node.updateLabel),
+                    for (final u in kCoreOsUnits)
+                      FactEntry(label: u, value: node.unitState(u)),
+                    FactEntry(label: 'Containers', value: node.containersLabel),
+                    FactEntry(
+                      label: 'Kubelet log',
+                      value: !node.kubeletRead
+                          ? 'not readable'
+                          : node.kubeletWarnings.isEmpty
+                              ? 'no warnings in 15m'
+                              : '${node.kubeletWarnings.length} warnings in 15m',
+                    ),
+                  ],
+                ),
+                for (final line in node.kubeletWarnings.take(5))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      line,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: KelolaType.mono(color: c.muted, size: 10.5),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+        if (bastion != null) ...[
+          const SizedBox(height: 6),
+          ServiceRow(
+            key: const ValueKey('coreos-bastion-link'),
+            risk: RiskLevel.read,
+            name: 'Node of cluster on «${bastion.alias}»',
+            meta: 'open Kubernetes',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => KubernetesHomeScreen(hostId: bastion.id),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Future<void> _open(Widget Function(String hostId) builder) async {
     await Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => builder(widget.hostId)));
@@ -806,6 +952,21 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       return;
     }
     await _reloadPendingUpdates();
+    unawaited(_reloadClusterKind());
+  }
+
+  /// Cached read only, never SSH. Picks up what the Kubernetes home just
+  /// read, so the tile matches the band title on the way back.
+  Future<void> _reloadClusterKind() async {
+    try {
+      final store = await ref.read(clusterKindStoreProvider.future);
+      final kind = await store.read(widget.hostId);
+      if (mounted) {
+        setState(() => _clusterKind = kind);
+      }
+    } catch (_) {
+      // Cache only; the tile falls back to Kubernetes.
+    }
   }
 
   Future<void> _reloadPendingUpdates() async {
@@ -978,6 +1139,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     }
     await ref.read(sessionPoolProvider).disconnect(host.id);
     await ref.read(hostRepositoryProvider).delete(host.id);
+    await forgetClusterKind(ref.read(clusterKindStoreProvider.future), host.id);
     if (!mounted) {
       return;
     }

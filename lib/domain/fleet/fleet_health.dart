@@ -15,7 +15,9 @@ enum FleetSeverity {
   failedUnits,
   badContainers,
   k8sDown,
+  ocpDegraded,
   k8sWorkloads,
+  ocpAttention,
   diskHigh,
   loadHigh,
   memHigh,
@@ -38,7 +40,9 @@ enum FleetIssueKind {
   failedUnit,
   badContainer,
   k8sDown,
+  ocpDegraded,
   k8sWorkloads,
+  ocpAttention,
   diskCritical,
   loadHigh,
   memHigh,
@@ -63,6 +67,8 @@ class FleetIssue {
       kind == FleetIssueKind.badContainer ||
       kind == FleetIssueKind.k8sDown ||
       kind == FleetIssueKind.k8sWorkloads ||
+      kind == FleetIssueKind.ocpDegraded ||
+      kind == FleetIssueKind.ocpAttention ||
       kind == FleetIssueKind.diskCritical ||
       kind == FleetIssueKind.securityUpdates;
 }
@@ -227,6 +233,11 @@ class FleetHostHealth {
         FleetTileMetric(label: 'k8s', value: '${cluster.failedWorkloads} fail'),
       );
     }
+    // M48: OpenShift version, or the short trouble when something is wrong.
+    final ocp = cluster?.ocp;
+    if (ocp != null) {
+      cells.add(FleetTileMetric(label: 'ocp', value: ocp.tileValue));
+    }
     if (fromCache || isStale(now: now)) {
       cells.add(FleetTileMetric(label: 'cache', value: ageLabel(now: now)));
     }
@@ -268,6 +279,7 @@ class FleetHostHealth {
     int? pendingUpdates,
     int? securityUpdates,
     bool? rebootRequired,
+    FleetK8sSummary? k8s,
   }) {
     return FleetHostHealth(
       hostId: hostId,
@@ -288,7 +300,7 @@ class FleetHostHealth {
       fetchedAt: fetchedAt ?? this.fetchedAt,
       fromCache: fromCache ?? this.fromCache,
       outcome: outcome ?? this.outcome,
-      k8s: k8s,
+      k8s: k8s ?? this.k8s,
     );
   }
 }
@@ -418,12 +430,31 @@ FleetAssessment assessFleetHost(
       ),
     );
   }
+  final ocp = cluster?.ocp;
+  if (health.reachable && ocp != null && ocp.failed) {
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.ocpDegraded,
+        label: 'Open Kubernetes',
+        meta: ocp.tileLine,
+      ),
+    );
+  }
   if (health.reachable && cluster != null && cluster.workloadsFailing) {
     issues.add(
       FleetIssue(
         kind: FleetIssueKind.k8sWorkloads,
         label: 'Open Kubernetes',
         meta: 'k8s ${cluster.failedWorkloads} failed workloads',
+      ),
+    );
+  }
+  if (health.reachable && ocp != null && ocp.attention) {
+    issues.add(
+      FleetIssue(
+        kind: FleetIssueKind.ocpAttention,
+        label: 'Open Kubernetes',
+        meta: ocp.tileLine,
       ),
     );
   }
@@ -515,7 +546,9 @@ FleetSeverity _severityFromIssues(List<FleetIssue> issues) {
     FleetIssueKind.failedUnit => FleetSeverity.failedUnits,
     FleetIssueKind.badContainer => FleetSeverity.badContainers,
     FleetIssueKind.k8sDown => FleetSeverity.k8sDown,
+    FleetIssueKind.ocpDegraded => FleetSeverity.ocpDegraded,
     FleetIssueKind.k8sWorkloads => FleetSeverity.k8sWorkloads,
+    FleetIssueKind.ocpAttention => FleetSeverity.ocpAttention,
     FleetIssueKind.diskCritical => FleetSeverity.diskHigh,
     FleetIssueKind.loadHigh => FleetSeverity.loadHigh,
     FleetIssueKind.memHigh => FleetSeverity.memHigh,
@@ -531,9 +564,11 @@ FleetTileHealth _tileHealth(FleetSeverity severity) {
     FleetSeverity.failedUnits ||
     FleetSeverity.badContainers ||
     FleetSeverity.k8sDown ||
+    FleetSeverity.ocpDegraded ||
     FleetSeverity.loadHigh =>
       FleetTileHealth.failed,
     FleetSeverity.k8sWorkloads ||
+    FleetSeverity.ocpAttention ||
     FleetSeverity.diskHigh ||
     FleetSeverity.memHigh ||
     FleetSeverity.securityUpdates ||

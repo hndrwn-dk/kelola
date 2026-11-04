@@ -1,0 +1,19 @@
+{
+  "_synthetic": "M48 synthetic: master settled, worker mid-rollout, infra paused, edge degraded with one degraded machine",
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {"metadata": {"name": "master"}, "spec": {"paused": false, "nodeSelector": {"matchLabels": {"node-role.kubernetes.io/master": ""}}},
+     "status": {"machineCount": 1, "readyMachineCount": 1, "updatedMachineCount": 1, "degradedMachineCount": 0, "conditions": [
+       {"type": "Updated", "status": "True"}, {"type": "Updating", "status": "False"}, {"type": "Degraded", "status": "False"}]}},
+    {"metadata": {"name": "worker"}, "spec": {"paused": false, "nodeSelector": {"matchLabels": {"node-role.kubernetes.io/worker": ""}}},
+     "status": {"machineCount": 3, "readyMachineCount": 2, "updatedMachineCount": 1, "degradedMachineCount": 0, "conditions": [
+       {"type": "Updated", "status": "False"}, {"type": "Updating", "status": "True", "message": "All nodes are updating to rendered-worker-b2"}, {"type": "Degraded", "status": "False"}]}},
+    {"metadata": {"name": "infra"}, "spec": {"paused": true, "nodeSelector": {"matchLabels": {"node-role.kubernetes.io/infra": ""}}},
+     "status": {"machineCount": 1, "readyMachineCount": 1, "updatedMachineCount": 1, "degradedMachineCount": 0, "conditions": [
+       {"type": "Updating", "status": "False"}, {"type": "Degraded", "status": "False"}]}},
+    {"metadata": {"name": "edge"}, "spec": {"paused": false, "nodeSelector": {"matchLabels": {"node-role.kubernetes.io/edge": ""}}},
+     "status": {"machineCount": 2, "readyMachineCount": 1, "updatedMachineCount": 1, "degradedMachineCount": 1, "conditions": [
+       {"type": "Updating", "status": "False"}, {"type": "NodeDegraded", "status": "True"}, {"type": "Degraded", "status": "True", "message": "Node edge-1 is reporting: \"failed to drain node\""}]}}
+  ]
+}

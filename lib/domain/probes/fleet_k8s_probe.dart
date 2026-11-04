@@ -4,6 +4,9 @@ import 'package:kelola/domain/k8s/cluster_health.dart';
 import 'package:kelola/domain/k8s/cluster_health_parser.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
+import 'package:kelola/domain/k8s/openshift_health.dart';
+import 'package:kelola/domain/k8s/openshift_health_parser.dart';
+import 'package:kelola/domain/probes/openshift_health_probe.dart';
 import 'package:kelola/domain/probes/cluster_health_probe.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
 import 'package:kelola/domain/probes/probe.dart';
@@ -48,12 +51,22 @@ class FleetClusterProbe extends Probe<FleetClusterRead> {
 
   @override
   FleetClusterRead parse(String stdout, String stderr, int exitCode) {
+    // Only the NODES section: the M48 ---OPENSHIFT--- section after it
+    // also carries JSON and must not count as "nodes answered".
     final marker = stdout.indexOf('---NODES---');
-    final nodes = marker < 0 ? '' : stdout.substring(marker);
+    var nodes = marker < 0 ? '' : stdout.substring(marker + 11);
+    final end = RegExp(r'---[A-Z0-9_]+---').firstMatch(nodes);
+    if (end != null) {
+      nodes = nodes.substring(0, end.start);
+    }
+    // ---AUTH--- carries the CLI's own error text when readyz failed.
+    final authAt = stdout.indexOf('---AUTH---');
+    final authText = authAt < 0 ? '' : stdout.substring(authAt);
     return (
       health: parseClusterHealth(stdout),
       nodesRead: nodes.contains('{'),
-      connectionRefused: _apiDidNotAnswer(stderr),
+      connectionRefused:
+          _apiDidNotAnswer(stderr) || _apiDidNotAnswer(authText),
     );
   }
 
@@ -85,6 +98,40 @@ class FleetWorkloadListProbe extends WorkloadListProbe {
   }
 }
 
+/// M48 §5: the OpenShift health read, run from fleet. Same command as
+/// [OpenShiftHealthProbe]. When no section printed JSON it throws, so the
+/// caller leaves `ocp` null instead of reading "all healthy".
+class FleetOpenShiftProbe extends Probe<OpenShiftHealth> {
+  const FleetOpenShiftProbe();
+
+  @override
+  String get auditTitle => 'Read OpenShift health (fleet)';
+
+  @override
+  String command(HostFacts facts) => OpenShiftHealthProbe.commandFor(facts);
+
+  @override
+  OpenShiftHealth parse(String stdout, String stderr, int exitCode) {
+    final health = parseOpenShiftHealth(stdout);
+    if (health.version == null &&
+        health.operators == null &&
+        health.pools == null &&
+        health.csrs == null) {
+      throw K8sReadException('OpenShift health', stderr.trim().split('\n').first);
+    }
+    return health;
+  }
+
+  @override
+  bool get needsSudo => false;
+
+  @override
+  RiskLevel get risk => RiskLevel.read;
+
+  @override
+  Duration get timeout => const Duration(seconds: 30);
+}
+
 /// Fold the two fleet reads into a summary. Unreadable (RBAC, k3s without
 /// passwordless sudo) never pages; a refused connection is "API down".
 ///
@@ -96,6 +143,10 @@ FleetK8sSummary fleetK8sSummary(
   FleetK8sSummary? previous,
 }) {
   if (read.health.missingKubectl) {
+    return FleetK8sSummary.unreadable;
+  }
+  // M48: an expired login is "not readable", never "API down".
+  if (read.health.authExpired) {
     return FleetK8sSummary.unreadable;
   }
   if (!read.nodesRead) {
@@ -114,6 +165,7 @@ FleetK8sSummary fleetK8sSummary(
       nodesTotal: base.nodesTotal,
       failedWorkloads: carried?.failedWorkloads ?? 0,
       warningWorkloads: carried?.warningWorkloads ?? 0,
+      nodes: base.nodes,
     );
   }
   return FleetK8sSummary.from(read.health, inv);

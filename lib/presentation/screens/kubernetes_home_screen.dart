@@ -1,14 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/fleet/fleet_k8s.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
+import 'package:kelola/domain/k8s/cluster_kind.dart';
 import 'package:kelola/domain/k8s/cluster_policy.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
 import 'package:kelola/domain/k8s/kubectl.dart';
+import 'package:kelola/domain/k8s/openshift_health.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_home_summary.dart';
 import 'package:kelola/domain/k8s/workload_view.dart';
@@ -16,12 +21,14 @@ import 'package:kelola/domain/probes/cluster_health_probe.dart';
 import 'package:kelola/domain/probes/cluster_resource_probes.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/domain/probes/openshift_health_probe.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/screens/k8s_resource_detail_screen.dart';
 import 'package:kelola/presentation/screens/k8s_resource_list_screen.dart';
 import 'package:kelola/presentation/screens/workload_detail_screen.dart';
 import 'package:kelola/presentation/screens/workloads_screen.dart';
+import 'package:kelola/presentation/widgets/ocp_operator_sheet.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 import 'package:kelola/providers.dart';
 
@@ -75,6 +82,12 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
   // Wave 4.
   List<K8sRevision>? _changes;
   _SectionError? _changesError;
+
+  // M48: OpenShift section. Only read when the API says OpenShift.
+  OpenShiftHealth? _ocp;
+  _SectionError? _ocpError;
+  DateTime? _ocpReadAt;
+  OcpOperatorFilter _opFilter = OcpOperatorFilter.all;
 
   @override
   void initState() {
@@ -148,6 +161,22 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
       if (!mounted) {
         return;
       }
+      // Cache the kind the band title is about to show, for the dashboard
+      // tile. Only a read that answered replaces it.
+      // Never awaited: a cache write must not delay or break the read.
+      unawaited(_saveClusterKind(host.id, cluster));
+      // M48 §3: an expired `oc login` is one state and nothing else.
+      if (cluster.authExpired) {
+        setState(() {
+          _host = host;
+          _facts = facts;
+          _cluster = cluster;
+          _inv = const WorkloadInventory(rows: []);
+          _ocp = null;
+          _ocpError = null;
+        });
+        return;
+      }
       final inv = await runHostProbe(
         ref: ref,
         context: context,
@@ -159,6 +188,16 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
         return;
       }
       final dns = coreDnsReadyFromWorkloads(inv.rows);
+      if (cluster.nodes.isNotEmpty) {
+        // M48 §4: RHCOS hosts link back here from cached node names.
+        await ref.read(hostRepositoryProvider).saveClusterNodeNames(
+              hostId: host.id,
+              summary: FleetK8sSummary.from(cluster, inv),
+            );
+        if (!mounted) {
+          return;
+        }
+      }
       setState(() {
         _host = host;
         _facts = facts;
@@ -166,6 +205,10 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
         _inv = inv;
       });
       // Host key is pinned by now, so these can share the pooled client.
+      // OpenShift health runs alongside Wave 2, only on OpenShift.
+      final ocpFuture = cluster.isOpenShift == true
+          ? _section(host, facts, const OpenShiftHealthProbe())
+          : null;
       final results = await Future.wait([
         _section(host, facts, const ClusterEventsProbe()),
         _section(host, facts, const ServiceListProbe()),
@@ -174,11 +217,15 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
         _section(host, facts, const SecurityInventoryProbe()),
         _section(host, facts, const RolloutHistoryProbe()),
       ]);
+      final ocpResult = await ocpFuture;
       if (!mounted) {
         return;
       }
       setState(() {
         _readAt = _now();
+        _ocp = ocpResult?.value as OpenShiftHealth?;
+        _ocpError = ocpResult?.error;
+        _ocpReadAt = ocpResult == null ? null : _readAt;
         _events = results[0].value as List<K8sClusterEvent>?;
         _eventsError = results[0].error;
         _net = results[1].value as K8sNetworking?;
@@ -259,7 +306,9 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
             ? ''
             : cluster.missingKubectl
                 ? 'no kubectl'
-                : _overallLabel(cluster.overall),
+                : cluster.authExpired
+                    ? 'session expired'
+                    : _overallLabel(_bandStatus(cluster)),
         actions: [
           KelolaChromeIconButton(
             tooltip: 'Refresh',
@@ -300,6 +349,15 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
       );
     }
 
+    if (cluster != null && cluster.authExpired && _error == null) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: kelolaScrollPadding(context),
+        children: [_authExpiredBlock(c)],
+      );
+    }
+
+    final openShift = cluster?.isOpenShift == true;
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: kelolaScrollPadding(context),
@@ -309,9 +367,9 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
           const SizedBox(height: 12),
         ],
         if (cluster != null && !cluster.missingKubectl) ...[
-          const SectionSlab('Cluster'),
+          SectionSlab(_clusterTitle(cluster)),
           RiskBand.forHealth(
-            status: cluster.overall,
+            status: _bandStatus(cluster),
             child: FactGroup(
               heading: null,
               framed: false,
@@ -331,7 +389,10 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
                         ? 'none'
                         : _cap(cluster.pressuredNodes),
                   ),
-                FactEntry(label: 'CoreDNS', value: _coreDnsLabel(cluster.coreDnsReady)),
+                FactEntry(
+                  label: openShift ? 'DNS' : 'CoreDNS',
+                  value: _coreDnsLabel(cluster.coreDnsReady),
+                ),
                 FactEntry(
                   label: 'This host',
                   value: cluster.thisHostMatched && cluster.thisHost != null
@@ -341,6 +402,11 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
               ],
             ),
           ),
+          if (openShift) ...[
+            const SizedBox(height: 10),
+            const SectionSlab('OpenShift'),
+            _openShiftBlock(c, cluster),
+          ],
           const SizedBox(height: 10),
           const SectionSlab('Workloads'),
           _workloadsBlock(c),
@@ -891,6 +957,327 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
               emptyCopy: 'No security findings.'),
         ];
       },
+    );
+  }
+
+  // ---- M48: OpenShift ------------------------------------------------
+
+  Future<void> _saveClusterKind(String hostId, ClusterHealth cluster) async {
+    try {
+      final store = await ref.read(clusterKindStoreProvider.future);
+      await store.recordRead(hostId, cluster, _now());
+    } catch (_) {
+      // Cache only; the dashboard tile keeps its last known label.
+    }
+  }
+
+  /// OpenShift health with the cluster's nodes folded in (node MCD state).
+  OpenShiftHealth? _ocpWith(ClusterHealth cluster) =>
+      _ocp?.withNodes(cluster.nodes);
+
+  /// Worse of the cluster's and the OpenShift section's own overall.
+  HealthStatus _bandStatus(ClusterHealth cluster) {
+    final ocp = _ocpWith(cluster);
+    if (ocp == null) {
+      return cluster.overall;
+    }
+    return worseHealth(cluster.overall, ocp.overall);
+  }
+
+  /// `OpenShift 4.17.3 · stable-4.17`; `OpenShift` until the version is
+  /// read; `Kubernetes` off OpenShift.
+  String _clusterTitle(ClusterHealth cluster) {
+    if (cluster.isOpenShift != true) {
+      return clusterKindLabel(cluster.isOpenShift);
+    }
+    final v = _ocp?.version;
+    final base = clusterKindLabel(true);
+    if (v == null || v.version.isEmpty) {
+      return base;
+    }
+    return [
+      '$base ${v.version}',
+      if (v.channel.isNotEmpty) v.channel,
+    ].join(' · ');
+  }
+
+  Widget _authExpiredBlock(KelolaColors c) {
+    final body = KelolaType.body(color: c.text, size: 13);
+    return RiskBand.forHealth(
+      status: HealthStatus.unknown,
+      child: Text.rich(
+        TextSpan(
+          style: body,
+          children: [
+            const TextSpan(text: 'Session on this host expired. Run '),
+            TextSpan(
+              text: 'oc login',
+              style: KelolaType.mono(color: c.text, size: 12.5),
+            ),
+            const TextSpan(text: ' there, then pull to refresh.'),
+          ],
+        ),
+        key: const ValueKey('k8s-auth-expired'),
+      ),
+    );
+  }
+
+  List<K8sListRow> _nodeRows(Iterable<ClusterNodeMembership> nodes) {
+    return [
+      for (final n in nodes)
+        K8sListRow(name: n.name, meta: n.nodeRowMeta, status: n.nodeHealth),
+    ];
+  }
+
+  void _openNodes(String title, Iterable<ClusterNodeMembership> nodes) {
+    _push(
+      K8sResourceListScreen(
+        hostId: widget.hostId,
+        title: title,
+        rows: _nodeRows(nodes),
+        emptyCopy: 'No nodes match this pool.',
+      ),
+    );
+  }
+
+  void _openOperator(ClusterOperatorState op) {
+    showOcpOperatorSheet(
+      context,
+      operator: op,
+      asOf: k8sAge(_ocpReadAt, _now()),
+    );
+  }
+
+  List<K8sListRow> _operatorRows(Iterable<ClusterOperatorState> ops) {
+    final sorted = [...ops]
+      ..sort((a, b) {
+        final h = worstHealthFirst(a.health, b.health);
+        return h != 0 ? h : a.name.compareTo(b.name);
+      });
+    return [
+      for (final op in sorted)
+        K8sListRow(
+          name: op.name,
+          meta: op.meta,
+          status: op.health,
+          onTap: () => _openOperator(op),
+        ),
+    ];
+  }
+
+  Widget _openShiftBlock(KelolaColors c, ClusterHealth cluster) {
+    if (_ocpError != null || _ocp == null) {
+      return _sectionBody<OpenShiftHealth>(
+        c,
+        value: _ocp,
+        error: _ocpError,
+        build: (_) => const [],
+      );
+    }
+    final ocp = _ocpWith(cluster)!;
+    final v = ocp.version;
+    final updatingPools = [
+      for (final p in ocp.pools ?? const <MachineConfigPoolState>[])
+        if (p.updating) p.name,
+    ];
+    final pendingNodes = [
+      for (final n in cluster.nodes)
+        if (n.updatePending || n.mcdState == McdState.working) n.name,
+    ];
+    final facts = <FactEntry>[
+      if (v != null && v.progressing)
+        FactEntry(
+          label: 'Progressing',
+          value: v.progressingMessage.isEmpty ? 'yes' : v.progressingMessage,
+        ),
+      if (v != null && v.availableUpdates > 0)
+        FactEntry(label: 'Updates', value: '${v.availableUpdates} available'),
+      if (v != null && v.overrides > 0)
+        FactEntry(
+          label: 'Overrides',
+          value: '${v.overrides} components unmanaged',
+        ),
+      if (updatingPools.isNotEmpty)
+        FactEntry(label: 'Pools updating', value: _cap(updatingPools)),
+      if (pendingNodes.isNotEmpty)
+        FactEntry(label: 'Nodes updating', value: _cap(pendingNodes)),
+      if (ocp.errorFor(OcpSection.clusterVersion) != null)
+        FactEntry(
+          label: 'Version',
+          value: ocp.errorFor(OcpSection.clusterVersion)!,
+        ),
+    ];
+    final ops = ocp.operators;
+    final filtered = ops == null
+        ? const <ClusterOperatorState>[]
+        : [
+            for (final op in ops)
+              if (_opFilter.matches(op)) op,
+          ];
+    final opRows = _operatorRows(filtered);
+    final pools = ocp.pools;
+    final findings = ocp.findings;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        RiskBand.forHealth(
+          status: ocp.overall,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                ocp.summary,
+                style: KelolaType.display(
+                  color: c.text,
+                  size: 14,
+                  weight: FontWeight.w600,
+                ),
+              ),
+              if (findings.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                K8sRows(
+                  rows: [
+                    for (final f in findings)
+                      K8sListRow(
+                        name: f.subject,
+                        meta: f.message,
+                        status: f.health,
+                      ),
+                  ],
+                  limit: 3,
+                ),
+              ],
+              if (facts.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                FactGroup(heading: null, framed: false, entries: facts),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: StatCard(
+                key: const ValueKey('ocp-stat-operators'),
+                label: 'Operators',
+                value: ocp.operatorsLabel,
+                detail: ocp.errorFor(OcpSection.clusterOperators),
+                meterFraction: ops == null || ops.isEmpty
+                    ? null
+                    : ocp.operatorsHealthy / ops.length,
+                status: ops == null
+                    ? null
+                    : ocp.operatorsHealthy == ops.length
+                        ? HealthStatus.healthy
+                        : HealthStatus.failed,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: StatCard(
+                key: const ValueKey('ocp-stat-pools'),
+                label: 'Pools',
+                value: ocp.poolsLabel,
+                detail: ocp.errorFor(OcpSection.machineConfigPools),
+                meterFraction: pools == null || pools.isEmpty
+                    ? null
+                    : ocp.poolsUpdated / pools.length,
+                status: pools == null
+                    ? null
+                    : ocp.poolsDegraded > 0
+                        ? HealthStatus.failed
+                        : HealthStatus.healthy,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: StatCard(
+                key: const ValueKey('ocp-stat-csrs'),
+                label: 'CSRs',
+                value: ocp.csrsLabel,
+                detail: ocp.errorFor(OcpSection.csrs),
+                status: ocp.csrs == null
+                    ? null
+                    : ocp.csrs!.count > 0
+                        ? HealthStatus.warning
+                        : HealthStatus.healthy,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _box(c, [
+          if (ops == null)
+            Text(
+              ocp.errorFor(OcpSection.clusterOperators) ??
+                  'Could not read cluster operators',
+              style: KelolaType.mono(color: c.muted, size: 12),
+            )
+          else ...[
+            Wrap(
+              spacing: 5,
+              runSpacing: 5,
+              children: [
+                for (final f in OcpOperatorFilter.values)
+                  FilterPill(
+                    key: ValueKey('ocp-filter-${f.name}'),
+                    label: '${f.label} ${f.count(ops)}',
+                    selected: _opFilter == f,
+                    onTap: () => setState(() => _opFilter = f),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (opRows.isEmpty)
+              K8sQuietNote(_opFilter.emptyCopy)
+            else
+              K8sRows(rows: opRows, limit: 5),
+            _allButton(
+              'All operators',
+              'Operators',
+              _operatorRows(ops),
+              emptyCopy: 'No cluster operators.',
+            ),
+          ],
+        ]),
+        const SizedBox(height: 8),
+        _box(c, [
+          if (pools == null)
+            Text(
+              ocp.errorFor(OcpSection.machineConfigPools) ??
+                  'Could not read machine config pools',
+              style: KelolaType.mono(color: c.muted, size: 12),
+            )
+          else if (pools.isEmpty)
+            K8sQuietNote('No machine config pools')
+          else
+            K8sRows(
+              rows: [
+                for (final p in pools)
+                  K8sListRow(
+                    name: 'pool ${p.name}',
+                    meta: p.meta,
+                    status: p.health,
+                    detail: p.degradedMessage.isNotEmpty
+                        ? p.degradedMessage
+                        : (p.updatingMessage.isNotEmpty
+                            ? p.updatingMessage
+                            : null),
+                    onTap: () => _openNodes(
+                      'Pool ${p.name}',
+                      cluster.nodes.where(p.selects),
+                    ),
+                  ),
+              ],
+            ),
+          OutlinedButton(
+            onPressed: () => _openNodes('Nodes', cluster.nodes),
+            child: const Text('All nodes'),
+          ),
+        ]),
+      ],
     );
   }
 

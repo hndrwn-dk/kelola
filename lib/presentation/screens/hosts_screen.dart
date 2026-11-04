@@ -716,6 +716,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     }
     await ref.read(sessionPoolProvider).disconnect(host.id);
     await ref.read(hostRepositoryProvider).delete(host.id);
+    await forgetClusterKind(ref.read(clusterKindStoreProvider.future), host.id);
     _reloadSideState();
   }
 

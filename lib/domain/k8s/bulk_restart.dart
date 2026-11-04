@@ -1,16 +1,18 @@
+import 'package:kelola/domain/k8s/cluster_policy.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_actions.dart';
 
 /// M32: namespaces that hold something `rollout restart` accepts
-/// (Deployments, StatefulSets, DaemonSets). Add-on `kube-*` namespaces last.
+/// (Deployments, StatefulSets, DaemonSets). Add-on `kube-*` / `openshift-*`
+/// namespaces ([isSystemNamespace]) last.
 List<String> bulkRestartNamespaces(List<K8sWorkload> rows) {
   final names = <String>{
     for (final w in rows)
       if (workloadCanRestart(w.kind) && w.namespace.isNotEmpty) w.namespace,
   }.toList();
   names.sort((a, b) {
-    final ak = a.startsWith('kube-');
-    final bk = b.startsWith('kube-');
+    final ak = isSystemNamespace(a);
+    final bk = isSystemNamespace(b);
     if (ak != bk) {
       return ak ? 1 : -1;
     }
@@ -35,4 +37,4 @@ List<K8sWorkload> bulkRestartCandidates(
 
 /// Add-ons the operator usually does not own start unchecked.
 bool bulkRestartCheckedByDefault(String namespace) =>
-    !namespace.startsWith('kube-');
+    !isSystemNamespace(namespace);

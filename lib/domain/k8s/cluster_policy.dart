@@ -191,8 +191,11 @@ class K8sFinding {
 }
 
 /// Namespaces whose hygiene (requests/limits/probes/:latest) is not judged:
-/// cluster add-ons the operator does not own.
-bool isSystemNamespace(String ns) => ns.startsWith('kube-');
+/// cluster add-ons the operator does not own. M48: OpenShift ships ~60
+/// `openshift-*` namespaces (plus `openshift`) with privileged pods and no
+/// NetworkPolicies; they are platform, not the operator's workloads.
+bool isSystemNamespace(String ns) =>
+    ns.startsWith('kube-') || ns == 'openshift' || ns.startsWith('openshift-');
 
 /// The Configuration section's hygiene rules for one container, so the
 /// workload screen colours a container the same way the finding judges it.

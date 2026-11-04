@@ -154,6 +154,8 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
           );
         case FleetIssueKind.k8sDown:
         case FleetIssueKind.k8sWorkloads:
+        case FleetIssueKind.ocpDegraded:
+        case FleetIssueKind.ocpAttention:
           if (!mounted) {
             return;
           }
@@ -216,9 +218,11 @@ class _FleetHostSheetState extends ConsumerState<FleetHostSheet> {
       FleetIssueKind.failedUnit ||
       FleetIssueKind.badContainer ||
       FleetIssueKind.k8sDown ||
+      FleetIssueKind.ocpDegraded ||
       FleetIssueKind.loadHigh =>
         HealthStatus.failed,
       FleetIssueKind.k8sWorkloads ||
+      FleetIssueKind.ocpAttention ||
       FleetIssueKind.diskCritical ||
       FleetIssueKind.memHigh ||
       FleetIssueKind.securityUpdates ||

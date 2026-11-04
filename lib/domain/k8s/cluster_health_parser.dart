@@ -22,7 +22,9 @@ ClusterHealth parseClusterHealth(
       .firstWhere((s) => s.isNotEmpty, orElse: () => '');
 
   final readyzRaw = _section(stdout, 'READYZ') ?? '';
-  final apiReachable = _readyzOk(readyzRaw);
+  final authExpired = authExpiredFromText(_section(stdout, 'AUTH') ?? '');
+  // An expired login is an answer from the API, never "API down".
+  final apiReachable = authExpired || _readyzOk(readyzRaw);
 
   final nodesRaw = _section(stdout, 'NODES') ?? '';
   final nodes = _parseNodes(nodesRaw);
@@ -59,7 +61,68 @@ ClusterHealth parseClusterHealth(
     thisHostMatched: matched,
     coreDnsReady: coreDnsReady,
     nodes: nodes,
+    // The OpenShift section fails for the same auth reason, so an expired
+    // login says nothing about the cluster kind.
+    isOpenShift: authExpired ? null : parseIsOpenShift(stdout),
+    authExpired: authExpired,
+    kubeContext: parseKubeContext(stdout),
   );
+}
+
+/// M48 §1b. `true` when the API discovery doc for `config.openshift.io/v1`
+/// came back; `false` on `---OPENSHIFT_NONE---`, a 404, or an empty body;
+/// `null` when the section is missing or holds junk.
+bool? parseIsOpenShift(String stdout) {
+  if (!stdout.contains('---OPENSHIFT---')) {
+    return null;
+  }
+  if (stdout.contains('---OPENSHIFT_NONE---')) {
+    return false;
+  }
+  final body = (_section(stdout, 'OPENSHIFT') ?? '').trim();
+  if (body.isEmpty) {
+    return false;
+  }
+  if (RegExp(r'\b404\b|NotFound|not found', caseSensitive: false)
+      .hasMatch(body)) {
+    return false;
+  }
+  final json = _jsonMap(body);
+  if (json == null) {
+    return null;
+  }
+  return json['groupVersion'] == 'config.openshift.io/v1';
+}
+
+/// First line of `---CONTEXT---`; empty when missing or not a context name
+/// (CLI errors have spaces; context names do not).
+String parseKubeContext(String stdout) {
+  final body = _section(stdout, 'CONTEXT');
+  if (body == null) {
+    return '';
+  }
+  final line = body
+      .split('\n')
+      .map((l) => l.trim())
+      .firstWhere((l) => l.isNotEmpty, orElse: () => '');
+  if (line.isEmpty || line.contains(RegExp(r'\s')) || line.startsWith('---')) {
+    return '';
+  }
+  return line;
+}
+
+/// M48 §1d. Strings `oc` / `kubectl` print when the login is no longer valid.
+const kAuthExpiredMarkers = [
+  'Unauthorized',
+  'You must be logged in to the server',
+  'the server has asked for the client to provide credentials',
+];
+
+bool authExpiredFromText(String text) {
+  if (text.trim().isEmpty) {
+    return false;
+  }
+  return kAuthExpiredMarkers.any(text.contains);
 }
 
 bool _readyzOk(String raw) {
@@ -108,6 +171,7 @@ ClusterNodeMembership _node(Map<String, dynamic> raw) {
   final meta = _map(raw['metadata']);
   final name = meta['name'] as String? ?? '';
   final labels = _map(meta['labels']);
+  final annotations = _map(meta['annotations']);
   final controlPlane = labels.keys.any(
     (k) =>
         k == 'node-role.kubernetes.io/control-plane' ||
@@ -131,15 +195,43 @@ ClusterNodeMembership _node(Map<String, dynamic> raw) {
     }
   }
   final info = _map(status['nodeInfo']);
+  final current = _str(annotations['$_mcPrefix/currentConfig']);
+  final desired = _str(annotations['$_mcPrefix/desiredConfig']);
   return ClusterNodeMembership(
     name: name,
     ready: ready,
-    kubeletVersion: info['kubeletVersion'] as String? ?? '',
-    containerRuntime: info['containerRuntimeVersion'] as String? ?? '',
+    kubeletVersion: _str(info['kubeletVersion']),
+    containerRuntime: _str(info['containerRuntimeVersion']),
     controlPlane: controlPlane,
     pressures: pressures,
+    mcdState: _mcdState(_str(annotations['$_mcPrefix/state'])),
+    updatePending:
+        current.isNotEmpty && desired.isNotEmpty && current != desired,
+    mcdReason: _str(annotations['$_mcPrefix/reason']),
+    roles: [
+      for (final role in _kRoles)
+        if (labels.containsKey('node-role.kubernetes.io/$role')) role,
+    ],
+    labels: {
+      for (final e in labels.entries)
+        if (e.value is String) e.key: e.value as String,
+    },
   );
 }
+
+const _mcPrefix = 'machineconfiguration.openshift.io';
+const _kRoles = ['master', 'control-plane', 'worker', 'infra'];
+
+McdState? _mcdState(String raw) {
+  return switch (raw) {
+    'Done' => McdState.done,
+    'Working' => McdState.working,
+    'Degraded' || 'Unreconcilable' => McdState.degraded,
+    _ => null,
+  };
+}
+
+String _str(Object? v) => v is String ? v : '';
 
 bool _hostnameMatches(String hostname, String nodeName) {
   final h = hostname.toLowerCase();

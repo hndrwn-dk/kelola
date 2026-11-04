@@ -1,0 +1,17 @@
+{
+  "_synthetic": "M48 synthetic: settled ClusterVersion; Upgradeable=False must be ignored (CRC reports it)",
+  "apiVersion": "config.openshift.io/v1",
+  "kind": "ClusterVersion",
+  "metadata": {"name": "version"},
+  "spec": {"channel": "stable-4.17"},
+  "status": {
+    "desired": {"version": "4.17.3"},
+    "availableUpdates": null,
+    "conditions": [
+      {"type": "Available", "status": "True"},
+      {"type": "Failing", "status": "False"},
+      {"type": "Progressing", "status": "False", "message": "Cluster version is 4.17.3"},
+      {"type": "Upgradeable", "status": "False", "reason": "ClusterVersionOverridesSet"}
+    ]
+  }
+}

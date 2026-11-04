@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:kelola/data/k8s/cluster_kind_store.dart';
+import 'package:kelola/domain/k8s/cluster_health.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/presentation/fleet/fleet_k8s_read.dart';
 import 'package:kelola/data/db/host_repository.dart';
@@ -24,7 +28,12 @@ class FleetWatchController {
     required this.widgetBridge,
     required this.entitlement,
     required this.selectedHostIds,
+    this.clusterKinds,
   });
+
+  /// M48: cluster-kind cache for the dashboard tile. Optional so tests and
+  /// older call sites need not wire it.
+  final Future<ClusterKindStore> Function()? clusterKinds;
 
   final HostRepository hosts;
   final SshSessionPool pool;
@@ -92,6 +101,20 @@ class FleetWatchController {
     }
   }
 
+  void _recordClusterKind(String hostId, ClusterHealth health) {
+    final of = clusterKinds;
+    if (of == null) {
+      return;
+    }
+    unawaited(() async {
+      try {
+        await (await of()).recordRead(hostId, health, DateTime.now().toUtc());
+      } catch (_) {
+        // Cache only.
+      }
+    }());
+  }
+
   Future<FleetHostHealth> _probe(Host host, FleetHostHealth? cached) async {
     const scope = ProbeScope.fleet;
     final facts = await hosts.facts(host.id) ?? HostFacts.undiscovered;
@@ -113,6 +136,7 @@ class FleetWatchController {
             <T>(Probe<T> p) =>
                 pool.execute(host, p, facts: facts, scope: scope),
             previous: cached?.k8s,
+            onClusterKind: (h) => _recordClusterKind(host.id, h),
           )
         : cached?.k8s;
     return FleetHostHealth(

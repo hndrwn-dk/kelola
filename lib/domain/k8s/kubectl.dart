@@ -3,9 +3,16 @@ import 'dart:convert';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
-enum KubectlFlavor { none, kubectl, k3s }
+enum KubectlFlavor { none, kubectl, k3s, oc }
 
+/// M48 precedence: `oc` → `k3s` → `kubectl`. `oc` is a superset of kubectl
+/// and bastions often carry both. k3s stays ahead of kubectl: on k3s hosts a
+/// standalone kubectl often has no kubeconfig and falls back to
+/// `localhost:8080`.
 KubectlFlavor kubectlFlavor(HostFacts facts) {
+  if (facts.runtimes.contains('oc')) {
+    return KubectlFlavor.oc;
+  }
   if (facts.runtimes.contains('k3s')) {
     return KubectlFlavor.k3s;
   }
@@ -19,9 +26,16 @@ String? kubectlBin(HostFacts facts) {
   return switch (kubectlFlavor(facts)) {
     KubectlFlavor.k3s => 'k3s kubectl',
     KubectlFlavor.kubectl => 'kubectl',
+    KubectlFlavor.oc => 'oc',
     KubectlFlavor.none => null,
   };
 }
+
+/// CRC installs `oc` at `~/.crc/bin/oc/oc` and only puts it on PATH after
+/// `eval $(crc oc-env)` in an interactive shell. The binary is resolved at
+/// run time (no path is stored in facts). Inline substitution rather than
+/// `OC=…;` so the result still composes after `LC_ALL=C` and after a pipe.
+const kOcBinary = r'"$(command -v oc || echo "$HOME/.crc/bin/oc/oc")"';
 
 /// Facts pick the binary. k3s usually needs passwordless sudo; kubectl does not.
 String kubectlTry(HostFacts facts, String args) {
@@ -31,6 +45,8 @@ String kubectlTry(HostFacts facts, String args) {
       'sudo -n k3s kubectl $args 2>/dev/null || k3s kubectl $args',
     KubectlFlavor.kubectl =>
       'kubectl $args 2>/dev/null || sudo -n kubectl $args',
+    KubectlFlavor.oc =>
+      '$kOcBinary $args 2>/dev/null || sudo -n $kOcBinary $args',
   };
 }
 
@@ -40,6 +56,7 @@ String kubectlRun(HostFacts facts, String args) {
     KubectlFlavor.none => 'echo ---NO_KUBECTL---; exit 1',
     KubectlFlavor.k3s => 'sudo -n k3s kubectl $args || k3s kubectl $args',
     KubectlFlavor.kubectl => 'kubectl $args || sudo -n kubectl $args',
+    KubectlFlavor.oc => '$kOcBinary $args || sudo -n $kOcBinary $args',
   };
 }
 
