@@ -52,6 +52,7 @@ class ClusterKindRecord {
     required this.readAt,
     this.kubeContext = '',
     this.seenContext,
+    this.distro,
   });
 
   final bool isOpenShift;
@@ -65,6 +66,9 @@ class ClusterKindRecord {
   /// Context reported by the newest read, when that read could not tell
   /// the kind. Null when no newer read reported a context.
   final String? seenContext;
+
+  /// M48.1: OKD vs OCP, when known. Null = unknown (label stays OpenShift).
+  final OpenShiftDistro? distro;
 
   /// False when a newer read reported a different context: the cached kind
   /// belongs to another cluster. An unknown context on either side is not
@@ -115,6 +119,14 @@ ClusterKindRecord? mergeClusterKind(
       isOpenShift: kind,
       readAt: at.toUtc(),
       kubeContext: read.kubeContext,
+      // A fresh hint wins; otherwise the old distro only survives on the
+      // same context (an unknown context is not a change).
+      distro:
+          read.distroHint ??
+          (previous != null &&
+                  _sameContext(previous.kubeContext, read.kubeContext)
+              ? previous.distro
+              : null),
     );
   }
   if (previous == null || read.kubeContext.isEmpty) {
@@ -125,5 +137,28 @@ ClusterKindRecord? mergeClusterKind(
     readAt: previous.readAt,
     kubeContext: previous.kubeContext,
     seenContext: read.kubeContext,
+    distro: previous.distro,
+  );
+}
+
+bool _sameContext(String a, String b) => a.isEmpty || b.isEmpty || a == b;
+
+/// [record] with [distro] set and nothing else changed. A distro read
+/// older than the kind read is ignored, so a slow result cannot undo a
+/// newer read.
+ClusterKindRecord withDistro(
+  ClusterKindRecord record,
+  OpenShiftDistro distro,
+  DateTime at,
+) {
+  if (at.toUtc().isBefore(record.readAt.toUtc())) {
+    return record;
+  }
+  return ClusterKindRecord(
+    isOpenShift: record.isOpenShift,
+    readAt: record.readAt,
+    kubeContext: record.kubeContext,
+    seenContext: record.seenContext,
+    distro: distro,
   );
 }

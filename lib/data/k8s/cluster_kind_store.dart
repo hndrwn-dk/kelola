@@ -29,6 +29,22 @@ class ClusterKindStore {
     await _save(all);
   }
 
+  /// M48.1: set the distro on an existing record (ClusterVersion arrived).
+  /// No record: no-op. isOpenShift and kubeContext are left alone.
+  Future<void> recordDistro(
+    String hostId,
+    OpenShiftDistro distro,
+    DateTime at,
+  ) async {
+    final all = await _load();
+    final current = all[hostId];
+    if (current == null) {
+      return;
+    }
+    all[hostId] = withDistro(current, distro, at);
+    await _save(all);
+  }
+
   Future<void> write(String hostId, ClusterKindRecord record) async {
     final all = await _load()..[hostId] = record;
     await _save(all);
@@ -59,6 +75,7 @@ class ClusterKindStore {
             'at': e.value.readAt.toUtc().toIso8601String(),
             'ctx': e.value.kubeContext,
             if (e.value.seenContext != null) 'seen': e.value.seenContext,
+            if (e.value.distro != null) 'distro': e.value.distro!.name,
           },
       }),
     );
@@ -91,6 +108,7 @@ class ClusterKindStore {
             readAt: at,
             kubeContext: v['ctx'] is String ? v['ctx'] as String : '',
             seenContext: v['seen'] is String ? v['seen'] as String : null,
+            distro: _distro(v['distro']),
           );
         }
       }
@@ -99,4 +117,14 @@ class ClusterKindStore {
       return {};
     }
   }
+}
+
+/// `'ocp'` / `'okd'`; anything else (or absent) is unknown.
+OpenShiftDistro? _distro(Object? raw) {
+  for (final d in OpenShiftDistro.values) {
+    if (d.name == raw) {
+      return d;
+    }
+  }
+  return null;
 }
