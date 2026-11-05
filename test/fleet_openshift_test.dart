@@ -9,6 +9,7 @@ import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/fleet/fleet_k8s.dart';
 import 'package:kelola/domain/fleet/fleet_watch.dart';
 import 'package:kelola/domain/k8s/cluster_health_parser.dart';
+import 'package:kelola/domain/k8s/cluster_kind.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
 import 'package:kelola/domain/k8s/openshift_health_parser.dart';
 import 'package:kelola/domain/k8s/workload.dart';
@@ -317,6 +318,57 @@ void main() {
       );
       expect(fleetWatchNoticeBody(failed), 'OCP 4.17.3 · 2 operators degraded');
     });
+  });
+
+  testWidgets('fleet tile and issue with an OKD summary read OKD',
+      (tester) async {
+    final row = _host(
+      _healthyK8s.withOcp(
+        const FleetOcpSummary(
+          version: '4.17.0-okd-scos.0',
+          distro: OpenShiftDistro.okd,
+          operatorsDegraded: 2,
+        ),
+      ),
+    );
+    expect(
+      assessFleetHost(row).issues.single.meta,
+      'OKD 4.17.0-okd-scos.0 · 2 operators degraded',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildKelolaDarkTheme(),
+        home: Scaffold(
+          body: SizedBox(
+            width: 220,
+            height: 140,
+            child: FleetHostTile(
+              alias: row.alias,
+              status: HealthStatus.failed,
+              metrics: [
+                for (final m in row.tileMetrics())
+                  FleetTileMetricView(label: m.label, value: m.value),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    // Cell label names the product; the value is unchanged.
+    expect(find.text('okd'), findsOneWidget);
+    expect(find.text('ocp'), findsNothing);
+    expect(find.text('2 op deg'), findsOneWidget);
+  });
+
+  test('FleetOcpSummary.from takes the distro from the version', () {
+    final okd = parseOpenShiftHealth(
+      '---CLUSTERVERSION---\n'
+      '${File('test/fixtures/openshift/okd/clusterversion_scos.json').readAsStringSync()}',
+    );
+    expect(FleetOcpSummary.from(okd).distro, OpenShiftDistro.okd);
+    expect(FleetOcpSummary.from(okd).tileLine, 'OKD 4.17.0-okd-scos.0');
+    expect(FleetOcpSummary.from(parseOpenShiftHealth(_ocpOut())).tileLine,
+        'OCP 4.17.3 · 1 operator degraded · 1 operator unavailable');
   });
 
   testWidgets('fleet tile shows the OCP cell', (tester) async {

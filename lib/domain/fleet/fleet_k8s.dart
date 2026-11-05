@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
+import 'package:kelola/domain/k8s/cluster_kind.dart';
 import 'package:kelola/domain/k8s/openshift_health.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 
@@ -182,6 +183,7 @@ class FleetOcpSummary {
     this.pendingCsrs = 0,
     this.versionFailing = false,
     this.poolsPaused = 0,
+    this.distro,
   });
 
   factory FleetOcpSummary.from(OpenShiftHealth h) {
@@ -193,6 +195,7 @@ class FleetOcpSummary {
       pendingCsrs: h.csrs?.count ?? 0,
       versionFailing: h.version?.failing ?? false,
       poolsPaused: (h.pools ?? const []).where((p) => p.paused).length,
+      distro: h.version?.distro,
     );
   }
 
@@ -203,6 +206,14 @@ class FleetOcpSummary {
   final int pendingCsrs;
   final bool versionFailing;
   final int poolsPaused;
+
+  /// M48.1: OKD vs OCP from the ClusterVersion; null = unknown (reads OCP).
+  final OpenShiftDistro? distro;
+
+  bool get isOkd => distro == OpenShiftDistro.okd;
+
+  /// `OKD` with evidence, else `OCP`.
+  String get prefix => isOkd ? 'OKD' : 'OCP';
 
   /// Failed per the M48 §2d table; warning for paused pools / pending CSRs.
   bool get failed =>
@@ -224,7 +235,7 @@ class FleetOcpSummary {
     String n(int count, String one) =>
         '$count $one${count == 1 ? '' : 's'}';
     return [
-      version.isEmpty ? 'OCP' : 'OCP $version',
+      version.isEmpty ? prefix : '$prefix $version',
       if (versionFailing) 'version failing',
       if (operatorsDegraded > 0) '${n(operatorsDegraded, 'operator')} degraded',
       if (operatorsUnavailable > 0)
@@ -264,6 +275,7 @@ class FleetOcpSummary {
         'csr': pendingCsrs,
         'cvFail': versionFailing,
         'mcpPaused': poolsPaused,
+        if (distro != null) 'd': distro!.name,
       };
 
   static FleetOcpSummary? fromJson(Object? raw) {
@@ -279,6 +291,10 @@ class FleetOcpSummary {
       pendingCsrs: n(raw['csr']),
       versionFailing: raw['cvFail'] == true,
       poolsPaused: n(raw['mcpPaused']),
+      distro: [
+        for (final d in OpenShiftDistro.values)
+          if (d.name == raw['d']) d,
+      ].firstOrNull,
     );
   }
 }

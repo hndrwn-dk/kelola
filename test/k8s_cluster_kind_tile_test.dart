@@ -332,6 +332,26 @@ void main() {
       await dispose(tester);
     });
 
+    testWidgets('M48.1: OKD version from the home makes the tile read OKD',
+        (tester) async {
+      await repo.saveFacts(host.id, _facts(const ['oc']));
+      // No node image hint: the distro can only come from ClusterVersion.
+      pool.cluster = _cluster(true);
+      pool.clusterVersion = 'okd/clusterversion_scos.json';
+      await pumpDashboard(tester);
+      expect(tile(tester).label, 'Kubernetes');
+
+      await tester.tap(find.byKey(const ValueKey('dashboard-k8s-tile')));
+      await frames(tester, 20);
+      expect(find.text('OKD 4.17.0-OKD-SCOS.0 · STABLE-SCOS-4'), findsOneWidget);
+      Navigator.of(tester.element(find.byType(KubernetesHomeScreen))).pop();
+      await frames(tester, 20);
+
+      expect(tile(tester).label, 'OKD');
+      expect((await kinds.read(host.id))!.distro, OpenShiftDistro.okd);
+      await dispose(tester);
+    });
+
     testWidgets('OpenShift context cached → context changes → Kubernetes',
         (tester) async {
       await repo.saveFacts(host.id, _facts(const ['oc']));
@@ -423,6 +443,9 @@ class _Pool extends SshSessionPool {
   ClusterHealth cluster = _cluster(false);
   final probes = <Probe<dynamic>>[];
 
+  /// ClusterVersion fixture the OpenShift read returns.
+  String clusterVersion = 'synthetic_clusterversion_healthy.json';
+
   @override
   Future<T> execute<T>(
     Host host,
@@ -474,8 +497,7 @@ class _Pool extends SshSessionPool {
       return parseOpenShiftHealth(
         [
           '---CLUSTERVERSION---',
-          File('test/fixtures/openshift/synthetic_clusterversion_healthy.json')
-              .readAsStringSync(),
+          File('test/fixtures/openshift/$clusterVersion').readAsStringSync(),
           '---CLUSTEROPERATORS---',
           '{"items":[]}',
           '---MCP---',

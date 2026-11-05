@@ -236,7 +236,9 @@ class FleetHostHealth {
     // M48: OpenShift version, or the short trouble when something is wrong.
     final ocp = cluster?.ocp;
     if (ocp != null) {
-      cells.add(FleetTileMetric(label: 'ocp', value: ocp.tileValue));
+      cells.add(
+        FleetTileMetric(label: ocp.prefix.toLowerCase(), value: ocp.tileValue),
+      );
     }
     if (fromCache || isStale(now: now)) {
       cells.add(FleetTileMetric(label: 'cache', value: ageLabel(now: now)));

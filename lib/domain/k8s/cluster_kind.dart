@@ -40,8 +40,14 @@ OpenShiftDistro? openShiftDistroFrom({
 /// M48: one place decides "OpenShift" vs "Kubernetes", so the host
 /// dashboard tile and the Kubernetes home band title cannot disagree.
 /// Unknown (null) is Kubernetes: never guess OpenShift.
-String clusterKindLabel(bool? isOpenShift) =>
-    isOpenShift == true ? 'OpenShift' : 'Kubernetes';
+/// M48.1: OKD only with evidence ([distro] == okd); an unknown distro is
+/// still OpenShift.
+String clusterKindLabel(bool? isOpenShift, {OpenShiftDistro? distro}) {
+  if (isOpenShift != true) {
+    return 'Kubernetes';
+  }
+  return distro == OpenShiftDistro.okd ? 'OKD' : 'OpenShift';
+}
 
 /// Last known cluster kind for a host, keyed by the kubeconfig context it
 /// was read under, cached so the dashboard can label its Kubernetes tile
@@ -82,7 +88,8 @@ class ClusterKindRecord {
   }
 
   /// Tile label. A changed context reads Kubernetes until the next read.
-  String get label => clusterKindLabel(contextMatches && isOpenShift);
+  String get label =>
+      clusterKindLabel(contextMatches && isOpenShift, distro: distro);
 
   /// The 15-minute rule ([Host.attentionFreshFor]).
   bool isStale(DateTime now) =>

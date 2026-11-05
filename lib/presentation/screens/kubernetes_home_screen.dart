@@ -226,6 +226,11 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
         _ocp = ocpResult?.value as OpenShiftHealth?;
         _ocpError = ocpResult?.error;
         _ocpReadAt = ocpResult == null ? null : _readAt;
+        // M48.1: the version beats the node-image hint in the tile cache.
+        final distro = _ocp?.version?.distro;
+        if (distro != null) {
+          unawaited(_saveDistro(host.id, distro, _readAt!));
+        }
         _events = results[0].value as List<K8sClusterEvent>?;
         _eventsError = results[0].error;
         _net = results[1].value as K8sNetworking?;
@@ -404,7 +409,9 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
           ),
           if (openShift) ...[
             const SizedBox(height: 10),
-            const SectionSlab('OpenShift'),
+            SectionSlab(
+              clusterKindLabel(true, distro: _distro(cluster)),
+            ),
             _openShiftBlock(c, cluster),
           ],
           const SizedBox(height: 10),
@@ -962,6 +969,19 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
 
   // ---- M48: OpenShift ------------------------------------------------
 
+  Future<void> _saveDistro(
+    String hostId,
+    OpenShiftDistro distro,
+    DateTime at,
+  ) async {
+    try {
+      final store = await ref.read(clusterKindStoreProvider.future);
+      await store.recordDistro(hostId, distro, at);
+    } catch (_) {
+      // Cache only.
+    }
+  }
+
   Future<void> _saveClusterKind(String hostId, ClusterHealth cluster) async {
     try {
       final store = await ref.read(clusterKindStoreProvider.future);
@@ -984,6 +1004,10 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
     return worseHealth(cluster.overall, ocp.overall);
   }
 
+  /// M48.1: the version wins; node OS images hint before it arrives.
+  OpenShiftDistro? _distro(ClusterHealth cluster) =>
+      _ocp?.version?.distro ?? cluster.distroHint;
+
   /// `OpenShift 4.17.3 · stable-4.17`; `OpenShift` until the version is
   /// read; `Kubernetes` off OpenShift.
   String _clusterTitle(ClusterHealth cluster) {
@@ -991,7 +1015,7 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
       return clusterKindLabel(cluster.isOpenShift);
     }
     final v = _ocp?.version;
-    final base = clusterKindLabel(true);
+    final base = clusterKindLabel(true, distro: _distro(cluster));
     if (v == null || v.version.isEmpty) {
       return base;
     }

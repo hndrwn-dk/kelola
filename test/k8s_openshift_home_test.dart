@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -330,6 +331,58 @@ void main() {
     expect(pool.probes.map((p) => p.runtimeType), [ClusterHealthProbe]);
   });
 
+  group('M48.1 OKD', () {
+    String okd(String name) => _fixture('okd/$name');
+
+    ClusterHealth okdCluster() => parseClusterHealth(
+          [
+            '---HOSTNAME---',
+            'crc',
+            '---READYZ---',
+            'ok',
+            '---NODES---',
+            okd('nodes_scos.json'),
+            '---OPENSHIFT---',
+            _fixture('synthetic_config_openshift_io_v1.json'),
+            '---AUTH---',
+          ].join('\n'),
+        );
+
+    testWidgets('OKD band title and section slab', (tester) async {
+      pool.cluster = okdCluster();
+      pool.ocp = _ocp(cv: okd('clusterversion_scos.json'));
+      await pumpHome(tester);
+
+      expect(find.text('OKD 4.17.0-OKD-SCOS.0 · STABLE-SCOS-4'), findsOneWidget);
+      expect(find.text('OKD'), findsOneWidget); // section slab
+      expect(find.text('OPENSHIFT'), findsNothing);
+      expect(find.textContaining('OPENSHIFT 4'), findsNothing);
+    });
+
+    testWidgets('only nodes read (OpenShift health pending): title OKD',
+        (tester) async {
+      pool.cluster = okdCluster();
+      pool.ocp = _ocp(cv: okd('clusterversion_scos.json'));
+      pool.ocpGate = Completer<void>();
+      await pumpHome(tester);
+
+      expect(find.text('OKD'), findsNWidgets(2)); // band title + section slab
+      expect(find.text('OPENSHIFT'), findsNothing);
+      pool.ocpGate!.complete();
+      await tester.pump();
+      await tester.pump();
+    });
+
+    testWidgets('RHCOS fixtures: title unchanged', (tester) async {
+      pool.cluster = _openShiftCluster();
+      pool.ocp = _ocp();
+      await pumpHome(tester);
+      expect(find.text('OPENSHIFT 4.17.3 · STABLE-4.17'), findsOneWidget);
+      expect(find.text('OPENSHIFT'), findsOneWidget);
+      expect(find.text('OKD'), findsNothing);
+    });
+  });
+
   testWidgets('vanilla cluster runs no OpenShift read and shows no section',
       (tester) async {
     pool.cluster = const ClusterHealth(
@@ -371,6 +424,9 @@ class _OcpPool extends SshSessionPool {
   );
   OpenShiftHealth ocp = const OpenShiftHealth();
   bool ocpFails = false;
+
+  /// When set, OpenShiftHealthProbe waits on it (health still pending).
+  Completer<void>? ocpGate;
   final probes = <Probe<dynamic>>[];
 
   @override
@@ -410,6 +466,7 @@ class _OcpPool extends SshSessionPool {
       return const <K8sRevision>[] as T;
     }
     if (probe is OpenShiftHealthProbe) {
+      await ocpGate?.future;
       if (ocpFails) {
         throw K8sReadException('OpenShift health', 'forbidden');
       }
