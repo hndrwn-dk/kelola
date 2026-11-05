@@ -15,6 +15,7 @@ import 'package:kelola/domain/files/sftp_denied.dart';
 import 'package:kelola/domain/files/sftp_entry.dart';
 import 'package:kelola/domain/files/sftp_format.dart';
 import 'package:kelola/domain/files/sftp_list_view.dart';
+import 'package:kelola/domain/files/sftp_local_name.dart';
 import 'package:kelola/domain/files/sftp_path.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -501,8 +502,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (host == null) {
       return;
     }
+    if (!isSafeSftpEntryName(e.name)) {
+      setState(() => _error = 'Kelola will not save a file named ${e.name}.');
+      return;
+    }
     final dir = await Directory.systemTemp.createTemp('kelola-edit');
-    final local = File('${dir.path}/${e.name}');
+    final local = File(sftpLocalPathIn(dir.path, e.name));
     final xfer = _Transfer(label: 'Download ${e.name}');
     setState(() => _holdTransfer(xfer));
     final bytes = await _run(
@@ -560,7 +565,11 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       setState(() => _error = 'Download a file, not a directory.');
       return;
     }
-    final dest = File('${(await _transferDir()).path}/${e.name}');
+    if (!isSafeSftpEntryName(e.name)) {
+      setState(() => _error = 'Kelola will not save a file named ${e.name}.');
+      return;
+    }
+    final dest = File(sftpLocalPathIn((await _transferDir()).path, e.name));
     final xfer = _Transfer(label: 'Download ${e.name}');
     setState(() {
       _holdTransfer(xfer);
