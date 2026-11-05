@@ -174,6 +174,58 @@ void main() {
     await dispose(tester);
   });
 
+  testWidgets('M48.1: scos host shows the OKD node notice', (tester) async {
+    await repo.saveFacts(node.id, _rhcos.copyWith(osId: 'scos'));
+    await pumpOpener(tester);
+    await openNode(tester);
+
+    final sheet = find.byType(CoreOsNoticeSheetBody);
+    expect(sheet, findsOneWidget);
+    expect(find.descendant(of: sheet, matching: find.text('OKD node')), findsOneWidget);
+    expect(find.text(kOkdNodeNoticeCopy), findsOneWidget);
+    expect(find.text(kCoreOsNoticeCopy), findsNothing);
+    expect(find.text('OpenShift node'), findsNothing);
+
+    await tester.tap(find.text('Continue'));
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(await acks.isAcknowledged(node.id), isTrue);
+    expect(find.text('CLUSTER NODE'), findsOneWidget);
+    await dispose(tester);
+  });
+
+  testWidgets('M48.1: rhcos host notice is unchanged', (tester) async {
+    await pumpOpener(tester);
+    await openNode(tester);
+    expect(find.text('OpenShift node'), findsOneWidget);
+    expect(find.text(kCoreOsNoticeCopy), findsOneWidget);
+    expect(find.text('OKD node'), findsNothing);
+    await dispose(tester);
+  });
+
+  test('M48.1: notice title and copy by osId', () {
+    expect(coreOsNoticeTitle('rhcos'), 'OpenShift node');
+    expect(coreOsNoticeCopy('rhcos'), kCoreOsNoticeCopy);
+    for (final id in ['scos', 'fcos']) {
+      expect(coreOsNoticeTitle(id), 'OKD node', reason: id);
+      expect(coreOsNoticeCopy(id), kOkdNodeNoticeCopy, reason: id);
+    }
+    expect(
+      kOkdNodeNoticeCopy,
+      'This is an OKD node. SSH logins on nodes leave an "accessed" mark that '
+      'the cluster shows on the node. Kelola only reads. For cluster health, '
+      'add the bastion instead.',
+    );
+    // rhcos copy unchanged from M48.
+    expect(
+      kCoreOsNoticeCopy,
+      'This is an OpenShift node. Red Hat records SSH logins on nodes as an '
+      '"accessed" mark that support may ask about. Kelola only reads. For '
+      'cluster health, add the bastion instead.',
+    );
+  });
+
   testWidgets('not shown again after Continue', (tester) async {
     await acks.acknowledge(node.id);
     await pumpOpener(tester);

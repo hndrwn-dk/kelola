@@ -235,7 +235,10 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
           if (!mounted) {
             return;
           }
-          final ok = await showCoreOsNoticeSheet(context);
+          final ok = await showCoreOsNoticeSheet(
+            context,
+            osId: knownFacts.osId,
+          );
           if (!ok) {
             if (mounted) {
               await Navigator.of(context).maybePop();
