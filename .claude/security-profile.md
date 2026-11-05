@@ -1,7 +1,7 @@
 # Security profile
 
 - **Project type:** flutter-mobile, android
-- **Repo visibility:** public (Apache-2.0)
+- **Repo visibility:** private (Apache-2.0 licensed)
 - **One-line purpose:** Agentless Android app for administering Linux servers over SSH; no server-side agent, key-only auth.
 - **Trust boundaries / attackers:**
   - Malicious or compromised SSH server — controls banners, command output, file listings, and anything the app parses or renders
