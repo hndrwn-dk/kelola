@@ -411,6 +411,7 @@ final fleetWatchControllerProvider = Provider<FleetWatchController>((ref) {
     selectedHostIds: () async =>
         ref.read(fleetProbeSelectionProvider).valueOrNull,
     clusterKinds: () => ref.read(clusterKindStoreProvider.future),
+    coreOsAcks: () => ref.read(coreOsAckStoreProvider.future),
   );
   bridge.setTickHandler(controller.maybeTick);
   ref.onDispose(() {

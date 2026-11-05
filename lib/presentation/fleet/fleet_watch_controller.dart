@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:kelola/data/hosts/coreos_ack_store.dart';
 import 'package:kelola/data/k8s/cluster_kind_store.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/presentation/coreos_notice_gate.dart';
 import 'package:kelola/presentation/fleet/fleet_k8s_read.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/fleet/fleet_watch_bridge.dart';
@@ -29,7 +31,12 @@ class FleetWatchController {
     required this.entitlement,
     required this.selectedHostIds,
     this.clusterKinds,
+    this.coreOsAcks,
   });
+
+  /// M48 §4: first-connect acknowledgements. OpenShift/OKD nodes without one
+  /// are not probed. Null treats every such node as unacknowledged.
+  final Future<CoreOsAckStore> Function()? coreOsAcks;
 
   /// M48: cluster-kind cache for the dashboard tile. Optional so tests and
   /// older call sites need not wire it.
@@ -80,10 +87,17 @@ class FleetWatchController {
       selectedHostIds: await selectedHostIds(),
       fleetUnlimited: entitlement.isUnlocked(ProFeature.fleetUnlimited),
     );
-    final toProbe = [
-      for (final host in all)
-        if (plan.isMonitored(host.id)) host,
-    ];
+    final toProbe = <Host>[];
+    for (final host in all) {
+      if (!plan.isMonitored(host.id)) {
+        continue;
+      }
+      final facts = await hosts.facts(host.id) ?? HostFacts.undiscovered;
+      if (await coreOsNoticeBlocks(facts, host.id, coreOsAcks)) {
+        continue;
+      }
+      toProbe.add(host);
+    }
     final runner = FleetWatchRunner(hosts: hosts);
     final cache = await hosts.loadFleetCacheByHost();
     final notices = await runner.tick(
