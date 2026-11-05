@@ -69,9 +69,10 @@ class _WorkloadsScreenState extends ConsumerState<WorkloadsScreen> {
       if (facts == null) {
         facts = await ref.read(hostRepositoryProvider).facts(host.id) ??
             HostFacts.undiscovered;
-        // Cached facts omit runtimes. Rediscover via HostFacts so the
-        // list probe never probes PATH itself.
-        if (facts.runtimes.isEmpty) {
+        // Cached facts list no Kubernetes CLI (old cache, or the CLI was
+        // installed later). Rediscover via HostFacts so the list probe
+        // never probes PATH itself.
+        if (factsNeedK8sRediscovery(facts)) {
           if (!mounted) {
             return;
           }

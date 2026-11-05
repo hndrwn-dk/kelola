@@ -22,6 +22,12 @@ KubectlFlavor kubectlFlavor(HostFacts facts) {
   return KubectlFlavor.none;
 }
 
+/// Cached facts that list no Kubernetes CLI are re-checked before a
+/// Kubernetes read. Hosts discovered before `oc` detection existed (or
+/// before a CLI was installed) would otherwise keep reporting "no kubectl"
+/// until removed and re-added.
+bool factsNeedK8sRediscovery(HostFacts facts) => !facts.hasK8s;
+
 String? kubectlBin(HostFacts facts) {
   return switch (kubectlFlavor(facts)) {
     KubectlFlavor.k3s => 'k3s kubectl',
