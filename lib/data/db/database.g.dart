@@ -10235,6 +10235,279 @@ class EnvVarsCompanion extends UpdateCompanion<EnvVarRow> {
   }
 }
 
+class $PackageListCacheTable extends PackageListCache
+    with TableInfo<$PackageListCacheTable, PackageListCacheRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PackageListCacheTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _snapshotJsonMeta = const VerificationMeta(
+    'snapshotJson',
+  );
+  @override
+  late final GeneratedColumn<String> snapshotJson = GeneratedColumn<String>(
+    'snapshot_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
+    'fetchedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
+    'fetched_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [hostId, snapshotJson, fetchedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'package_list_cache';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PackageListCacheRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('snapshot_json')) {
+      context.handle(
+        _snapshotJsonMeta,
+        snapshotJson.isAcceptableOrUnknown(
+          data['snapshot_json']!,
+          _snapshotJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_snapshotJsonMeta);
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(
+        _fetchedAtMeta,
+        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fetchedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {hostId};
+  @override
+  PackageListCacheRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PackageListCacheRow(
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      snapshotJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}snapshot_json'],
+      )!,
+      fetchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}fetched_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PackageListCacheTable createAlias(String alias) {
+    return $PackageListCacheTable(attachedDatabase, alias);
+  }
+}
+
+class PackageListCacheRow extends DataClass
+    implements Insertable<PackageListCacheRow> {
+  final String hostId;
+  final String snapshotJson;
+  final DateTime fetchedAt;
+  const PackageListCacheRow({
+    required this.hostId,
+    required this.snapshotJson,
+    required this.fetchedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['host_id'] = Variable<String>(hostId);
+    map['snapshot_json'] = Variable<String>(snapshotJson);
+    map['fetched_at'] = Variable<DateTime>(fetchedAt);
+    return map;
+  }
+
+  PackageListCacheCompanion toCompanion(bool nullToAbsent) {
+    return PackageListCacheCompanion(
+      hostId: Value(hostId),
+      snapshotJson: Value(snapshotJson),
+      fetchedAt: Value(fetchedAt),
+    );
+  }
+
+  factory PackageListCacheRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PackageListCacheRow(
+      hostId: serializer.fromJson<String>(json['hostId']),
+      snapshotJson: serializer.fromJson<String>(json['snapshotJson']),
+      fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'hostId': serializer.toJson<String>(hostId),
+      'snapshotJson': serializer.toJson<String>(snapshotJson),
+      'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
+    };
+  }
+
+  PackageListCacheRow copyWith({
+    String? hostId,
+    String? snapshotJson,
+    DateTime? fetchedAt,
+  }) => PackageListCacheRow(
+    hostId: hostId ?? this.hostId,
+    snapshotJson: snapshotJson ?? this.snapshotJson,
+    fetchedAt: fetchedAt ?? this.fetchedAt,
+  );
+  PackageListCacheRow copyWithCompanion(PackageListCacheCompanion data) {
+    return PackageListCacheRow(
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      snapshotJson: data.snapshotJson.present
+          ? data.snapshotJson.value
+          : this.snapshotJson,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PackageListCacheRow(')
+          ..write('hostId: $hostId, ')
+          ..write('snapshotJson: $snapshotJson, ')
+          ..write('fetchedAt: $fetchedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(hostId, snapshotJson, fetchedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PackageListCacheRow &&
+          other.hostId == this.hostId &&
+          other.snapshotJson == this.snapshotJson &&
+          other.fetchedAt == this.fetchedAt);
+}
+
+class PackageListCacheCompanion extends UpdateCompanion<PackageListCacheRow> {
+  final Value<String> hostId;
+  final Value<String> snapshotJson;
+  final Value<DateTime> fetchedAt;
+  final Value<int> rowid;
+  const PackageListCacheCompanion({
+    this.hostId = const Value.absent(),
+    this.snapshotJson = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PackageListCacheCompanion.insert({
+    required String hostId,
+    required String snapshotJson,
+    required DateTime fetchedAt,
+    this.rowid = const Value.absent(),
+  }) : hostId = Value(hostId),
+       snapshotJson = Value(snapshotJson),
+       fetchedAt = Value(fetchedAt);
+  static Insertable<PackageListCacheRow> custom({
+    Expression<String>? hostId,
+    Expression<String>? snapshotJson,
+    Expression<DateTime>? fetchedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (hostId != null) 'host_id': hostId,
+      if (snapshotJson != null) 'snapshot_json': snapshotJson,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PackageListCacheCompanion copyWith({
+    Value<String>? hostId,
+    Value<String>? snapshotJson,
+    Value<DateTime>? fetchedAt,
+    Value<int>? rowid,
+  }) {
+    return PackageListCacheCompanion(
+      hostId: hostId ?? this.hostId,
+      snapshotJson: snapshotJson ?? this.snapshotJson,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (snapshotJson.present) {
+      map['snapshot_json'] = Variable<String>(snapshotJson.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PackageListCacheCompanion(')
+          ..write('hostId: $hostId, ')
+          ..write('snapshotJson: $snapshotJson, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$KelolaDatabase extends GeneratedDatabase {
   _$KelolaDatabase(QueryExecutor e) : super(e);
   $KelolaDatabaseManager get managers => $KelolaDatabaseManager(this);
@@ -10264,6 +10537,9 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     this,
   );
   late final $EnvVarsTable envVars = $EnvVarsTable(this);
+  late final $PackageListCacheTable packageListCache = $PackageListCacheTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -10287,6 +10563,7 @@ abstract class _$KelolaDatabase extends GeneratedDatabase {
     fleetWatchState,
     vaultTombstones,
     envVars,
+    packageListCache,
   ];
 }
 
@@ -15397,6 +15674,180 @@ typedef $$EnvVarsTableProcessedTableManager =
       EnvVarRow,
       PrefetchHooks Function()
     >;
+typedef $$PackageListCacheTableCreateCompanionBuilder =
+    PackageListCacheCompanion Function({
+      required String hostId,
+      required String snapshotJson,
+      required DateTime fetchedAt,
+      Value<int> rowid,
+    });
+typedef $$PackageListCacheTableUpdateCompanionBuilder =
+    PackageListCacheCompanion Function({
+      Value<String> hostId,
+      Value<String> snapshotJson,
+      Value<DateTime> fetchedAt,
+      Value<int> rowid,
+    });
+
+class $$PackageListCacheTableFilterComposer
+    extends Composer<_$KelolaDatabase, $PackageListCacheTable> {
+  $$PackageListCacheTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get snapshotJson => $composableBuilder(
+    column: $table.snapshotJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PackageListCacheTableOrderingComposer
+    extends Composer<_$KelolaDatabase, $PackageListCacheTable> {
+  $$PackageListCacheTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get snapshotJson => $composableBuilder(
+    column: $table.snapshotJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PackageListCacheTableAnnotationComposer
+    extends Composer<_$KelolaDatabase, $PackageListCacheTable> {
+  $$PackageListCacheTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get snapshotJson => $composableBuilder(
+    column: $table.snapshotJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get fetchedAt =>
+      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+}
+
+class $$PackageListCacheTableTableManager
+    extends
+        RootTableManager<
+          _$KelolaDatabase,
+          $PackageListCacheTable,
+          PackageListCacheRow,
+          $$PackageListCacheTableFilterComposer,
+          $$PackageListCacheTableOrderingComposer,
+          $$PackageListCacheTableAnnotationComposer,
+          $$PackageListCacheTableCreateCompanionBuilder,
+          $$PackageListCacheTableUpdateCompanionBuilder,
+          (
+            PackageListCacheRow,
+            BaseReferences<
+              _$KelolaDatabase,
+              $PackageListCacheTable,
+              PackageListCacheRow
+            >,
+          ),
+          PackageListCacheRow,
+          PrefetchHooks Function()
+        > {
+  $$PackageListCacheTableTableManager(
+    _$KelolaDatabase db,
+    $PackageListCacheTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PackageListCacheTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PackageListCacheTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PackageListCacheTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> hostId = const Value.absent(),
+                Value<String> snapshotJson = const Value.absent(),
+                Value<DateTime> fetchedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PackageListCacheCompanion(
+                hostId: hostId,
+                snapshotJson: snapshotJson,
+                fetchedAt: fetchedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String hostId,
+                required String snapshotJson,
+                required DateTime fetchedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PackageListCacheCompanion.insert(
+                hostId: hostId,
+                snapshotJson: snapshotJson,
+                fetchedAt: fetchedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PackageListCacheTableProcessedTableManager =
+    ProcessedTableManager<
+      _$KelolaDatabase,
+      $PackageListCacheTable,
+      PackageListCacheRow,
+      $$PackageListCacheTableFilterComposer,
+      $$PackageListCacheTableOrderingComposer,
+      $$PackageListCacheTableAnnotationComposer,
+      $$PackageListCacheTableCreateCompanionBuilder,
+      $$PackageListCacheTableUpdateCompanionBuilder,
+      (
+        PackageListCacheRow,
+        BaseReferences<
+          _$KelolaDatabase,
+          $PackageListCacheTable,
+          PackageListCacheRow
+        >,
+      ),
+      PackageListCacheRow,
+      PrefetchHooks Function()
+    >;
 
 class $KelolaDatabaseManager {
   final _$KelolaDatabase _db;
@@ -15436,4 +15887,6 @@ class $KelolaDatabaseManager {
       $$VaultTombstonesTableTableManager(_db, _db.vaultTombstones);
   $$EnvVarsTableTableManager get envVars =>
       $$EnvVarsTableTableManager(_db, _db.envVars);
+  $$PackageListCacheTableTableManager get packageListCache =>
+      $$PackageListCacheTableTableManager(_db, _db.packageListCache);
 }

@@ -318,3 +318,13 @@ class VaultTombstones extends Table {
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
+
+@DataClassName('PackageListCacheRow')
+class PackageListCache extends Table {
+  TextColumn get hostId => text().references(Hosts, #id)();
+  TextColumn get snapshotJson => text()();
+  DateTimeColumn get fetchedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {hostId};
+}

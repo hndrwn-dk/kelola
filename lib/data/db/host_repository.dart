@@ -205,6 +205,9 @@ class HostRepository {
       )..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.snippets)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.pins)..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(
+        _db.packageListCache,
+      )..where((t) => t.hostId.equals(id))).go();
       final last = await lastHostId();
       if (last == id) {
         await setLastHost(null);
@@ -1262,6 +1265,42 @@ class HostRepository {
     final rows = await _db.select(_db.hostTags).get();
     final set = rows.map((r) => r.tag).toSet().toList()..sort();
     return set;
+  }
+
+  Future<({PackageSnapshot snapshot, DateTime fetchedAt})?>
+      loadPackageListCache(String hostId) async {
+    final row = await (_db.select(_db.packageListCache)
+          ..where((t) => t.hostId.equals(hostId)))
+        .getSingleOrNull();
+    if (row == null) {
+      return null;
+    }
+    try {
+      final map = jsonDecode(row.snapshotJson);
+      if (map is! Map) {
+        return null;
+      }
+      return (
+        snapshot: PackageSnapshot.fromJson(Map<String, dynamic>.from(map)),
+        fetchedAt: row.fetchedAt.toUtc(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> savePackageListCache({
+    required String hostId,
+    required PackageSnapshot snapshot,
+  }) async {
+    final now = DateTime.now().toUtc();
+    await _db.into(_db.packageListCache).insertOnConflictUpdate(
+      PackageListCacheCompanion.insert(
+        hostId: hostId,
+        snapshotJson: jsonEncode(snapshot.toJson()),
+        fetchedAt: now,
+      ),
+    );
   }
 
   Future<void> savePackageUpdateCounts({

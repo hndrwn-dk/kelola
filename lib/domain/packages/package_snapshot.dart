@@ -23,6 +23,22 @@ class PackageUpdate {
     );
   }
 
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'currentVersion': currentVersion,
+        'candidateVersion': candidateVersion,
+        'security': security,
+      };
+
+  factory PackageUpdate.fromJson(Map<String, dynamic> json) {
+    return PackageUpdate(
+      name: json['name'] as String? ?? '',
+      currentVersion: json['currentVersion'] as String?,
+      candidateVersion: json['candidateVersion'] as String?,
+      security: json['security'] as bool? ?? false,
+    );
+  }
+
   String get versionMeta {
     final cur = currentVersion;
     final cand = candidateVersion;
@@ -55,6 +71,42 @@ class PackageSnapshot {
   bool get securitySupported => PackageCommands.securitySupported(manager);
 
   int get securityCount => updates.where((u) => u.security).length;
+
+  Map<String, Object?> toJson() => {
+        'manager': manager.name,
+        'updates': updates.map((u) => u.toJson()).toList(),
+        'rebootRequired': rebootRequired,
+        'rebootReasons': rebootReasons,
+      };
+
+  factory PackageSnapshot.fromJson(Map<String, dynamic> json) {
+    final mgrName = json['manager'] as String? ?? 'unknown';
+    final mgr = PackageManager.values.where((m) => m.name == mgrName);
+    final rawUpdates = json['updates'];
+    final updates = <PackageUpdate>[];
+    if (rawUpdates is List) {
+      for (final item in rawUpdates) {
+        if (item is Map) {
+          updates.add(
+            PackageUpdate.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+    }
+    final rawReasons = json['rebootReasons'];
+    final reasons = <String>[];
+    if (rawReasons is List) {
+      for (final r in rawReasons) {
+        if (r is String) reasons.add(r);
+      }
+    }
+    return PackageSnapshot(
+      manager: mgr.isEmpty ? PackageManager.unknown : mgr.first,
+      updates: updates,
+      rebootRequired: json['rebootRequired'] as bool? ?? false,
+      rebootReasons: reasons,
+    );
+  }
 }
 
 enum PackageListFilter { security, all }

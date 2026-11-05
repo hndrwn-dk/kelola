@@ -170,6 +170,129 @@ void main() {
     expect(find.text('ALL 0'), findsNothing);
   });
 
+  testWidgets('cache hit shows list without probing', (tester) async {
+    var probes = 0;
+    await repo.savePackageListCache(
+      hostId: host.id,
+      snapshot: const PackageSnapshot(
+        manager: PackageManager.apt,
+        updates: [PackageUpdate(name: 'cached-pkg')],
+        rebootRequired: false,
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          hostRepositoryProvider.overrideWithValue(repo),
+          sessionPoolProvider.overrideWithValue(
+            _PackagesPool(
+              repository: repo,
+              list: () async {
+                probes++;
+                return const PackageSnapshot(
+                  manager: PackageManager.apt,
+                  updates: [PackageUpdate(name: 'fresh-pkg')],
+                  rebootRequired: false,
+                );
+              },
+            ),
+          ),
+          enrollmentProvider.overrideWith(_ReadyEnrollment.new),
+        ],
+        child: KelolaApp(home: PackagesScreen(hostId: host.id)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('cached-pkg'), findsOneWidget);
+    expect(find.text('fresh-pkg'), findsNothing);
+    expect(find.textContaining('Updated'), findsOneWidget);
+    expect(probes, 0);
+  });
+
+  testWidgets('pull refresh replaces cache', (tester) async {
+    await repo.savePackageListCache(
+      hostId: host.id,
+      snapshot: const PackageSnapshot(
+        manager: PackageManager.apt,
+        updates: [PackageUpdate(name: 'cached-pkg')],
+        rebootRequired: false,
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          hostRepositoryProvider.overrideWithValue(repo),
+          sessionPoolProvider.overrideWithValue(
+            _PackagesPool(
+              repository: repo,
+              list: () async => const PackageSnapshot(
+                manager: PackageManager.apt,
+                updates: [PackageUpdate(name: 'fresh-pkg')],
+                rebootRequired: false,
+              ),
+            ),
+          ),
+          enrollmentProvider.overrideWith(_ReadyEnrollment.new),
+        ],
+        child: KelolaApp(home: PackagesScreen(hostId: host.id)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.fling(
+      find.byType(RefreshIndicator),
+      const Offset(0, 300),
+      1000,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('fresh-pkg'), findsOneWidget);
+    expect(find.text('cached-pkg'), findsNothing);
+    final loaded = await repo.loadPackageListCache(host.id);
+    expect(loaded!.snapshot.updates.single.name, 'fresh-pkg');
+  });
+
+  testWidgets('failed refresh keeps prior cache list', (tester) async {
+    await repo.savePackageListCache(
+      hostId: host.id,
+      snapshot: const PackageSnapshot(
+        manager: PackageManager.apt,
+        updates: [PackageUpdate(name: 'cached-pkg')],
+        rebootRequired: false,
+      ),
+    );
+    var n = 0;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          hostRepositoryProvider.overrideWithValue(repo),
+          sessionPoolProvider.overrideWithValue(
+            _PackagesPool(
+              repository: repo,
+              list: () async {
+                n++;
+                throw Exception('ssh down');
+              },
+            ),
+          ),
+          enrollmentProvider.overrideWith(_ReadyEnrollment.new),
+        ],
+        child: KelolaApp(home: PackagesScreen(hostId: host.id)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(n, 0);
+    await tester.fling(
+      find.byType(RefreshIndicator),
+      const Offset(0, 300),
+      1000,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('cached-pkg'), findsOneWidget);
+    expect(find.byType(KelolaError), findsOneWidget);
+  });
+
   testWidgets('leaving Packages cancels the in-flight list', (tester) async {
     final gate = Completer<PackageSnapshot>();
     final pool = _PackagesPool(
