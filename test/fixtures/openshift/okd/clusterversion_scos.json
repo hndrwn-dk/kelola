@@ -1,0 +1,16 @@
+{
+  "_synthetic": "M48.1 synthetic: OKD on CentOS Stream CoreOS ClusterVersion, not captured from a cluster",
+  "apiVersion": "config.openshift.io/v1",
+  "kind": "ClusterVersion",
+  "metadata": {"name": "version"},
+  "spec": {"channel": "stable-scos-4"},
+  "status": {
+    "desired": {"version": "4.17.0-okd-scos.0"},
+    "availableUpdates": null,
+    "conditions": [
+      {"type": "Available", "status": "True"},
+      {"type": "Failing", "status": "False"},
+      {"type": "Progressing", "status": "False", "message": "Cluster version is 4.17.0-okd-scos.0"}
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/k8s/cluster_kind.dart';
 
 /// M48: Machine Config Daemon state from the node annotation
 /// `machineconfiguration.openshift.io/state`. Null off OpenShift.
@@ -17,6 +18,7 @@ class ClusterNodeMembership {
     this.mcdReason = '',
     this.roles = const [],
     this.labels = const {},
+    this.osImage = '',
   });
 
   final String name;
@@ -44,6 +46,10 @@ class ClusterNodeMembership {
   /// Node labels, kept so a MachineConfigPool's `nodeSelector` can be
   /// matched against nodes already read (no extra call).
   final Map<String, String> labels;
+
+  /// M48.1: `status.nodeInfo.osImage`, e.g. `CentOS Stream CoreOS 417.9…`.
+  /// Empty when missing.
+  final String osImage;
 
   /// `Ready · Done`, `Ready · Working (update pending)`,
   /// `Ready · Degraded: <reason>`. Plain `Ready` off OpenShift.
@@ -145,6 +151,12 @@ class ClusterHealth {
 
   /// `config current-context` on the host. Empty when unknown.
   final String kubeContext;
+
+  /// M48.1: distro hinted by node OS images, before ClusterVersion is
+  /// read. Null unless the cluster is known to be OpenShift.
+  OpenShiftDistro? get distroHint => isOpenShift == true
+      ? openShiftDistroFrom(osImages: nodes.map((n) => n.osImage))
+      : null;
 
   /// Nodes whose MCD state is Degraded (OpenShift only).
   List<ClusterNodeMembership> get mcdDegradedNodes => [

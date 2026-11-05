@@ -1,0 +1,11 @@
+{
+  "_synthetic": "M48.1 synthetic: one OKD/SCOS node with MCD annotations as in the M48 fixture",
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {"metadata": {"name": "crc", "labels": {"node-role.kubernetes.io/master": "", "node-role.kubernetes.io/control-plane": "", "node-role.kubernetes.io/worker": ""},
+      "annotations": {"machineconfiguration.openshift.io/state": "Done", "machineconfiguration.openshift.io/currentConfig": "rendered-master-a1", "machineconfiguration.openshift.io/desiredConfig": "rendered-master-a1", "machineconfiguration.openshift.io/reason": ""}},
+     "status": {"conditions": [{"type": "Ready", "status": "True"}],
+      "nodeInfo": {"kubeletVersion": "v1.30.4", "containerRuntimeVersion": "cri-o://1.30.4", "osImage": "CentOS Stream CoreOS 417.9.202410150733-0"}}}
+  ]
+}

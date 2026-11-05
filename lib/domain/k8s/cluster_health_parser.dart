@@ -202,6 +202,7 @@ ClusterNodeMembership _node(Map<String, dynamic> raw) {
     ready: ready,
     kubeletVersion: _str(info['kubeletVersion']),
     containerRuntime: _str(info['containerRuntimeVersion']),
+    osImage: _str(info['osImage']),
     controlPlane: controlPlane,
     pressures: pressures,
     mcdState: _mcdState(_str(annotations['$_mcPrefix/state'])),

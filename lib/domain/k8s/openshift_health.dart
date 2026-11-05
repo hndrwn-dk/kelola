@@ -1,5 +1,6 @@
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
+import 'package:kelola/domain/k8s/cluster_kind.dart';
 
 /// M48: OpenShift-only cluster state, read by `OpenShiftHealthProbe` on top
 /// of the Kubernetes home reads. Read-only; nothing here mutates the cluster.
@@ -64,6 +65,9 @@ class ClusterVersionState {
 
   /// `len(spec.overrides)`: components the CVO no longer manages.
   final int overrides;
+
+  /// M48.1: OKD when the version says so, OCP for any other version.
+  OpenShiftDistro? get distro => openShiftDistroFrom(version: version);
 }
 
 class ClusterOperatorState {

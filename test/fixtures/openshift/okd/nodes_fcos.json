@@ -1,0 +1,11 @@
+{
+  "_synthetic": "M48.1 synthetic: one OKD/FCOS node with MCD annotations as in the M48 fixture",
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {"metadata": {"name": "okd-master-0", "labels": {"node-role.kubernetes.io/master": "", "node-role.kubernetes.io/control-plane": ""},
+      "annotations": {"machineconfiguration.openshift.io/state": "Done", "machineconfiguration.openshift.io/currentConfig": "rendered-master-f1", "machineconfiguration.openshift.io/desiredConfig": "rendered-master-f1"}},
+     "status": {"conditions": [{"type": "Ready", "status": "True"}],
+      "nodeInfo": {"kubeletVersion": "v1.28.6", "containerRuntimeVersion": "cri-o://1.28.3", "osImage": "Fedora CoreOS 39.20240210.3.0"}}}
+  ]
+}
