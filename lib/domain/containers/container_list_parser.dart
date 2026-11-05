@@ -89,7 +89,18 @@ class ContainerListParser {
 
   List<ContainerRow> _parsePods(String raw, String engine) {
     final out = <ContainerRow>[];
-    final label = engine == 'kubectl' ? 'k8s' : (engine == 'k3s' ? 'k3s' : 'k8s');
+    // M48: the probe names the CLI that listed the pods (`cli=oc`), so a
+    // pod opens with the same CLI. Older output without it falls back to
+    // the first engine found.
+    final cli = RegExp(r'^cli=(\w+)\s*$', multiLine: true)
+            .firstMatch(raw)
+            ?.group(1) ??
+        engine;
+    final label = switch (cli) {
+      'k3s' => 'k3s',
+      'oc' => 'oc',
+      _ => 'k8s',
+    };
     for (final line in raw.split('\n')) {
       final parts = line.trim().split('\t');
       if (parts.length < 3) {

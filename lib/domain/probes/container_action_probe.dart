@@ -3,6 +3,7 @@ import 'package:kelola/domain/containers/container_lockout.dart';
 import 'package:kelola/domain/containers/container_row.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/sudo_hint.dart';
@@ -31,7 +32,8 @@ class ContainerActionProbe extends Probe<String> {
 LC_ALL=C
 (kubectl -n $ns describe pod $name 2>/dev/null \\
   || sudo -n kubectl -n $ns describe pod $name 2>/dev/null \\
-  || sudo -n k3s kubectl -n $ns describe pod $name 2>/dev/null) | head -n 80
+  || sudo -n k3s kubectl -n $ns describe pod $name 2>/dev/null \\
+  || $kOcBinary -n $ns describe pod $name 2>/dev/null) | head -n 80
 ''';
       }
       return 'echo ---K8S---; exit 2';
