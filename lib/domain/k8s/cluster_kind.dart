@@ -2,6 +2,41 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
 
+/// M48.1: which OpenShift distribution a cluster runs.
+enum OpenShiftDistro { ocp, okd }
+
+const _okdImagePrefixes = ['CentOS Stream CoreOS', 'Fedora CoreOS'];
+const _ocpImagePrefix = 'Red Hat Enterprise Linux CoreOS';
+
+/// Version wins; osImage only when version is empty. Null = unknown: never
+/// claim OKD without evidence.
+OpenShiftDistro? openShiftDistroFrom({
+  String version = '',
+  Iterable<String> osImages = const [],
+}) {
+  final v = version.trim();
+  if (v.isNotEmpty) {
+    return v.toLowerCase().contains('okd')
+        ? OpenShiftDistro.okd
+        : OpenShiftDistro.ocp;
+  }
+  var okd = false;
+  var ocp = false;
+  for (final raw in osImages) {
+    final image = raw.trim();
+    if (_okdImagePrefixes.any(image.startsWith)) {
+      okd = true;
+    } else if (image.startsWith(_ocpImagePrefix)) {
+      ocp = true;
+    }
+  }
+  if (okd == ocp) {
+    // Neither, or a mix of both.
+    return null;
+  }
+  return okd ? OpenShiftDistro.okd : OpenShiftDistro.ocp;
+}
+
 /// M48: one place decides "OpenShift" vs "Kubernetes", so the host
 /// dashboard tile and the Kubernetes home band title cannot disagree.
 /// Unknown (null) is Kubernetes: never guess OpenShift.
