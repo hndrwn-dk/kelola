@@ -11,7 +11,8 @@ abstract final class WhatsNewStrings {
   static String label(String version) => "What's new · $version";
 
   static const notes = <String>[
-    'OpenShift support: the Kubernetes screen shows version, operators, machine config pools and pending CSRs.',
-    'OpenShift (RHCOS) nodes can be added as hosts, read-only, with a link back to their cluster.',
+    'Packages opens instantly from the last list for each host.',
+    'OKD clusters are labelled OKD, not OpenShift.',
+    'Files refuses unsafe file names sent by a server.',
   ];
 }
