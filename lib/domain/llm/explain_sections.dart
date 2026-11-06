@@ -65,6 +65,7 @@ ParsedExplain parseExplainSections(
     '($aliasPattern)'
     r'(?:\*{1,2}|_{1,2})?'
     r'[ \t]*:'
+    r'[ \t]*(?:\*{1,2}|_{1,2})?'
     r'[ \t]*(.*)$',
     multiLine: true,
     caseSensitive: false,

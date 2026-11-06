@@ -42,6 +42,8 @@ class AppLockGate extends StatefulWidget {
 class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   final _queue = AppLockLinkQueue();
   ProviderSubscription<AsyncValue<int>>? _timeoutSub;
+  ProviderSubscription<AsyncValue<bool>>? _screenshotsSub;
+  var _allowScreenshots = false;
   var _hydrated = false;
   var _loaded = false;
   var _locked = false;
@@ -96,10 +98,45 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
       },
       fireImmediately: true,
     );
+    _screenshotsSub?.close();
+    _screenshotsSub = container.listen<AsyncValue<bool>>(
+      allowScreenshotsProvider,
+      (previous, next) {
+        final allow = next.asData?.value;
+        if (allow != null && allow != _allowScreenshots) {
+          final wasSecure = recentsSecure(
+            _timeoutSec,
+            allowScreenshots: _allowScreenshots,
+          );
+          _allowScreenshots = allow;
+          _pushWindowFlags(wasSecure: wasSecure);
+        }
+      },
+      fireImmediately: true,
+    );
+  }
+
+  void _pushWindowFlags({required bool wasSecure}) {
+    final container = _container();
+    if (container == null) {
+      return;
+    }
+    final port = container.read(appLockPortProvider);
+    final secure = recentsSecure(
+      _timeoutSec,
+      allowScreenshots: _allowScreenshots,
+    );
+    if (secure || wasSecure) {
+      port.setRecentsSecure(secure);
+    }
+    port.setRecentsPreviewHidden(
+      recentsPreviewHidden(_timeoutSec, allowScreenshots: _allowScreenshots),
+    );
   }
 
   @override
   void dispose() {
+    _screenshotsSub?.close();
     _timeoutSub?.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -130,14 +167,13 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
       return;
     }
     final first = !_loaded;
-    final wasSecure = recentsSecure(_timeoutSec);
+    final wasSecure = recentsSecure(
+      _timeoutSec,
+      allowScreenshots: _allowScreenshots,
+    );
     _loaded = true;
     _timeoutSec = sec;
-    final secure = recentsSecure(sec);
-    final container = _container();
-    if (container != null && (secure || wasSecure)) {
-      container.read(appLockPortProvider).setRecentsSecure(secure);
-    }
+    _pushWindowFlags(wasSecure: wasSecure);
     if (sec == 0) {
       if (_locked) {
         _unlock();

@@ -159,8 +159,9 @@ SudoHint kelolaSudoHint({
         body:
             'This host\'s sudo asks for a password, so this mutate failed. '
             'Kelola never prompts for a sudo password on daily probes. '
-            'Add a NOPASSWD line for this unit only at $visudoKelolaPath '
-            '(mode 0440), or a polkit rule limited to $unit. '
+            'Use Enable Kelola sudo, or add a NOPASSWD line for this unit only '
+            'at $visudoKelolaPath (mode 0440), or a polkit rule limited to '
+            '$unit. '
             '$sudoNeedsNoSudoCopy',
         snippet: '# path: $visudoKelolaPath  mode: 0440\n'
             '$visudoKelolaCommand\n'

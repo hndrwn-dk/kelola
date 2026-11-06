@@ -41,6 +41,20 @@ List<Host> planSnippetMultiHosts(Snippet snippet, List<Host> hosts) {
   ];
 }
 
+/// Distinct host tags, for filtering which hosts a snippet runs on.
+List<String> snippetMultiTags(List<Host> hosts) {
+  final tags = {for (final host in hosts) ...host.tags}.toList()..sort();
+  return tags;
+}
+
+/// Hosts a tag selects. A null tag selects every host.
+Set<String> snippetMultiSelectTag(List<Host> hosts, String? tag) {
+  return {
+    for (final host in hosts)
+      if (tag == null || host.tags.contains(tag)) host.id,
+  };
+}
+
 SnippetBindings snippetMultiBindings(Host host, SnippetBindings shared) {
   return SnippetBindings(
     unit: shared.unit,

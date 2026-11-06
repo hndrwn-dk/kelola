@@ -377,7 +377,7 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
               pillText: 'keep',
             ),
           ),
-        if (rules.isEmpty && !_loading)
+        if (rules.isEmpty && !_loading && _error == null)
           const KelolaEmpty(body: 'No firewall rules reported.'),
         for (final rule in rules)
           Padding(

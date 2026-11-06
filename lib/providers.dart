@@ -81,6 +81,14 @@ final appLockTimeoutProvider = FutureProvider<int>((ref) async {
   }
 });
 
+final allowScreenshotsProvider = FutureProvider<bool>((ref) async {
+  try {
+    return await ref.watch(hostRepositoryProvider).allowScreenshots();
+  } catch (_) {
+    return false;
+  }
+});
+
 final sessionLogRetentionProvider = FutureProvider<int>((ref) async {
   try {
     return await ref.watch(hostRepositoryProvider).sessionLogRetentionDays();

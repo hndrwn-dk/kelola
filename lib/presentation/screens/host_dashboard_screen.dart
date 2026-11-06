@@ -258,8 +258,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         probe: const DashboardProbe(),
         facts: knownFacts,
       );
-      final fleetCache = await repo.loadFleetCacheByHost();
-      final pending = fleetCache[host.id]?.pendingUpdates;
+      final pending = await repo.knownPendingUpdates(host.id);
       CoreOsNodeStatus? node;
       String? nodeError;
       String? bastionId;
@@ -277,6 +276,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         }
         // Cached node lists only; never SSH to the bastion from here.
         final hostname = node?.hostname ?? '';
+        final fleetCache = await repo.loadFleetCacheByHost();
         bastionId = clusterBastionFor(
           hostname.isNotEmpty ? hostname : host.alias,
           {for (final e in fleetCache.entries) e.key: e.value.k8s},
@@ -307,7 +307,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       setState(() {
         _facts = facts;
         _dash = dash;
-        _pendingUpdates = fleetCache.containsKey(host.id) ? pending : null;
+        _pendingUpdates = pending;
         _host = updated ?? host;
         _startup = startup;
         _error = dashboardErrorAfterSuccessfulPoll(_error);
@@ -768,7 +768,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
               ServiceRow(
                 risk: RiskLevel.read,
                 name: 'Snippets',
-                meta: 'templates · never fleet',
+                meta: 'templates · this host or several',
                 onTap: () => _open((_) => SnippetsScreen(host: host)),
               ),
               if (_startup.isNotEmpty) ...[
@@ -973,16 +973,13 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   }
 
   Future<void> _reloadPendingUpdates() async {
-    final fleetCache =
-        await ref.read(hostRepositoryProvider).loadFleetCacheByHost();
+    final pending = await ref
+        .read(hostRepositoryProvider)
+        .knownPendingUpdates(widget.hostId);
     if (!mounted) {
       return;
     }
-    final pending = fleetCache[widget.hostId]?.pendingUpdates;
-    setState(() {
-      _pendingUpdates =
-          fleetCache.containsKey(widget.hostId) ? pending : _pendingUpdates;
-    });
+    setState(() => _pendingUpdates = pending ?? _pendingUpdates);
   }
 
   Future<void> _editNote() async {

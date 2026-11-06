@@ -21,6 +21,8 @@ String kelolaSudoersGroupLabel(KelolaSudoersGroup g) {
     KelolaSudoersGroup.packages => 'Packages',
     KelolaSudoersGroup.firewall => 'Firewall',
     KelolaSudoersGroup.hostPower => 'Host power',
+    KelolaSudoersGroup.services => 'Services',
+    KelolaSudoersGroup.processes => 'Processes',
   };
 }
 
@@ -34,7 +36,7 @@ String kelolaSudoersGroupsLabel(Set<KelolaSudoersGroup> groups) {
 /// Guided install of [kelolaSudoersPath]. Returns true on verified install.
 ///
 /// Always installs the full set available for [facts] (Packages, Firewall,
-/// Host power when present). No per-group picker.
+/// Host power, Services, Processes when present). No per-group picker.
 Future<bool> runEnableKelolaSudoFlow({
   required BuildContext context,
   required WidgetRef ref,

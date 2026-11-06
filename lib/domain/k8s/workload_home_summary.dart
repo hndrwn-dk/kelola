@@ -42,6 +42,7 @@ class WorkloadHomeSummary {
     var crashLoop = 0;
     var restarting = 0;
     final notReady = <K8sWorkload>[];
+    final flapping = <K8sWorkload>[];
     for (final row in rows) {
       switch (row.kind) {
         case K8sKind.deployment:
@@ -67,16 +68,19 @@ class WorkloadHomeSummary {
       }
       if (row.notReady) {
         notReady.add(row);
+      } else if (row.readyButRestarting) {
+        flapping.add(row);
       }
     }
     notReady.sort(_worstFirst);
+    flapping.sort(_worstFirst);
     return WorkloadHomeSummary(
       deployments: deployments,
       statefulSets: statefulSets,
       daemonSets: daemonSets,
       pods: pods,
       notReadyCount: notReady.length,
-      worst: notReady.take(worstLimit).toList(growable: false),
+      worst: [...notReady, ...flapping].take(worstLimit).toList(growable: false),
       pendingCount: pending,
       crashLoopCount: crashLoop,
       restartingCount: restarting,
@@ -120,5 +124,9 @@ bool? coreDnsReadyFromWorkloads(List<K8sWorkload> rows) {
   if (dns.isEmpty) {
     return null;
   }
-  return dns.every((p) => !p.notReady && p.health == HealthStatus.healthy);
+  return dns.every(
+    (p) =>
+        !p.notReady &&
+        (p.health == HealthStatus.healthy || p.readyButRestarting),
+  );
 }

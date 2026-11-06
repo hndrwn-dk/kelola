@@ -13,6 +13,7 @@ import 'package:kelola/domain/probes/process_signal_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
+import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/providers.dart';
 
 class ProcessesScreen extends ConsumerStatefulWidget {
@@ -38,6 +39,18 @@ class _ProcessesScreenState extends ConsumerState<ProcessesScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<void> _enableSudo() async {
+    final ok = await runEnableKelolaSudoFlow(
+      context: context,
+      ref: ref,
+      host: _host!,
+      facts: _facts,
+    );
+    if (ok && mounted) {
+      await _load();
+    }
   }
 
   Future<void> _load() async {
@@ -187,6 +200,7 @@ class _ProcessesScreenState extends ConsumerState<ProcessesScreen> {
               child: KelolaError(
                 message: _error!,
                 sudoUser: _host?.username,
+                onEnableSudo: _host == null ? null : _enableSudo,
               ),
             ),
           Expanded(

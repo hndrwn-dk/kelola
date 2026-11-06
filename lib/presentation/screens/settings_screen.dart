@@ -50,6 +50,66 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _restoreNote;
 
+  Future<void> _pickScreenshots() async {
+    final c = context.kc;
+    final allowed = ref.read(allowScreenshotsProvider).asData?.value ?? false;
+    final chosen = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Screenshots',
+                  style: KelolaType.display(color: c.text, size: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'While App lock is on, Kelola blocks screenshots and screen '
+                  'recording. Allowing them can capture host names, addresses '
+                  'and command output. Below Android 13 and on iOS it also '
+                  'shows the last screen in the app switcher while locked.',
+                  style: KelolaType.body(color: c.muted, size: 13),
+                ),
+                const SizedBox(height: 12),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Blocked',
+                  meta: allowed ? 'with App lock' : 'selected',
+                  onTap: () => Navigator.of(ctx).pop(false),
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Allowed',
+                  meta: allowed ? 'selected' : 'always',
+                  onTap: () => Navigator.of(ctx).pop(true),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (chosen == null || chosen == allowed) {
+      return;
+    }
+    await ref.read(hostRepositoryProvider).setAllowScreenshots(chosen);
+    ref.invalidate(allowScreenshotsProvider);
+  }
+
   Future<void> _pickLockTimeout() async {
     final can = ref.read(appLockAvailableProvider).asData?.value ?? false;
     if (!can) {
@@ -879,6 +939,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final timeout = ref.watch(appLockTimeoutProvider).asData?.value ?? 0;
+    final screenshotsAllowed =
+        ref.watch(allowScreenshotsProvider).asData?.value ?? false;
     final retentionDays = ref.watch(sessionLogRetentionProvider).asData?.value ??
         kDefaultSessionLogRetentionDays;
     final canAuth = ref.watch(appLockAvailableProvider).asData?.value ?? false;
@@ -941,6 +1003,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ? AppLockTimeout.fromSeconds(timeout).label
                           : 'set a device screen lock first',
                   onTap: canAuth ? _pickLockTimeout : null,
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Screenshots',
+                  meta: screenshotsAllowed || timeout == 0
+                      ? 'allowed'
+                      : 'blocked with App lock',
+                  onTap: _pickScreenshots,
                 ),
                 const SizedBox(height: 8),
                 ServiceRow(

@@ -696,7 +696,9 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                       child: const Text('Edit'),
                     ),
                     TextButton(
-                      onPressed: _starting ? null : () => _startTarget(t),
+                      onPressed: _starting || tunnelTargetRunning(t, active)
+                          ? null
+                          : () => _startTarget(t),
                       child: const Text('Start'),
                     ),
                   ],

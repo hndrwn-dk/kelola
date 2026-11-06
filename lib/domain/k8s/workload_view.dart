@@ -1,5 +1,14 @@
 import 'package:kelola/domain/k8s/workload.dart';
 
+/// Line under the Kubernetes home workload pills when nothing needs listing.
+/// Zero rows from a cluster we could not read says nothing about readiness.
+String workloadsAllClearLine({required bool apiReachable, required int rows}) {
+  if (!apiReachable) {
+    return 'Could not read workloads';
+  }
+  return rows == 0 ? 'No workloads listed' : 'All listed workloads ready';
+}
+
 class WorkloadListView {
   const WorkloadListView({required this.rows});
 

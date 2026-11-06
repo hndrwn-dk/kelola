@@ -1289,6 +1289,17 @@ class HostRepository {
     }
   }
 
+  /// Pending updates the dashboard may show, or null until a package list
+  /// was read. Fleet rows hold 0 for "never checked", so 0 alone proves nothing.
+  Future<int?> knownPendingUpdates(String hostId) async {
+    final listed = await loadPackageListCache(hostId);
+    if (listed != null) {
+      return listed.snapshot.updates.length;
+    }
+    final fleet = (await loadFleetCacheByHost())[hostId]?.pendingUpdates;
+    return fleet != null && fleet > 0 ? fleet : null;
+  }
+
   Future<void> savePackageListCache({
     required String hostId,
     required PackageSnapshot snapshot,
@@ -1531,6 +1542,19 @@ class HostRepository {
     return value;
   }
 
+  Future<bool> allowScreenshots() async {
+    return (await _settings())?.allowScreenshots ?? false;
+  }
+
+  Future<void> setAllowScreenshots(bool value) async {
+    final existing = await _settings();
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
+          _appSettingsWrite(existing, allowScreenshots: Value(value)),
+        );
+  }
+
   Future<void> setAppLockTimeoutSec(int value) async {
     final existing = await _settings();
     await _db
@@ -1689,6 +1713,7 @@ class HostRepository {
     Value<int> tunnelIdleMinutes = const Value.absent(),
     Value<bool> snippetLibraryReady = const Value.absent(),
     Value<int> appLockTimeoutSec = const Value.absent(),
+    Value<bool> allowScreenshots = const Value.absent(),
     Value<int> sessionLogRetentionDays = const Value.absent(),
     Value<bool> fleetWatchEnabled = const Value.absent(),
     Value<int> fleetWatchDiskPercent = const Value.absent(),
@@ -1741,6 +1766,9 @@ class HostRepository {
       appLockTimeoutSec: appLockTimeoutSec.present
           ? appLockTimeoutSec
           : Value(existing?.appLockTimeoutSec ?? 0),
+      allowScreenshots: allowScreenshots.present
+          ? allowScreenshots
+          : Value(existing?.allowScreenshots ?? false),
       sessionLogRetentionDays: sessionLogRetentionDays.present
           ? sessionLogRetentionDays
           : Value(

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/app.dart';
@@ -9,6 +10,11 @@ import 'package:kelola/providers.dart';
 
 void main() {
   testWidgets('Help lists every FAQ question and answer', (tester) async {
+    // The list is lazy: a tall view builds every topic.
+    tester.view.physicalSize = const Size(1080, 12000);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
     // KelolaApp's FleetWatchResume reads providers on the first frame.
     final db = KelolaDatabase.memory();
     addTearDown(db.close);

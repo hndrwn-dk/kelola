@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
@@ -52,6 +53,17 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<void> _enableSudo() async {
+    final ok = await runEnableKelolaSudoFlow(
+      context: context,
+      ref: ref,
+      host: widget.host,
+    );
+    if (ok && mounted) {
+      await _load();
+    }
   }
 
   Future<void> _load() async {
@@ -208,6 +220,7 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
                     KelolaError(
                       message: _error!,
                       sudoUser: widget.host.username,
+                      onEnableSudo: _enableSudo,
                     )
                   else if (detail == null && _busy)
                     const SizedBox(height: 48)
@@ -221,6 +234,7 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
                     KelolaError(
                       message: _error!,
                       sudoUser: widget.host.username,
+                      onEnableSudo: _enableSudo,
                     ),
                     const SizedBox(height: 12),
                   ],

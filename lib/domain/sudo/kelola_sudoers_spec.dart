@@ -7,7 +7,7 @@ import 'package:kelola/domain/facts/host_facts.dart';
 const kelolaSudoersPath = '/etc/sudoers.d/kelola';
 const kelolaSudoersMode = '0440';
 
-enum KelolaSudoersGroup { packages, firewall, hostPower }
+enum KelolaSudoersGroup { packages, firewall, hostPower, services, processes }
 
 class KelolaSudoersSpec {
   const KelolaSudoersSpec({
@@ -42,7 +42,8 @@ class KelolaSudoersSpec {
   String get contentHash => sha256.convert(utf8.encode(content)).toString();
 }
 
-/// Exact argv Kelola runs via `sudo -n` for the selected groups.
+/// Commands Kelola runs via `sudo -n` for the selected groups. In a sudoers
+/// rule a trailing `*` also matches spaces, so such a rule is not one argument.
 KelolaSudoersSpec buildKelolaSudoersSpec({
   required String user,
   required HostFacts facts,
@@ -58,6 +59,12 @@ KelolaSudoersSpec buildKelolaSudoersSpec({
   if (groups.contains(KelolaSudoersGroup.hostPower)) {
     cmds.addAll(const ['/usr/sbin/reboot', '/usr/sbin/poweroff']);
   }
+  if (groups.contains(KelolaSudoersGroup.services)) {
+    cmds.addAll(_serviceCommands(facts.init));
+  }
+  if (groups.contains(KelolaSudoersGroup.processes)) {
+    cmds.addAll(_processCommands);
+  }
   return KelolaSudoersSpec(user: user, groups: groups, commands: cmds);
 }
 
@@ -69,8 +76,37 @@ Set<KelolaSudoersGroup> defaultKelolaSudoersGroups(HostFacts facts) {
   if (facts.fw != FirewallBackend.none) {
     out.add(KelolaSudoersGroup.firewall);
   }
+  if (_serviceCommands(facts.init).isNotEmpty) {
+    out.add(KelolaSudoersGroup.services);
+  }
+  out.add(KelolaSudoersGroup.processes);
   return out;
 }
+
+/// Unit lifecycle verbs only. The first argument must start with a letter or
+/// digit, but `*` matches spaces, so later arguments and options still pass:
+/// this grants any unit, not one safe name. `enable`, `disable` and `link` are
+/// left out on purpose: they accept a unit file path, so allowing them
+/// passwordless would let this login run anything as root.
+List<String> _serviceCommands(InitSystem init) {
+  if (init != InitSystem.systemd) {
+    return const [];
+  }
+  return const [
+    '/usr/bin/systemctl start [a-zA-Z0-9]*',
+    '/usr/bin/systemctl stop [a-zA-Z0-9]*',
+    '/usr/bin/systemctl restart [a-zA-Z0-9]*',
+    '/usr/bin/systemctl reload [a-zA-Z0-9]*',
+  ];
+}
+
+/// The two signals the Processes screen sends. The first pid must start with
+/// a digit, but `*` matches spaces, so this grants signalling any process. The
+/// app's PID 1 and sshd guard does not apply to direct sudo use.
+const _processCommands = [
+  '/usr/bin/kill -s TERM [0-9]*',
+  '/usr/bin/kill -s KILL [0-9]*',
+];
 
 List<String> _packageCommands(PackageManager pkg) {
   switch (pkg) {

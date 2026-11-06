@@ -206,7 +206,7 @@ class CorrelationStore {
           for (var i = 0; i < lines.length; i++)
             JournalEntry(
               cursor: 'unit-detail-$i',
-              realtimeUsec: '0',
+              realtimeUsec: '',
               priority: 3,
               message: lines[i],
               unit: key,

@@ -12,6 +12,7 @@ import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/domain/units/unit_list_view.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/screens/unit_detail_screen.dart';
+import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 import 'package:kelola/providers.dart';
 
@@ -56,6 +57,18 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
     super.initState();
     _filter = widget.failedOnly ? UnitListFilter.failed : UnitListFilter.all;
     _load();
+  }
+
+  Future<void> _enableSudo() async {
+    final ok = await runEnableKelolaSudoFlow(
+      context: context,
+      ref: ref,
+      host: _host!,
+      facts: _facts,
+    );
+    if (ok && mounted) {
+      await _load();
+    }
   }
 
   Future<void> _load() async {
@@ -221,6 +234,7 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
               child: KelolaError(
                 message: _error!,
                 sudoUser: _host?.username,
+                onEnableSudo: _host == null ? null : _enableSudo,
               ),
             ),
           Expanded(

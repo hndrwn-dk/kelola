@@ -36,7 +36,7 @@ class KelolaDatabase extends _$KelolaDatabase {
   KelolaDatabase.connect(super.e);
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -294,6 +294,19 @@ WHERE id = 1
       }
       if (from < 27) {
         await m.createTable(packageListCache);
+      }
+      if (from < 28) {
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='app_settings'",
+        ).get();
+        if (tables.isNotEmpty) {
+          final cols =
+              await customSelect('PRAGMA table_info(app_settings)').get();
+          final names = cols.map((r) => r.read<String>('name')).toSet();
+          if (!names.contains('allow_screenshots')) {
+            await m.addColumn(appSettings, appSettings.allowScreenshots);
+          }
+        }
       }
     },
   );

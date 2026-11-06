@@ -716,6 +716,8 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
   late Set<String> _selected;
   List<SnippetMultiOutcome> _outcomes = const [];
   bool _busy = false;
+  String? _tag;
+  final _resultsKey = GlobalKey();
 
   @override
   void initState() {
@@ -754,6 +756,26 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
           style: KelolaType.body(color: c.muted, size: 13),
         ),
         const SizedBox(height: 12),
+        if (snippetMultiTags(widget.hosts).isNotEmpty) ...[
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              FilterPill(
+                label: 'All',
+                selected: _tag == null,
+                onTap: _busy ? null : () => _pickTag(null),
+              ),
+              for (final tag in snippetMultiTags(widget.hosts))
+                FilterPill(
+                  label: tag,
+                  selected: _tag == tag,
+                  onTap: _busy ? null : () => _pickTag(tag),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+        ],
         if (widget.hosts.isEmpty)
           Text(
             'No hosts match this snippet.',
@@ -809,6 +831,7 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
           const SizedBox(height: 12),
           Text('Running', style: KelolaType.mono(color: c.muted, size: 10.5)),
         ],
+        SizedBox(key: _resultsKey, height: 0),
         for (final outcome in _outcomes) ...[
           const SizedBox(height: 10),
           ServiceRow(
@@ -838,6 +861,25 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
         ],
       ],
     );
+  }
+
+  void _pickTag(String? tag) {
+    setState(() {
+      _tag = tag;
+      _selected = snippetMultiSelectTag(widget.hosts, tag);
+    });
+  }
+
+  void _revealResults() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _resultsKey.currentContext;
+      if (target != null && target.mounted) {
+        Scrollable.ensureVisible(
+          target,
+          duration: const Duration(milliseconds: 250),
+        );
+      }
+    });
   }
 
   Future<void> _runSelected() async {
@@ -889,6 +931,7 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
         return;
       }
       setState(() => _outcomes = outcomes);
+      _revealResults();
     } finally {
       if (mounted) {
         setState(() => _busy = false);

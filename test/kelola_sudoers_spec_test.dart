@@ -102,6 +102,8 @@ void main() {
         KelolaSudoersGroup.packages,
         KelolaSudoersGroup.firewall,
         KelolaSudoersGroup.hostPower,
+        KelolaSudoersGroup.services,
+        KelolaSudoersGroup.processes,
       },
     );
   });
@@ -110,6 +112,68 @@ void main() {
     final groups = defaultKelolaSudoersGroups(
       facts(pkg: PackageManager.unknown, fw: FirewallBackend.none),
     );
-    expect(groups, {KelolaSudoersGroup.hostPower});
+    expect(
+      groups,
+      containsAll(<KelolaSudoersGroup>{
+        KelolaSudoersGroup.hostPower,
+        KelolaSudoersGroup.processes,
+      }),
+    );
+    expect(groups, isNot(contains(KelolaSudoersGroup.packages)));
+    expect(groups, isNot(contains(KelolaSudoersGroup.firewall)));
+  });
+
+  group('services and processes', () {
+    final spec = buildKelolaSudoersSpec(
+      user: 'hendr',
+      facts: facts(),
+      groups: const {
+        KelolaSudoersGroup.services,
+        KelolaSudoersGroup.processes,
+      },
+    );
+
+    test('covers what Kelola runs through sudo', () {
+      for (final verb in ['start', 'stop', 'restart', 'reload']) {
+        expect(
+          spec.commands,
+          contains('/usr/bin/systemctl $verb [a-zA-Z0-9]*'),
+        );
+      }
+      expect(spec.commands, contains('/usr/bin/kill -s TERM [0-9]*'));
+      expect(spec.commands, contains('/usr/bin/kill -s KILL [0-9]*'));
+    });
+
+    test('never allows unit file installs, a bare binary or a shell', () {
+      for (final bad in ['enable', 'disable', 'link', 'edit', 'mask', 'daemon-']) {
+        expect(spec.content, isNot(contains('systemctl $bad')), reason: bad);
+      }
+      expect(spec.commands, isNot(contains('/usr/bin/systemctl')));
+      expect(spec.commands, isNot(contains('/usr/bin/systemctl *')));
+      expect(spec.content, isNot(contains('/bin/sh')));
+      expect(spec.content, isNot(contains('NOPASSWD: ALL')));
+    });
+
+    test('the first argument cannot begin as an option or a path', () {
+      for (final cmd in spec.commands.where((c) => c.contains('systemctl'))) {
+        expect(cmd, endsWith(' [a-zA-Z0-9]*'));
+      }
+    });
+
+    test('only systemd hosts get service rules', () {
+      final openrc = HostFacts.undiscovered.copyWith(init: InitSystem.openrc);
+      expect(
+        defaultKelolaSudoersGroups(openrc),
+        isNot(contains(KelolaSudoersGroup.services)),
+      );
+      expect(
+        buildKelolaSudoersSpec(
+          user: 'u',
+          facts: openrc,
+          groups: const {KelolaSudoersGroup.services},
+        ).commands,
+        isEmpty,
+      );
+    });
   });
 }

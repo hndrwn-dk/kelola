@@ -4087,6 +4087,21 @@ class $AppSettingsTable extends AppSettings
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _allowScreenshotsMeta = const VerificationMeta(
+    'allowScreenshots',
+  );
+  @override
+  late final GeneratedColumn<bool> allowScreenshots = GeneratedColumn<bool>(
+    'allow_screenshots',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("allow_screenshots" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _sessionLogRetentionDaysMeta =
       const VerificationMeta('sessionLogRetentionDays');
   @override
@@ -4240,6 +4255,7 @@ class $AppSettingsTable extends AppSettings
     tunnelIdleMinutes,
     snippetLibraryReady,
     appLockTimeoutSec,
+    allowScreenshots,
     sessionLogRetentionDays,
     fleetWatchEnabled,
     fleetWatchDiskPercent,
@@ -4399,6 +4415,15 @@ class $AppSettingsTable extends AppSettings
         appLockTimeoutSec.isAcceptableOrUnknown(
           data['app_lock_timeout_sec']!,
           _appLockTimeoutSecMeta,
+        ),
+      );
+    }
+    if (data.containsKey('allow_screenshots')) {
+      context.handle(
+        _allowScreenshotsMeta,
+        allowScreenshots.isAcceptableOrUnknown(
+          data['allow_screenshots']!,
+          _allowScreenshotsMeta,
         ),
       );
     }
@@ -4575,6 +4600,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.int,
         data['${effectivePrefix}app_lock_timeout_sec'],
       )!,
+      allowScreenshots: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}allow_screenshots'],
+      )!,
       sessionLogRetentionDays: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}session_log_retention_days'],
@@ -4655,6 +4684,10 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   /// `0` off, `-1` immediately, `60` / `300` / `900` otherwise.
   final int appLockTimeoutSec;
 
+  /// Lets screenshots through while App lock is on. Stays on this phone;
+  /// never in a vault blob.
+  final bool allowScreenshots;
+
   /// Days to keep non-bookmarked session logs. 7 / 14 / 30 / 90.
   final int sessionLogRetentionDays;
   final bool fleetWatchEnabled;
@@ -4688,6 +4721,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     required this.tunnelIdleMinutes,
     required this.snippetLibraryReady,
     required this.appLockTimeoutSec,
+    required this.allowScreenshots,
     required this.sessionLogRetentionDays,
     required this.fleetWatchEnabled,
     required this.fleetWatchDiskPercent,
@@ -4742,6 +4776,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     map['tunnel_idle_minutes'] = Variable<int>(tunnelIdleMinutes);
     map['snippet_library_ready'] = Variable<bool>(snippetLibraryReady);
     map['app_lock_timeout_sec'] = Variable<int>(appLockTimeoutSec);
+    map['allow_screenshots'] = Variable<bool>(allowScreenshots);
     map['session_log_retention_days'] = Variable<int>(sessionLogRetentionDays);
     map['fleet_watch_enabled'] = Variable<bool>(fleetWatchEnabled);
     map['fleet_watch_disk_percent'] = Variable<int>(fleetWatchDiskPercent);
@@ -4803,6 +4838,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       tunnelIdleMinutes: Value(tunnelIdleMinutes),
       snippetLibraryReady: Value(snippetLibraryReady),
       appLockTimeoutSec: Value(appLockTimeoutSec),
+      allowScreenshots: Value(allowScreenshots),
       sessionLogRetentionDays: Value(sessionLogRetentionDays),
       fleetWatchEnabled: Value(fleetWatchEnabled),
       fleetWatchDiskPercent: Value(fleetWatchDiskPercent),
@@ -4846,6 +4882,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
         json['snippetLibraryReady'],
       ),
       appLockTimeoutSec: serializer.fromJson<int>(json['appLockTimeoutSec']),
+      allowScreenshots: serializer.fromJson<bool>(json['allowScreenshots']),
       sessionLogRetentionDays: serializer.fromJson<int>(
         json['sessionLogRetentionDays'],
       ),
@@ -4894,6 +4931,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       'tunnelIdleMinutes': serializer.toJson<int>(tunnelIdleMinutes),
       'snippetLibraryReady': serializer.toJson<bool>(snippetLibraryReady),
       'appLockTimeoutSec': serializer.toJson<int>(appLockTimeoutSec),
+      'allowScreenshots': serializer.toJson<bool>(allowScreenshots),
       'sessionLogRetentionDays': serializer.toJson<int>(
         sessionLogRetentionDays,
       ),
@@ -4930,6 +4968,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     int? tunnelIdleMinutes,
     bool? snippetLibraryReady,
     int? appLockTimeoutSec,
+    bool? allowScreenshots,
     int? sessionLogRetentionDays,
     bool? fleetWatchEnabled,
     int? fleetWatchDiskPercent,
@@ -4971,6 +5010,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     tunnelIdleMinutes: tunnelIdleMinutes ?? this.tunnelIdleMinutes,
     snippetLibraryReady: snippetLibraryReady ?? this.snippetLibraryReady,
     appLockTimeoutSec: appLockTimeoutSec ?? this.appLockTimeoutSec,
+    allowScreenshots: allowScreenshots ?? this.allowScreenshots,
     sessionLogRetentionDays:
         sessionLogRetentionDays ?? this.sessionLogRetentionDays,
     fleetWatchEnabled: fleetWatchEnabled ?? this.fleetWatchEnabled,
@@ -5033,6 +5073,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       appLockTimeoutSec: data.appLockTimeoutSec.present
           ? data.appLockTimeoutSec.value
           : this.appLockTimeoutSec,
+      allowScreenshots: data.allowScreenshots.present
+          ? data.allowScreenshots.value
+          : this.allowScreenshots,
       sessionLogRetentionDays: data.sessionLogRetentionDays.present
           ? data.sessionLogRetentionDays.value
           : this.sessionLogRetentionDays,
@@ -5087,6 +5130,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('tunnelIdleMinutes: $tunnelIdleMinutes, ')
           ..write('snippetLibraryReady: $snippetLibraryReady, ')
           ..write('appLockTimeoutSec: $appLockTimeoutSec, ')
+          ..write('allowScreenshots: $allowScreenshots, ')
           ..write('sessionLogRetentionDays: $sessionLogRetentionDays, ')
           ..write('fleetWatchEnabled: $fleetWatchEnabled, ')
           ..write('fleetWatchDiskPercent: $fleetWatchDiskPercent, ')
@@ -5121,6 +5165,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     tunnelIdleMinutes,
     snippetLibraryReady,
     appLockTimeoutSec,
+    allowScreenshots,
     sessionLogRetentionDays,
     fleetWatchEnabled,
     fleetWatchDiskPercent,
@@ -5154,6 +5199,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.tunnelIdleMinutes == this.tunnelIdleMinutes &&
           other.snippetLibraryReady == this.snippetLibraryReady &&
           other.appLockTimeoutSec == this.appLockTimeoutSec &&
+          other.allowScreenshots == this.allowScreenshots &&
           other.sessionLogRetentionDays == this.sessionLogRetentionDays &&
           other.fleetWatchEnabled == this.fleetWatchEnabled &&
           other.fleetWatchDiskPercent == this.fleetWatchDiskPercent &&
@@ -5185,6 +5231,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<int> tunnelIdleMinutes;
   final Value<bool> snippetLibraryReady;
   final Value<int> appLockTimeoutSec;
+  final Value<bool> allowScreenshots;
   final Value<int> sessionLogRetentionDays;
   final Value<bool> fleetWatchEnabled;
   final Value<int> fleetWatchDiskPercent;
@@ -5214,6 +5261,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.tunnelIdleMinutes = const Value.absent(),
     this.snippetLibraryReady = const Value.absent(),
     this.appLockTimeoutSec = const Value.absent(),
+    this.allowScreenshots = const Value.absent(),
     this.sessionLogRetentionDays = const Value.absent(),
     this.fleetWatchEnabled = const Value.absent(),
     this.fleetWatchDiskPercent = const Value.absent(),
@@ -5244,6 +5292,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.tunnelIdleMinutes = const Value.absent(),
     this.snippetLibraryReady = const Value.absent(),
     this.appLockTimeoutSec = const Value.absent(),
+    this.allowScreenshots = const Value.absent(),
     this.sessionLogRetentionDays = const Value.absent(),
     this.fleetWatchEnabled = const Value.absent(),
     this.fleetWatchDiskPercent = const Value.absent(),
@@ -5274,6 +5323,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Expression<int>? tunnelIdleMinutes,
     Expression<bool>? snippetLibraryReady,
     Expression<int>? appLockTimeoutSec,
+    Expression<bool>? allowScreenshots,
     Expression<int>? sessionLogRetentionDays,
     Expression<bool>? fleetWatchEnabled,
     Expression<int>? fleetWatchDiskPercent,
@@ -5305,6 +5355,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (snippetLibraryReady != null)
         'snippet_library_ready': snippetLibraryReady,
       if (appLockTimeoutSec != null) 'app_lock_timeout_sec': appLockTimeoutSec,
+      if (allowScreenshots != null) 'allow_screenshots': allowScreenshots,
       if (sessionLogRetentionDays != null)
         'session_log_retention_days': sessionLogRetentionDays,
       if (fleetWatchEnabled != null) 'fleet_watch_enabled': fleetWatchEnabled,
@@ -5344,6 +5395,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<int>? tunnelIdleMinutes,
     Value<bool>? snippetLibraryReady,
     Value<int>? appLockTimeoutSec,
+    Value<bool>? allowScreenshots,
     Value<int>? sessionLogRetentionDays,
     Value<bool>? fleetWatchEnabled,
     Value<int>? fleetWatchDiskPercent,
@@ -5374,6 +5426,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       tunnelIdleMinutes: tunnelIdleMinutes ?? this.tunnelIdleMinutes,
       snippetLibraryReady: snippetLibraryReady ?? this.snippetLibraryReady,
       appLockTimeoutSec: appLockTimeoutSec ?? this.appLockTimeoutSec,
+      allowScreenshots: allowScreenshots ?? this.allowScreenshots,
       sessionLogRetentionDays:
           sessionLogRetentionDays ?? this.sessionLogRetentionDays,
       fleetWatchEnabled: fleetWatchEnabled ?? this.fleetWatchEnabled,
@@ -5445,6 +5498,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     if (appLockTimeoutSec.present) {
       map['app_lock_timeout_sec'] = Variable<int>(appLockTimeoutSec.value);
     }
+    if (allowScreenshots.present) {
+      map['allow_screenshots'] = Variable<bool>(allowScreenshots.value);
+    }
     if (sessionLogRetentionDays.present) {
       map['session_log_retention_days'] = Variable<int>(
         sessionLogRetentionDays.value,
@@ -5511,6 +5567,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('tunnelIdleMinutes: $tunnelIdleMinutes, ')
           ..write('snippetLibraryReady: $snippetLibraryReady, ')
           ..write('appLockTimeoutSec: $appLockTimeoutSec, ')
+          ..write('allowScreenshots: $allowScreenshots, ')
           ..write('sessionLogRetentionDays: $sessionLogRetentionDays, ')
           ..write('fleetWatchEnabled: $fleetWatchEnabled, ')
           ..write('fleetWatchDiskPercent: $fleetWatchDiskPercent, ')
@@ -12450,6 +12507,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<int> tunnelIdleMinutes,
       Value<bool> snippetLibraryReady,
       Value<int> appLockTimeoutSec,
+      Value<bool> allowScreenshots,
       Value<int> sessionLogRetentionDays,
       Value<bool> fleetWatchEnabled,
       Value<int> fleetWatchDiskPercent,
@@ -12481,6 +12539,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<int> tunnelIdleMinutes,
       Value<bool> snippetLibraryReady,
       Value<int> appLockTimeoutSec,
+      Value<bool> allowScreenshots,
       Value<int> sessionLogRetentionDays,
       Value<bool> fleetWatchEnabled,
       Value<int> fleetWatchDiskPercent,
@@ -12585,6 +12644,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<int> get appLockTimeoutSec => $composableBuilder(
     column: $table.appLockTimeoutSec,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get allowScreenshots => $composableBuilder(
+    column: $table.allowScreenshots,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12738,6 +12802,11 @@ class $$AppSettingsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get allowScreenshots => $composableBuilder(
+    column: $table.allowScreenshots,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sessionLogRetentionDays => $composableBuilder(
     column: $table.sessionLogRetentionDays,
     builder: (column) => ColumnOrderings(column),
@@ -12882,6 +12951,11 @@ class $$AppSettingsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get allowScreenshots => $composableBuilder(
+    column: $table.allowScreenshots,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get sessionLogRetentionDays => $composableBuilder(
     column: $table.sessionLogRetentionDays,
     builder: (column) => column,
@@ -12984,6 +13058,7 @@ class $$AppSettingsTableTableManager
                 Value<int> tunnelIdleMinutes = const Value.absent(),
                 Value<bool> snippetLibraryReady = const Value.absent(),
                 Value<int> appLockTimeoutSec = const Value.absent(),
+                Value<bool> allowScreenshots = const Value.absent(),
                 Value<int> sessionLogRetentionDays = const Value.absent(),
                 Value<bool> fleetWatchEnabled = const Value.absent(),
                 Value<int> fleetWatchDiskPercent = const Value.absent(),
@@ -13013,6 +13088,7 @@ class $$AppSettingsTableTableManager
                 tunnelIdleMinutes: tunnelIdleMinutes,
                 snippetLibraryReady: snippetLibraryReady,
                 appLockTimeoutSec: appLockTimeoutSec,
+                allowScreenshots: allowScreenshots,
                 sessionLogRetentionDays: sessionLogRetentionDays,
                 fleetWatchEnabled: fleetWatchEnabled,
                 fleetWatchDiskPercent: fleetWatchDiskPercent,
@@ -13044,6 +13120,7 @@ class $$AppSettingsTableTableManager
                 Value<int> tunnelIdleMinutes = const Value.absent(),
                 Value<bool> snippetLibraryReady = const Value.absent(),
                 Value<int> appLockTimeoutSec = const Value.absent(),
+                Value<bool> allowScreenshots = const Value.absent(),
                 Value<int> sessionLogRetentionDays = const Value.absent(),
                 Value<bool> fleetWatchEnabled = const Value.absent(),
                 Value<int> fleetWatchDiskPercent = const Value.absent(),
@@ -13073,6 +13150,7 @@ class $$AppSettingsTableTableManager
                 tunnelIdleMinutes: tunnelIdleMinutes,
                 snippetLibraryReady: snippetLibraryReady,
                 appLockTimeoutSec: appLockTimeoutSec,
+                allowScreenshots: allowScreenshots,
                 sessionLogRetentionDays: sessionLogRetentionDays,
                 fleetWatchEnabled: fleetWatchEnabled,
                 fleetWatchDiskPercent: fleetWatchDiskPercent,

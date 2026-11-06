@@ -239,7 +239,9 @@ class _TagEnvSheetState extends ConsumerState<_TagEnvSheet> {
         Text('Environments', style: KelolaType.display(color: c.text, size: 16)),
         const SizedBox(height: 8),
         Text(
-          'Tag variables apply to every host with that tag. Host overrides live on Edit host.',
+          'Tag hosts on Edit host, for example prod or uat. Variables here reach '
+          'every host with that tag. Find tagged hosts in Search, and pick them '
+          'in Run on hosts. Per-host overrides live on Edit host.',
           style: KelolaType.body(color: c.muted, size: 13),
         ),
         const SizedBox(height: 14),

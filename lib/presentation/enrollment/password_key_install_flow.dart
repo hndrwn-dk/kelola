@@ -293,13 +293,18 @@ Future<bool> runPasswordKeyInstallFlow({
         append = await pool.runPasswordBootstrap(
           host: host,
           password: password,
-          onUnknownHostKey: (id, algorithm, fp) {
-            return promptUnknownHostKey(
-              context,
-              hostId: id,
-              algorithm: algorithm,
-              fingerprint: fp,
-            );
+          onUnknownHostKey: (id, algorithm, fp) async {
+            lifecycle.hostKeyPromptOpen = true;
+            try {
+              return await promptUnknownHostKey(
+                context,
+                hostId: id,
+                algorithm: algorithm,
+                fingerprint: fp,
+              );
+            } finally {
+              lifecycle.hostKeyPromptOpen = false;
+            }
           },
           body: (client) async {
             if (!context.mounted) {
@@ -505,15 +510,34 @@ Future<void> recordKeyInstallAudit({
   );
 }
 
+/// Whether a lifecycle change must wipe the in-memory password.
+///
+/// The system fingerprint dialog takes window focus, which Flutter reports as
+/// `inactive`. During the host-key prompt that is expected and the password
+/// is about to be used, so only leaving the app (`paused`) wipes it then.
+@visibleForTesting
+bool lifecycleClearsPassword(
+  AppLifecycleState state, {
+  required bool hostKeyPromptOpen,
+}) {
+  if (state == AppLifecycleState.paused) {
+    return true;
+  }
+  return state == AppLifecycleState.inactive && !hostKeyPromptOpen;
+}
+
 class _PasswordLifecycleObserver with WidgetsBindingObserver {
   _PasswordLifecycleObserver(this._password);
 
   final EphemeralPassword _password;
+  bool hostKeyPromptOpen = false;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+    if (lifecycleClearsPassword(
+      state,
+      hostKeyPromptOpen: hostKeyPromptOpen,
+    )) {
       _password.clear();
     }
   }

@@ -22,7 +22,8 @@ ClusterHealth parseClusterHealth(
       .firstWhere((s) => s.isNotEmpty, orElse: () => '');
 
   final readyzRaw = _section(stdout, 'READYZ') ?? '';
-  final authExpired = authExpiredFromText(_section(stdout, 'AUTH') ?? '');
+  final authText = _section(stdout, 'AUTH') ?? '';
+  final authExpired = authExpiredFromText(authText);
   // An expired login is an answer from the API, never "API down".
   final apiReachable = authExpired || _readyzOk(readyzRaw);
 
@@ -55,6 +56,7 @@ ClusterHealth parseClusterHealth(
 
   return ClusterHealth(
     apiReachable: apiReachable,
+    kubeconfigDenied: !apiReachable && kubeconfigDeniedFromText(authText),
     controlPlaneReady: cpReady,
     controlPlaneDesired: cpDesired,
     thisHost: thisHost,
@@ -123,6 +125,14 @@ bool authExpiredFromText(String text) {
     return false;
   }
   return kAuthExpiredMarkers.any(text.contains);
+}
+
+/// The CLI could not open its kubeconfig, e.g. k3s `k3s.yaml` is root-only.
+bool kubeconfigDeniedFromText(String text) {
+  return RegExp(
+    r'Unable to read \S*k3s\.yaml|error loading config file.*permission denied',
+    caseSensitive: false,
+  ).hasMatch(text);
 }
 
 bool _readyzOk(String raw) {

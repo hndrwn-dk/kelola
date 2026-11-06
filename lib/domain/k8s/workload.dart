@@ -80,9 +80,19 @@ class K8sWorkload {
   /// Completed pods (Succeeded) are healthy with 0/N ready containers;
   /// they must not count as not ready.
   bool get notReady =>
-      health == HealthStatus.failed ||
-      health == HealthStatus.warning ||
-      (health == HealthStatus.unknown && desired > 0 && ready < desired);
+      !readyButRestarting &&
+      (health == HealthStatus.failed ||
+          health == HealthStatus.warning ||
+          (health == HealthStatus.unknown && desired > 0 && ready < desired));
+
+  /// A running pod with every container ready, flagged only for its lifetime
+  /// restart count (a node reboot adds to it). Worth a warning, but ready.
+  bool get readyButRestarting =>
+      kind == K8sKind.pod &&
+      health == HealthStatus.warning &&
+      podPhase == 'Running' &&
+      desired > 0 &&
+      ready >= desired;
 
   bool get pending =>
       kind == K8sKind.pod &&

@@ -21,6 +21,7 @@ import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/data/llm/assist_service.dart';
 import 'package:kelola/presentation/assist_flow.dart';
 import 'package:kelola/domain/llm/explain_sections.dart';
+import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/llm_explain_body.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/confirm_unit_action.dart';
@@ -90,8 +91,10 @@ class IncidentSheetPanel extends StatelessWidget {
     this.onLookUp,
     this.onDiagnostic,
     this.onExplain,
+    this.onEnableSudo,
     this.explainBusy = false,
     this.explainResult,
+    this.explainKey,
     this.explainKind = ExplainKind.failedUnit,
     this.error,
     this.status,
@@ -103,8 +106,12 @@ class IncidentSheetPanel extends StatelessWidget {
   final void Function(CorrelationLookUp lookUp)? onLookUp;
   final VoidCallback? onDiagnostic;
   final VoidCallback? onExplain;
+  final VoidCallback? onEnableSudo;
   final bool explainBusy;
   final String? explainResult;
+
+  /// Anchors the Explain answer so the sheet can scroll to it.
+  final Key? explainKey;
   final ExplainKind explainKind;
   final String? error;
   final String? status;
@@ -149,7 +156,11 @@ class IncidentSheetPanel extends StatelessWidget {
               const SizedBox(height: 10),
             ],
             if (error != null) ...[
-              KelolaError(message: error!, sudoUser: host.username),
+              KelolaError(
+                message: error!,
+                sudoUser: host.username,
+                onEnableSudo: onEnableSudo,
+              ),
               const SizedBox(height: 10),
             ],
             if (view.broken.isEmpty)
@@ -243,6 +254,7 @@ class IncidentSheetPanel extends StatelessWidget {
                   if (explainResult != null) ...[
                     const SizedBox(height: 12),
                     Text(
+                      key: explainKey,
                       'EXPLAIN',
                       style: KelolaType.mono(
                         color: c.dim,
@@ -305,6 +317,7 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
   String? _error;
   String? _status;
   String? _explainResult;
+  final _explainKey = GlobalKey();
   var _explainBusy = false;
 
   IncidentSheetView get _view {
@@ -324,6 +337,7 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
       status: _status,
       explainBusy: _explainBusy,
       explainResult: _explainResult,
+      explainKey: _explainKey,
       explainKind: view.focus?.kind == IncidentObjectKind.disk
           ? ExplainKind.disk
           : ExplainKind.failedUnit,
@@ -331,6 +345,11 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
       onLookUp: _lookUp,
       onDiagnostic: () => openDiagnosticPack(context, ref, widget.host),
       onExplain: () => _explain(),
+      onEnableSudo: () => runEnableKelolaSudoFlow(
+        context: context,
+        ref: ref,
+        host: widget.host,
+      ),
     );
   }
 
@@ -476,6 +495,15 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
       }
       // Inline on the incident sheet — a second modal often opens behind this one.
       setState(() => _explainResult = text);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final target = _explainKey.currentContext;
+        if (target != null && target.mounted) {
+          Scrollable.ensureVisible(
+            target,
+            duration: const Duration(milliseconds: 250),
+          );
+        }
+      });
     } catch (e) {
       if (mounted) {
         setState(() => _error = describeSshError(e));
