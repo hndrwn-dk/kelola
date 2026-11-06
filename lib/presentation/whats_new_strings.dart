@@ -11,8 +11,8 @@ abstract final class WhatsNewStrings {
   static String label(String version) => "What's new · $version";
 
   static const notes = <String>[
-    'Packages opens instantly from the last list for each host.',
-    'OKD clusters are labelled OKD, not OpenShift.',
-    'Files refuses unsafe file names sent by a server.',
+    'Your first password try on a new host now works.',
+    'New Screenshots setting, and pick hosts by tag in snippets.',
+    'Enable Kelola sudo now covers services and processes.',
   ];
 }
