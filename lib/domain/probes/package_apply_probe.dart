@@ -41,11 +41,11 @@ class PackageApplyProbe extends Probe<String> {
       throw SudoRequiredException(
         SudoHintContext(
           kind: SudoHintKind.packages,
-          binary: PackageCommands.apply(
+          binary: PackageCommands.applyArgv(
             manager,
             securityOnly: securityOnly,
             names: names,
-          ).replaceFirst('sudo -n ', ''),
+          ),
           verb: securityOnly ? 'security-upgrade' : 'upgrade',
         ),
       );

@@ -44,6 +44,7 @@ import 'package:kelola/presentation/screens/kubernetes_home_screen.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/probes/host_action_probe.dart';
+import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
 import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/domain/tunnels/active_tunnel.dart';
@@ -1075,6 +1076,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
           pinnedKey: pinned,
           connected: ref.read(sessionPoolProvider).hasLiveSession(host.id),
           onEdit: _openEdit,
+          checkSudoRules: _sudoRulesCheck(host),
           onRevealSerial: () {
             return ref
                 .read(hostRepositoryProvider)
@@ -1148,6 +1150,23 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     } else {
       openHostsRoot(context);
     }
+  }
+
+  /// Null when there is no live session or no facts to compare against: the
+  /// details screen must not open a connection to show a warning.
+  Future<bool> Function()? _sudoRulesCheck(Host host) {
+    final facts = _facts;
+    if (facts == null || !ref.read(sessionPoolProvider).hasLiveSession(host.id)) {
+      return null;
+    }
+    return () async {
+      final snapshot = await ref.read(sessionPoolProvider).execute(
+            host,
+            const SudoRulesProbe(),
+            facts: facts,
+          );
+      return sudoRulesOutdated(snapshot, user: host.username, facts: facts);
+    };
   }
 
   Future<void> _enableKelolaSudo(Host host) async {

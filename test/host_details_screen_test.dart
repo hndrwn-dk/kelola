@@ -84,6 +84,44 @@ void main() {
     expect(edited, isTrue);
   });
 
+  Widget detailsWith(Future<bool> Function()? check) => KelolaApp(
+        home: HostDetailsScreen(
+          host: host,
+          facts: facts,
+          checkSudoRules: check,
+        ),
+      );
+
+  testWidgets('warns when Kelola sudo rules are outdated', (tester) async {
+    await tester.pumpWidget(detailsWith(() async => true));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Kelola sudo'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      find.text('Kelola sudo rules are outdated. Re-run Enable Kelola sudo.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('shows no sudo warning when rules match or cannot be read', (
+    tester,
+  ) async {
+    await tester.pumpWidget(detailsWith(() async => false));
+    await tester.pumpAndSettle();
+    expect(find.text('Kelola sudo'), findsNothing);
+
+    await tester.pumpWidget(detailsWith(() => Future.error('offline')));
+    await tester.pumpAndSettle();
+    expect(find.text('Kelola sudo'), findsNothing);
+
+    await tester.pumpWidget(detailsWith(null));
+    await tester.pumpAndSettle();
+    expect(find.text('Kelola sudo'), findsNothing);
+  });
+
   testWidgets('Service control is none when sudo needs a password', (tester) async {
     await tester.pumpWidget(
       const KelolaApp(

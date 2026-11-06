@@ -1,4 +1,5 @@
 import 'package:kelola/domain/facts/enums.dart';
+import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
 /// Command table from M6. Manager comes from [HostFacts.pkg] — never `command -v`.
@@ -72,13 +73,28 @@ class PackageCommands {
     };
   }
 
+  /// [apply] as sudo sees it, for the sudoers line a hint suggests. A rule
+  /// holding the shell's quotes would never match. A name the sudoers rules
+  /// would refuse is dropped, leaving the fixed upgrade command: it came from
+  /// the host, and pasted as is it could grant `apt-get *`.
+  static String applyArgv(
+    PackageManager pkg, {
+    required bool securityOnly,
+    List<String> names = const [],
+  }) {
+    final cmd = names.length == 1 && isSudoersSafePackageName(pkg, names.first)
+        ? _applyOne(pkg, names.first)
+        : apply(pkg, securityOnly: securityOnly);
+    return cmd.replaceFirst('sudo -n ', '');
+  }
+
   static String apply(
     PackageManager pkg, {
     required bool securityOnly,
     List<String> names = const [],
   }) {
     if (names.length == 1) {
-      return _applyOne(pkg, names.first);
+      return _applyOne(pkg, shellSingleQuote(names.first));
     }
     if (securityOnly) {
       return switch (pkg) {
@@ -106,8 +122,7 @@ class PackageCommands {
     };
   }
 
-  static String _applyOne(PackageManager pkg, String name) {
-    final q = shellSingleQuote(name);
+  static String _applyOne(PackageManager pkg, String q) {
     return switch (pkg) {
       PackageManager.apt =>
         'sudo -n /usr/bin/apt-get -y -o Dpkg::Options::=--force-confold '

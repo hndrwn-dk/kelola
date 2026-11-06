@@ -8,5 +8,6 @@ bool looksLikeSudoPasswordPrompt(String stderr) {
       s.contains('a terminal is required') ||
       s.contains('no tty present') ||
       s.contains('no askpass program') ||
+      s.contains("i'm afraid i can't do that") ||
       s.contains('interactive authentication is required');
 }

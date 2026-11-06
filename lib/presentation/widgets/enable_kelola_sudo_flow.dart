@@ -9,8 +9,10 @@ import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
 import 'package:kelola/domain/probes/sudoers_install_probe.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
+import 'package:kelola/domain/sudo/sudo_flavor.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/enrollment/password_key_install_flow.dart';
 import 'package:kelola/presentation/host_session.dart';
@@ -73,7 +75,23 @@ Future<bool> runEnableKelolaSudoFlow({
     return false;
   }
 
-  final groups = defaultKelolaSudoersGroups(resolved);
+  SudoFlavor sudo = const UnknownSudo();
+  try {
+    sudo = await runHostProbe(
+      ref: ref,
+      context: context,
+      host: host,
+      probe: const SudoFlavorProbe(),
+      facts: resolved,
+    );
+  } catch (_) {
+    sudo = const UnknownSudo();
+  }
+  if (!context.mounted) {
+    return false;
+  }
+
+  final groups = defaultKelolaSudoersGroups(resolved, sudo: sudo);
   if (groups.isEmpty) {
     return false;
   }
@@ -86,6 +104,7 @@ Future<bool> runEnableKelolaSudoFlow({
       user: host.username,
       facts: resolved!,
       groups: groups,
+      sudo: sudo,
       fileExists: fileExists,
     ),
   );
@@ -97,6 +116,7 @@ Future<bool> runEnableKelolaSudoFlow({
     user: host.username,
     facts: resolved,
     groups: groups,
+    sudo: sudo,
   );
 
   final confirmed = await showModalBottomSheet<bool>(
@@ -229,12 +249,14 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
     required this.user,
     required this.facts,
     required this.groups,
+    required this.sudo,
     required this.fileExists,
   });
 
   final String user;
   final HostFacts facts;
   final Set<KelolaSudoersGroup> groups;
+  final SudoFlavor sudo;
   final bool fileExists;
 
   @override
@@ -244,7 +266,9 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
       user: user,
       facts: facts,
       groups: groups,
+      sudo: sudo,
     );
+    final tierNote = kelolaSudoersTierNote(sudo);
     return KelolaSheet(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 18, 14, 0),
@@ -264,6 +288,13 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
               'Optional — Kelola stays useful with zero sudo.',
               style: KelolaType.body(color: c.muted, size: 13),
             ),
+            if (tierNote != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                tierNote,
+                style: KelolaType.body(color: c.muted, size: 13),
+              ),
+            ],
             const SizedBox(height: 12),
             Container(
               constraints: const BoxConstraints(maxHeight: 220),

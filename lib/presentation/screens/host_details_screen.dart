@@ -6,6 +6,7 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/facts/serial_mask.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 
@@ -19,6 +20,7 @@ class HostDetailsScreen extends StatefulWidget {
     this.connected = false,
     this.onEdit,
     this.onRevealSerial,
+    this.checkSudoRules,
   });
 
   final Host host;
@@ -29,12 +31,37 @@ class HostDetailsScreen extends StatefulWidget {
   final VoidCallback? onEdit;
   final Future<void> Function()? onRevealSerial;
 
+  /// Resolves true when the host's Kelola sudo rules are outdated.
+  final Future<bool> Function()? checkSudoRules;
+
   @override
   State<HostDetailsScreen> createState() => _HostDetailsScreenState();
 }
 
 class _HostDetailsScreenState extends State<HostDetailsScreen> {
   bool _serialRevealed = false;
+  bool _sudoRulesOutdated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSudoRules();
+  }
+
+  Future<void> _checkSudoRules() async {
+    final check = widget.checkSudoRules;
+    if (check == null) {
+      return;
+    }
+    try {
+      final outdated = await check();
+      if (outdated && mounted) {
+        setState(() => _sudoRulesOutdated = true);
+      }
+    } catch (_) {
+      // A warning that cannot be checked stays hidden.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +179,12 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
                 ),
                 mono: false,
               ),
+              if (_sudoRulesOutdated)
+                const FactEntry(
+                  label: 'Kelola sudo',
+                  value: kelolaSudoRulesOutdatedCopy,
+                  mono: false,
+                ),
             ],
           ),
           if (firmware.isNotEmpty)
