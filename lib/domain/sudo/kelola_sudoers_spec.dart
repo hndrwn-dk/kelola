@@ -168,8 +168,9 @@ List<String> parseSudoListing(String listing) {
 /// A rule of ours that is missing counts, and so does a listed rule that takes
 /// arbitrary arguments or a refusal: the bare binaries, `*` and `!` of earlier
 /// versions. An extra exact rule does not count, because that is the one
-/// command a sudo hint told the admin to add. No listed Kelola rule at all
-/// means Kelola sudo was never enabled here, which is not outdated.
+/// command a sudo hint told the admin to add, or a per-service grant. No
+/// listed rule beyond those means Kelola sudo was never enabled here, which is
+/// not outdated.
 bool kelolaSudoRulesOutdated({
   required List<String> listed,
   required KelolaSudoersSpec spec,
@@ -182,23 +183,20 @@ bool kelolaSudoRulesOutdated({
       ours.add(rule);
     }
   }
-  if (ours.isEmpty) {
+  final expected = spec.commands.map(normalizeSudoRule).toSet();
+  bool wide(String rule) =>
+      rule.startsWith('!') ||
+      !rule.contains(' ') ||
+      rule.contains('*') ||
+      rule.contains('[');
+  final enabled = ours.any((r) => expected.contains(r) || wide(r));
+  if (!enabled) {
     return false;
   }
-  final expected = spec.commands.map(normalizeSudoRule).toSet();
   if (!expected.every(ours.contains)) {
     return true;
   }
-  return ours.any((rule) {
-    if (expected.contains(rule)) {
-      return false;
-    }
-    final wide = rule.startsWith('!') ||
-        !rule.contains(' ') ||
-        rule.contains('*') ||
-        rule.contains('[');
-    return wide;
-  });
+  return ours.any((r) => !expected.contains(r) && wide(r));
 }
 
 /// Any character a package name may hold, less [without]. Spelled out because

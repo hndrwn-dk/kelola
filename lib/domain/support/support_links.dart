@@ -38,7 +38,7 @@ const kSupportFaq = <SupportFaqItem>[
   SupportFaqItem(
     question: 'Why does an action say sudo needs a password?',
     answer:
-        'Kelola never asks for a sudo password during daily use. Actions that change a host need passwordless sudo. The message gives the exact sudoers line to add, limited to that action.',
+        'Kelola never asks for a sudo password during daily use. Actions that change a host need passwordless sudo. Tap Enable Kelola sudo to review and add the rules once. On hosts with sudo-rs or older sudo it adds service rules one action at a time.',
   ),
   SupportFaqItem(
     question: 'What are tags and Environments?',

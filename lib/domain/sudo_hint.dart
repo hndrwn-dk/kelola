@@ -196,7 +196,7 @@ SudoHint kelolaSudoHint({
         );
       }
       final sudoers = '$user ALL=(root) NOPASSWD: '
-          '/usr/bin/systemctl $verb ${_sudoersEscape(unit)}';
+          '/usr/bin/systemctl $verb ${sudoersEscape(unit)}';
       return SudoHint(
         body:
             'This host\'s sudo asks for a password, so this mutate failed. '
@@ -275,7 +275,7 @@ const sudoNeedsNoSudoCopy =
 
 /// Characters that end or break a sudoers command unless escaped, as in
 /// `Dpkg::Options`.
-String _sudoersEscape(String spec) => spec.replaceAllMapped(
+String sudoersEscape(String spec) => spec.replaceAllMapped(
       RegExp(r'[\\,:#]'),
       (m) => '\\${m[0]}',
     );
@@ -297,7 +297,7 @@ SudoHint _binaryHint({
   // Values in a spec can come from the host. Never hand back a pattern.
   final rule = !safe || spec.contains(_sudoersPattern)
       ? '# This command cannot be written as a safe sudoers rule.'
-      : '$user ALL=(root) NOPASSWD: ${_sudoersEscape(command)}';
+      : '$user ALL=(root) NOPASSWD: ${sudoersEscape(command)}';
   return SudoHint(
     body:
         'This host\'s sudo asks for a password, so $bodyLead failed. '

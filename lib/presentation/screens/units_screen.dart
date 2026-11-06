@@ -8,6 +8,7 @@ import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/unit_list_probe.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/domain/units/unit_list_view.dart';
 import 'package:kelola/presentation/host_session.dart';
@@ -65,6 +66,7 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
       ref: ref,
       host: _host!,
       facts: _facts,
+      hint: SudoHintContext.tryParse(_error ?? ''),
     );
     if (ok && mounted) {
       await _load();

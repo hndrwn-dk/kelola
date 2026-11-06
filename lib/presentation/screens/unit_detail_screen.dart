@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/design/kelola_theme.dart';
@@ -60,6 +61,7 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
       context: context,
       ref: ref,
       host: widget.host,
+      hint: SudoHintContext.tryParse(_error ?? ''),
     );
     if (ok && mounted) {
       await _load();

@@ -17,6 +17,7 @@ import 'package:kelola/domain/probes/process_list_probe.dart';
 import 'package:kelola/domain/probes/unit_action_probe.dart';
 import 'package:kelola/domain/probes/unit_detail_probe.dart';
 import 'package:kelola/domain/probes/unit_list_probe.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/data/llm/assist_service.dart';
 import 'package:kelola/presentation/assist_flow.dart';
@@ -349,6 +350,7 @@ class _LiveIncidentSheetState extends ConsumerState<_LiveIncidentSheet> {
         context: context,
         ref: ref,
         host: widget.host,
+        hint: SudoHintContext.tryParse(_error ?? ''),
       ),
     );
   }
