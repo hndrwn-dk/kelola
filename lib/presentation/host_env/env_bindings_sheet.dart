@@ -4,6 +4,7 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/host_tags.dart';
 import 'package:kelola/providers.dart';
 import 'package:uuid/uuid.dart';
 
@@ -41,7 +42,7 @@ class HostEnvSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return ServiceRow(
       risk: RiskLevel.read,
-      name: 'Environment',
+      name: 'Variables',
       meta: 'overrides and inherited',
       onTap: () => showHostEnvironmentsSheet(context: context, host: host),
     );
@@ -119,7 +120,8 @@ class _HostEnvSheetState extends ConsumerState<_HostEnvSheet> {
     final host = widget.host;
     final inherited = [
       for (final binding in _all)
-        if (binding.scope == EnvScope.tag && host.tags.contains(binding.scopeId))
+        if (binding.scope == EnvScope.tag &&
+            host.tags.contains(normalizeHostTag(binding.scopeId)))
           binding,
     ]..sort((a, b) => a.name.compareTo(b.name));
     final overrides = [
@@ -130,7 +132,7 @@ class _HostEnvSheetState extends ConsumerState<_HostEnvSheet> {
     return ListView(
       padding: kelolaScrollPadding(context, top: 16),
       children: [
-        Text('Environment', style: KelolaType.display(color: c.text, size: 16)),
+        Text('Variables', style: KelolaType.display(color: c.text, size: 16)),
         const SizedBox(height: 8),
         Text(
           'Inherited tag variables apply first. Host overrides win.',
@@ -197,9 +199,9 @@ class _TagEnvSheetState extends ConsumerState<_TagEnvSheet> {
     final rows = await repo.listEnvBindings();
     final hosts = await repo.list();
     final tags = {
-      for (final host in hosts) ...host.tags,
+      ...knownHostTags(hosts),
       for (final row in rows)
-        if (row.scope == EnvScope.tag) row.scopeId,
+        if (row.scope == EnvScope.tag) normalizeHostTag(row.scopeId),
     }.where((tag) => tag.isNotEmpty).toList()
       ..sort();
     if (!mounted) {
@@ -236,12 +238,11 @@ class _TagEnvSheetState extends ConsumerState<_TagEnvSheet> {
     return ListView(
       padding: kelolaScrollPadding(context, top: 16),
       children: [
-        Text('Environments', style: KelolaType.display(color: c.text, size: 16)),
+        Text('Tag variables', style: KelolaType.display(color: c.text, size: 16)),
         const SizedBox(height: 8),
         Text(
-          'Tag hosts on Edit host, for example prod or uat. Variables here reach '
-          'every host with that tag. Find tagged hosts in Search, and pick them '
-          'in Run on hosts. Per-host overrides live on Edit host.',
+          'Variables here reach every host with a tag, in commands and '
+          'snippets. Tag hosts on Edit host. Per-host overrides live there too.',
           style: KelolaType.body(color: c.muted, size: 13),
         ),
         const SizedBox(height: 14),
@@ -364,7 +365,7 @@ class _EnvEditorFormState extends ConsumerState<_EnvEditorForm> {
       return;
     }
     final scopeId = widget.scope == EnvScope.tag
-        ? _tag.text.trim()
+        ? normalizeHostTag(_tag.text)
         : widget.scopeId;
     if (scopeId.isEmpty) {
       setState(() => _nameError = 'Tag is required');

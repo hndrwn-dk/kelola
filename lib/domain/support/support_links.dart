@@ -41,9 +41,9 @@ const kSupportFaq = <SupportFaqItem>[
         'Kelola never asks for a sudo password during daily use. Actions that change a host need passwordless sudo. Tap Enable Kelola sudo to review and add the rules once. On hosts with sudo-rs or older sudo it adds service rules one action at a time.',
   ),
   SupportFaqItem(
-    question: 'What are tags and Environments?',
+    question: 'What are tags and tag variables?',
     answer:
-        'Tag hosts on Edit host, for example prod or uat. Settings → Environments sets variables for every host with a tag. Search finds hosts by tag, and Run on hosts can select them by tag.',
+        'Tag hosts on Edit host, for example prod or uat. Search finds hosts by tag, and Run on hosts can select them by tag. Settings → Tag variables sets values such as REGION for every host with a tag, and commands and snippets can use them as \$REGION.',
   ),
   SupportFaqItem(
     question: 'What does AI Assist send?',

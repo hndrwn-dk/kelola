@@ -137,7 +137,8 @@ void main() {
     );
     expect(find.text('Keys stay on this device'), findsNothing);
     expect(find.text('Session logs'), findsOneWidget);
-    expect(find.text('Environments'), findsOneWidget);
+    expect(find.text('Tag variables'), findsOneWidget);
+    expect(find.text('Environments'), findsNothing);
     expect(find.text('Fleet watch'), findsNothing);
     expect(find.text('Vault'), findsOneWidget);
   });

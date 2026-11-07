@@ -11,6 +11,7 @@ import 'package:kelola/domain/fleet/fleet_k8s.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/host_tags.dart';
 import 'package:kelola/domain/hosts/host_edit.dart';
 import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/domain/hosts/ssh_config_import.dart';
@@ -1244,7 +1245,7 @@ class HostRepository {
   Future<void> setHostTags(String hostId, List<String> tags) async {
     final cleaned =
         tags
-            .map((t) => t.trim().toLowerCase())
+            .map(normalizeHostTag)
             .where((t) => t.isNotEmpty)
             .toSet()
             .toList()

@@ -861,8 +861,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: 8),
                 ServiceRow(
                   risk: RiskLevel.read,
-                  name: 'Environments',
-                  meta: 'tag variables',
+                  name: 'Tag variables',
+                  meta: 'for commands and snippets',
                   onTap: () => showTagEnvironmentsSheet(context: context),
                 ),
                 const SizedBox(height: 8),

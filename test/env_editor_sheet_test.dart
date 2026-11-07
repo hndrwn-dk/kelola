@@ -113,7 +113,7 @@ void main() {
     final rows = await repo.listEnvBindings();
     expect(rows, hasLength(1));
     expect(rows.single.scope, EnvScope.tag);
-    expect(rows.single.scopeId, 'Prod');
+    expect(rows.single.scopeId, 'prod');
     expect(rows.single.name, 'REGION');
     expect(rows.single.value, 'us-east');
   });
