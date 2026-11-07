@@ -355,7 +355,7 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
         ComposeVerb.down,
         'Down',
         lockout
-            ? 'destructive · will end this session'
+            ? 'destructive · may end this session'
             : 'destructive · type ${group.label}',
       ),
     ];

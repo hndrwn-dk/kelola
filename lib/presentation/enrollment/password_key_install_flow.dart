@@ -31,6 +31,9 @@ void showPasswordDiscardedMessage(BuildContext context) {
 Future<bool> showPasswordEntrySheet(
   BuildContext context, {
   required EphemeralPassword password,
+  String title = 'Install with password',
+  String body =
+      'Enter the SSH password for this host. Kelola keeps it only in memory for this session.',
 }) async {
   final submitted = await showModalBottomSheet<bool>(
     context: context,
@@ -38,6 +41,8 @@ Future<bool> showPasswordEntrySheet(
     backgroundColor: Colors.transparent,
     builder: (ctx) => KelolaSheet(
       child: _PasswordEntryBody(
+        title: title,
+        body: body,
         onCancel: () => Navigator.of(ctx).pop(false),
         onSubmit: (value) {
           password.set(value);
@@ -506,6 +511,7 @@ Future<void> recordKeyInstallAudit({
     command: 'kelola-key-install:$note',
     risk: RiskLevel.mutate.name,
     usedSudo: false,
+    exitCode: report.success ? 0 : null,
     errorSummary: report.success ? null : report.title,
   );
 }
@@ -545,10 +551,14 @@ class _PasswordLifecycleObserver with WidgetsBindingObserver {
 
 class _PasswordEntryBody extends StatefulWidget {
   const _PasswordEntryBody({
+    required this.title,
+    required this.body,
     required this.onCancel,
     required this.onSubmit,
   });
 
+  final String title;
+  final String body;
   final VoidCallback onCancel;
   final void Function(String value) onSubmit;
 
@@ -577,13 +587,12 @@ class _PasswordEntryBodyState extends State<_PasswordEntryBody> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Install with password',
+              widget.title,
               style: KelolaType.display(color: c.text, size: 16),
             ),
             const SizedBox(height: 8),
             Text(
-              'Enter the SSH password for this host. Kelola keeps it only '
-              'in memory for this session.',
+              widget.body,
               style: KelolaType.body(color: c.muted, size: 13),
             ),
             const SizedBox(height: 12),

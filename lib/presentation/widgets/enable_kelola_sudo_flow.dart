@@ -20,6 +20,10 @@ import 'package:kelola/presentation/enrollment/password_key_install_flow.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/providers.dart';
 
+const _sudoPasswordTitle = 'Sudo password';
+const _sudoPasswordBody =
+    'Enter your sudo password for this host. Kelola uses it once and does not store it.';
+
 String kelolaSudoersGroupLabel(KelolaSudoersGroup g) {
   return switch (g) {
     KelolaSudoersGroup.packages => 'Packages',
@@ -204,6 +208,8 @@ Future<bool> runEnableKelolaSudoFlow({
     final entered = await showPasswordEntrySheet(
       context,
       password: password,
+      title: _sudoPasswordTitle,
+      body: _sudoPasswordBody,
     );
     if (!entered || !context.mounted) {
       return false;
@@ -324,7 +330,12 @@ Future<bool> _runUnitGrantFlow({
   final lifecycle = _SudoPasswordLifecycle(password);
   WidgetsBinding.instance.addObserver(lifecycle);
   try {
-    final entered = await showPasswordEntrySheet(context, password: password);
+    final entered = await showPasswordEntrySheet(
+      context,
+      password: password,
+      title: _sudoPasswordTitle,
+      body: _sudoPasswordBody,
+    );
     if (!entered || !context.mounted) {
       return false;
     }

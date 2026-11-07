@@ -1064,22 +1064,34 @@ class _KelolaSheetState extends State<KelolaSheet> {
   Widget build(BuildContext context) {
     final inset = kelolaSheetInset(context, childHeight: _childHeight);
     final maxBody = kelolaSheetMaxBodyHeight(context, childHeight: _childHeight);
-    return Padding(
-      padding: inset,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxBody),
-        child: _MeasureHeight(
-          onHeight: (h) {
-            if (_childHeight == h) {
-              return;
-            }
-            // Lock after first measure to avoid constrain/measure oscillation.
-            if (_childHeight != null) {
-              return;
-            }
-            setState(() => _childHeight = h);
-          },
-          child: widget.child,
+    final c = context.kc;
+    // Most callers open the sheet with a transparent background, so the sheet
+    // paints its own surface or the screen behind shows through the text.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        border: Border.all(color: c.line),
+      ),
+      child: Padding(
+        padding: inset,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxBody),
+          child: _MeasureHeight(
+            onHeight: (h) {
+              if (_childHeight == h) {
+                return;
+              }
+              // Lock after first measure to avoid constrain/measure oscillation.
+              if (_childHeight != null) {
+                return;
+              }
+              setState(() => _childHeight = h);
+            },
+            child: widget.child,
+          ),
         ),
       ),
     );

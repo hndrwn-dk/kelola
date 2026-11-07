@@ -61,7 +61,7 @@ void main() {
     final text = describeSshError(TimeoutException('ssh'));
     expect(
       text,
-      'Timed out waiting for SSH login. Check Wi-Fi/VPN and that the host is up.',
+      'Timed out waiting for SSH login. Check Wi-Fi/VPN and that the host is up. If a fingerprint prompt was open, try again.',
     );
     expectConnectionCopy(text);
   });

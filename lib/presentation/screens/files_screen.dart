@@ -355,6 +355,14 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
               child: KelolaError(message: _error!, sudoUser: _host?.username),
             ),
+          if (_entries.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              child: Text(
+                'Tap to open. Long-press to download or manage.',
+                style: KelolaType.body(color: c.muted, size: 12),
+              ),
+            ),
           if (_uploadHint != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
