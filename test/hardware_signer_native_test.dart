@@ -13,6 +13,59 @@ void main() {
     expect(kt, contains('"authRequired"'));
   });
 
+  group('Android queues a signature behind an open prompt', () {
+    final kt = File(
+      'android/app/src/main/kotlin/com/tursinalabs/kelola/HardwareSignerPlugin.kt',
+    ).readAsStringSync().replaceAll('\r\n', '\n');
+
+    test('a sign that needs a prompt waits instead of starting one', () {
+      final sign = kt.substring(kt.indexOf('private fun sign('));
+      final check = sign.indexOf('if (promptResult != null)');
+      final wait = sign.indexOf('waitingSigns.addLast');
+      final start = sign.indexOf('unlockThenSign(act, privateKey, data, result)');
+      expect(check, greaterThan(0));
+      expect(wait, greaterThan(check));
+      expect(start, greaterThan(wait));
+    });
+
+    test('a key the prompt opened still signs without waiting', () {
+      final sign = kt.substring(kt.indexOf('private fun sign('));
+      expect(
+        sign.indexOf('result.success(signWith(privateKey, data))'),
+        lessThan(sign.indexOf('waitingSigns.addLast')),
+      );
+    });
+
+    test('ending a prompt runs the next, after it has gone', () {
+      final end = kt.substring(kt.indexOf('private fun endPrompt('));
+      expect(end, contains('mainHandler.postDelayed({ runNextSign() }'));
+      final next = kt.substring(kt.indexOf('private fun runNextSign('));
+      expect(next, contains('while (promptResult == null)'));
+      expect(next, contains('next.result.error("sign_failed"'));
+    });
+
+    test('the gap between prompts is declared once', () {
+      expect('const val PROMPT_GAP_MS'.allMatches(kt).length, 1);
+    });
+
+    test('confirmations still refuse rather than wait', () {
+      final confirm = kt.substring(kt.indexOf('private fun confirmPresence('));
+      expect(confirm, contains('"busy"'));
+      expect(
+        confirm.substring(0, confirm.indexOf('private fun sign(')),
+        isNot(contains('waitingSigns')),
+      );
+    });
+
+    test('nothing waiting is left unanswered when the activity closes', () {
+      final detach = kt.substring(kt.indexOf('override fun onDetachedFromActivity()'));
+      expect(
+        detach.substring(0, detach.indexOf('onReattachedToActivity')),
+        contains('waitingSigns.removeFirst().result.error('),
+      );
+    });
+  });
+
   group('Android shows one biometric prompt at a time', () {
     final kt = File(
       'android/app/src/main/kotlin/com/tursinalabs/kelola/HardwareSignerPlugin.kt',

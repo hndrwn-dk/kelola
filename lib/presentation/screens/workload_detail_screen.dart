@@ -23,6 +23,9 @@ import 'package:kelola/presentation/widgets/confirm_workload_action.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 import 'package:kelola/providers.dart';
 
+/// Popped result that tells the list its rows are out of date.
+const workloadDeleted = true;
+
 class WorkloadDetailScreen extends ConsumerStatefulWidget {
   const WorkloadDetailScreen({
     super.key,
@@ -273,7 +276,7 @@ class _WorkloadDetailScreenState extends ConsumerState<WorkloadDetailScreen> {
       );
       if (verb == WorkloadVerb.delete) {
         if (mounted) {
-          Navigator.of(context).pop();
+          Navigator.of(context).pop(workloadDeleted);
         }
         return;
       }

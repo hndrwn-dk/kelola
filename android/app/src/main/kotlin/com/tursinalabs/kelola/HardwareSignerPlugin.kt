@@ -1,5 +1,7 @@
 package com.tursinalabs.kelola
 
+import android.os.Handler
+import android.os.Looper
 import android.content.Context
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
@@ -35,6 +37,13 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
     // take the touch given for the first.
     private var promptResult: MethodChannel.Result? = null
 
+    // Signatures that need a prompt while one is open. They wait for it to end,
+    // so neither loses its touch and neither is left unanswered.
+    private val waitingSigns = ArrayDeque<WaitingSign>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private class WaitingSign(val result: MethodChannel.Result, val retry: () -> Unit)
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
@@ -55,6 +64,13 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         val waiting = promptResult
         promptResult = null
         waiting?.error("auth_failed", "the activity closed during the prompt", null)
+        while (waitingSigns.isNotEmpty()) {
+            waitingSigns.removeFirst().result.error(
+                "auth_failed",
+                "the activity closed before the prompt",
+                null,
+            )
+        }
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
@@ -242,7 +258,25 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
             return false
         }
         promptResult = null
+        if (waitingSigns.isNotEmpty()) {
+            // After the prompt has gone: androidx ignores a start while it shows.
+            mainHandler.postDelayed({ runNextSign() }, PROMPT_GAP_MS)
+        }
         return true
+    }
+
+    // Stops at a retry that opens a prompt: its end runs the rest. A retry that
+    // signs or fails without one would otherwise strand those behind it.
+    private fun runNextSign() {
+        while (promptResult == null) {
+            val next = waitingSigns.removeFirstOrNull() ?: return
+            try {
+                next.retry()
+            } catch (e: Exception) {
+                // Off the method channel, nothing else would catch this.
+                next.result.error("sign_failed", e.message, null)
+            }
+        }
     }
 
     private fun confirmPresence(reason: String, result: MethodChannel.Result) {
@@ -307,14 +341,19 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         }
         try {
             result.success(signWith(privateKey, data))
-        } catch (_: UserNotAuthenticatedException) {
-            // Timed-auth keys (300s window): unlock with a plain BiometricPrompt.
-            // CryptoObject + initSign throws UserNotAuthenticatedException while
-            // the window is closed — the prompt never appears.
-            unlockThenSign(act, privateKey, data, result)
         } catch (e: Exception) {
-            // Per-use keys (timeout 0): must bind Signature via CryptoObject.
-            signWithCryptoObject(act, privateKey, data, result, e)
+            if (promptResult != null) {
+                // Retried whole: the touch on that prompt may open the key.
+                waitingSigns.addLast(WaitingSign(result) { sign(alias, data, result) })
+            } else if (e is UserNotAuthenticatedException) {
+                // Timed-auth keys (300s window): unlock with a plain BiometricPrompt.
+                // CryptoObject + initSign throws UserNotAuthenticatedException while
+                // the window is closed — the prompt never appears.
+                unlockThenSign(act, privateKey, data, result)
+            } else {
+                // Per-use keys (timeout 0): must bind Signature via CryptoObject.
+                signWithCryptoObject(act, privateKey, data, result, e)
+            }
         }
     }
 
@@ -452,6 +491,8 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
     )
 
     companion object {
+        // Long enough for BiometricPrompt to finish dismissing.
+        private const val PROMPT_GAP_MS = 300L
         private const val CHANNEL = "com.tursinalabs.kelola/hardware_signer"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val TAG = "KelolaSigner"

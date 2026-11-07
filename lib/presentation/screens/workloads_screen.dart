@@ -314,14 +314,14 @@ class _WorkloadsScreenState extends ConsumerState<WorkloadsScreen> {
             status: row.health,
             name: row.title,
             meta: workloadMeta(row),
-            onTap: () {
+            onTap: () async {
               final host = _host;
               final facts = _facts;
               if (host == null || facts == null) {
                 return;
               }
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
+              final deleted = await Navigator.of(context).push<bool>(
+                MaterialPageRoute<bool>(
                   builder: (_) => WorkloadDetailScreen(
                     host: host,
                     facts: facts,
@@ -329,6 +329,9 @@ class _WorkloadsScreenState extends ConsumerState<WorkloadsScreen> {
                   ),
                 ),
               );
+              if (deleted == workloadDeleted && mounted) {
+                await _load();
+              }
             },
           ),
         );
