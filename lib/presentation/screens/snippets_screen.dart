@@ -1083,7 +1083,7 @@ class _SnippetEditorState extends State<_SnippetEditor> {
           ),
           if (_scope == _SnippetScope.tag) ...[
             const SizedBox(height: 10),
-            KelolaInput(label: 'Tag', controller: _tag),
+            KelolaInput(label: 'Tag', controller: _tag, plain: true),
           ],
           const SizedBox(height: 6),
           ServiceRow(

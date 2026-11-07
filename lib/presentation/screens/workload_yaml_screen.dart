@@ -158,6 +158,10 @@ class _WorkloadYamlScreenState extends ConsumerState<WorkloadYamlScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
               child: TextField(
+                autocorrect: false,
+                enableSuggestions: false,
+                smartDashesType: SmartDashesType.disabled,
+                smartQuotesType: SmartQuotesType.disabled,
                 controller: _yaml,
                 maxLines: null,
                 expands: true,

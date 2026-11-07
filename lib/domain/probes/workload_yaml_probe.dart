@@ -55,7 +55,7 @@ class WorkloadYamlDiffProbe extends Probe<String> {
   String command(HostFacts facts) {
     assertYamlMatchesWorkload(yaml, workload);
     final ns = shellSingleQuote(workload.namespace);
-    return 'LC_ALL=C ${kubectlStdin(facts, '-n $ns diff -f -', yaml)}';
+    return kubectlStdin(facts, '-n $ns diff -f -', yaml);
   }
 
   @override
@@ -101,7 +101,7 @@ class WorkloadYamlApplyProbe extends Probe<String> {
   String command(HostFacts facts) {
     assertYamlMatchesWorkload(yaml, workload);
     final ns = shellSingleQuote(workload.namespace);
-    return 'LC_ALL=C ${kubectlStdin(facts, '-n $ns apply -f -', yaml)}';
+    return kubectlStdin(facts, '-n $ns apply -f -', yaml);
   }
 
   @override

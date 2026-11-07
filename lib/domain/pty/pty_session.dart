@@ -57,3 +57,5 @@ class PtyBoundaryProbe extends Probe<void> {
   @override
   String get auditTitle => closing ? kPtyAuditClose : kPtyAuditOpen;
 }
+
+const ptySessionEndedCopy = 'Session ended. Go back to open a new one.';

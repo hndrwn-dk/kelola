@@ -98,7 +98,7 @@ class ProbeTimeoutException extends KelolaException {
     required this.title,
     required this.timeout,
   }) : super(
-          'Timed out after ${timeout.inSeconds}s running "$title". Pull to try again.',
+          'Timed out after ${timeout.inSeconds}s running "$title". Try again.',
         );
 
   final String title;

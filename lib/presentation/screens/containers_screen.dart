@@ -167,6 +167,10 @@ class _ContainersScreenState extends ConsumerState<ContainersScreen> {
               children: [
                 if (_searching) ...[
                   TextField(
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    smartDashesType: SmartDashesType.disabled,
+                    smartQuotesType: SmartQuotesType.disabled,
                     autofocus: true,
                     style: KelolaType.mono(color: c.text, size: 13),
                     decoration: InputDecoration(

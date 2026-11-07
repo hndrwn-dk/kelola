@@ -21,7 +21,7 @@ class WorkloadExecProbe extends Probe<String> {
     final ns = shellSingleQuote(workload.namespace);
     final res = shellSingleQuote('${workload.kind.resource}/${workload.name}');
     final cmd = shellSingleQuote(line);
-    return 'LC_ALL=C ${kubectlRun(facts, '-n $ns exec $res -- sh -c $cmd')}';
+    return kubectlOnce(facts, '-n $ns exec $res -- sh -c $cmd');
   }
 
   @override
@@ -39,6 +39,10 @@ class WorkloadExecProbe extends Probe<String> {
       throw KelolaException(
         stderr.trim().isEmpty ? 'exit $exitCode' : stderr.trim(),
       );
+    }
+    if (exitCode != 0) {
+      final why = stderr.trim().isEmpty ? 'exit $exitCode' : stderr.trim();
+      return '${stdout.trim()}\n$why';
     }
     return stdout.trim().isEmpty ? stderr.trim() : stdout.trim();
   }

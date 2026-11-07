@@ -146,7 +146,10 @@ class WorkloadRolloutStatusProbe extends Probe<void> {
   String command(HostFacts facts) {
     final ns = shellSingleQuote(workload.namespace);
     final res = shellSingleQuote('${workload.kind.resource}/${workload.name}');
-    return 'LC_ALL=C ${kubectlRun(facts, '-n $ns rollout status $res --timeout=${wait.inSeconds}s')}';
+    return kubectlOnce(
+      facts,
+      '-n $ns rollout status $res --timeout=${wait.inSeconds}s',
+    );
   }
 
   @override

@@ -427,6 +427,7 @@ class _EnvEditorFormState extends ConsumerState<_EnvEditorForm> {
           ],
           KelolaInput(
             label: 'Tag',
+            plain: true,
             controller: _tag,
             hint: 'prod',
             textInputAction: TextInputAction.next,
@@ -436,6 +437,7 @@ class _EnvEditorFormState extends ConsumerState<_EnvEditorForm> {
         const SizedBox(height: 14),
         KelolaInput(
           label: 'Name',
+          plain: true,
           controller: _name,
           focusNode: _nameFocus,
           hint: 'REGION',

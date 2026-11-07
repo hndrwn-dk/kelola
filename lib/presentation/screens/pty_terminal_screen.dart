@@ -46,6 +46,7 @@ class _PtyTerminalScreenState extends ConsumerState<PtyTerminalScreen> {
   String? _error;
   var _ctrl = false;
   var _opening = true;
+  var _ended = false;
 
   @override
   void initState() {
@@ -121,6 +122,11 @@ class _PtyTerminalScreenState extends ConsumerState<PtyTerminalScreen> {
             setState(() => _error = describeSshError(e));
           }
         },
+        onDone: () {
+          if (mounted) {
+            setState(() => _ended = true);
+          }
+        },
       );
       setState(() => _opening = false);
     } on ReadOnlyViolation {
@@ -182,6 +188,14 @@ class _PtyTerminalScreenState extends ConsumerState<PtyTerminalScreen> {
               child: KelolaError(
                 message: _error!,
                 sudoUser: widget.host.username,
+              ),
+            ),
+          if (_ended)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              child: Text(
+                ptySessionEndedCopy,
+                style: KelolaType.body(color: c.muted, size: 13),
               ),
             ),
           Expanded(

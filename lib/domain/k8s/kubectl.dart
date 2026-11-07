@@ -50,7 +50,9 @@ String kubectlTry(HostFacts facts, String args) {
   };
 }
 
-/// Write / logs / exec. Same flavor as [kubectlTry], stderr kept.
+/// Reads whose failure says the cluster could not be reached. Same flavor as
+/// [kubectlTry], stderr kept. A failure runs [args] again through sudo, so
+/// anything that can fail for its own reasons uses [kubectlOnce].
 String kubectlRun(HostFacts facts, String args) {
   return switch (kubectlFlavor(facts)) {
     KubectlFlavor.none => 'echo ---NO_KUBECTL---; exit 1',
@@ -58,6 +60,32 @@ String kubectlRun(HostFacts facts, String args) {
     KubectlFlavor.kubectl => 'kubectl $args || sudo -n kubectl $args',
     KubectlFlavor.oc => '$kOcBinary $args || sudo -n $kOcBinary $args',
   };
+}
+
+/// Picks plain or sudo first, then runs [args] at most once, so a command that
+/// fails is neither repeated nor mistaken for a sudo problem, and its exit code
+/// survives. `kubectl diff` exits 1 on any difference. If neither can reach the
+/// API, [args] never runs, stderr carries both reasons, and the exit code is 2
+/// so `kubectl diff` callers do not read it as a difference.
+///
+/// Sets `LC_ALL=C` itself: a variable prefix cannot precede `if`. The group
+/// composes after a pipe, and the check leaves stdin for [args].
+String kubectlOnce(HostFacts facts, String args) {
+  return switch (kubectlFlavor(facts)) {
+    KubectlFlavor.none => '{ echo ---NO_KUBECTL---; exit 1; }',
+    KubectlFlavor.k3s =>
+      _kubectlOnce('sudo -n k3s kubectl', 'k3s kubectl', args),
+    KubectlFlavor.kubectl => _kubectlOnce('kubectl', 'sudo -n kubectl', args),
+    KubectlFlavor.oc => _kubectlOnce(kOcBinary, 'sudo -n $kOcBinary', args),
+  };
+}
+
+String _kubectlOnce(String first, String second, String args) {
+  const check = 'get --raw=/version';
+  return '{ export LC_ALL=C; '
+      'if $first $check >/dev/null 2>&1; then $first $args; '
+      'elif $second $check >/dev/null 2>&1; then $second $args; '
+      'else $first $check >/dev/null; $second $check >/dev/null; (exit 2); fi; }';
 }
 
 /// Host-side port-forward. Binds loopback only; facts pick the binary.
@@ -76,7 +104,7 @@ String kubectlPortForwardCommand(
 /// Pipe YAML on stdin. Base64 avoids a heredoc colliding with the document.
 String kubectlStdin(HostFacts facts, String args, String yaml) {
   final b64 = base64Encode(utf8.encode(yaml));
-  return 'printf %s ${shellSingleQuote(b64)} | base64 -d | ${kubectlRun(facts, args)}';
+  return 'printf %s ${shellSingleQuote(b64)} | base64 -d | ${kubectlOnce(facts, args)}';
 }
 
 int? parseKubectlForwardPort(String stdout) {

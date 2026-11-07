@@ -101,6 +101,10 @@ class _FileEditorScreenState extends ConsumerState<FileEditorScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
               child: TextField(
+                autocorrect: false,
+                enableSuggestions: false,
+                smartDashesType: SmartDashesType.disabled,
+                smartQuotesType: SmartQuotesType.disabled,
                 controller: _ctrl,
                 maxLines: null,
                 expands: true,

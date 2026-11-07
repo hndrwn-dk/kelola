@@ -331,6 +331,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                     KelolaInput(
                       key: const Key('edit-host-address'),
                       label: 'Address',
+                      plain: true,
                       controller: _address,
                       hint: host.address,
                       mono: true,
@@ -354,6 +355,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                           child: KelolaInput(
                             key: const Key('edit-host-username'),
                             label: 'Username',
+                            plain: true,
                             controller: _user,
                             hint: host.username,
                             mono: true,
@@ -365,6 +367,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                     KelolaInput(
                       key: const Key('edit-host-tags'),
                       label: 'Tags',
+                      plain: true,
                       controller: _tags,
                       hint: 'prod, staging, homelab',
                     ),
@@ -374,6 +377,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                     KelolaInput(
                       key: const Key('edit-host-ssh-cert'),
                       label: 'SSH certificate',
+                      plain: true,
                       controller: _sshCert,
                       hint: 'ecdsa-sha2-nistp256-cert-v01@openssh.com ...',
                       mono: true,

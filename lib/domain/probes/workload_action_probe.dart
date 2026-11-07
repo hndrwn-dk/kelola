@@ -37,7 +37,7 @@ class WorkloadActionProbe extends Probe<String> {
         '-n $ns scale $res --replicas=${replicas ?? workload.desired}',
       WorkloadVerb.delete => '-n $ns delete $res --wait=false',
     };
-    return 'LC_ALL=C ${kubectlRun(facts, args)}';
+    return kubectlOnce(facts, args);
   }
 
   @override
