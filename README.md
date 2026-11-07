@@ -1,6 +1,6 @@
 # Kelola
 
-Agentless Linux administration from a phone. If the host runs `sshd`, Kelola can reach it. Nothing is installed on the server.
+Agentless Linux administration from a phone. If the host runs `sshd`, Kelola can reach it. No agent or daemon is installed on the server: Kelola only adds its public key, plus optional sudo rules and an encrypted vault file when you turn those on.
 
 Kelola is a Flutter client (Android and iOS) from Tursina Labs. It SSHs in with a hardware-backed key, discovers what the machine is, and exposes admin as structured screens — not a terminal with a coat of paint.
 
@@ -13,7 +13,7 @@ Kelola has **LLM incident assist** (Explain / Summarise / Propose): explicit, re
 ## How it works
 
 1. The phone generates an ECDSA P-256 key in **Android StrongBox** or **iOS Secure Enclave**. The private key is non-exportable; signing is biometric-gated.
-2. Enrollment shows a QR code and an `authorized_keys` line. You paste that on the host by any means — USB, another SSH session, a console. No network from the phone is required for enrollment.
+2. Enrollment shows a QR code and an `authorized_keys` line. You paste that on the host by any means — USB, another SSH session, a console — and no network from the phone is required. Or let Kelola install the key with the host password once; the password is not stored, and Kelola checks that key login works before it is done.
 3. First connect pins the host key (TOFU). A mismatch is a hard block.
 4. One batched SSH command discovers OS, init, package manager, firewall, and journal access (`HostFacts`). The dashboard then shows load, memory, disk, and failed units.
 5. Every command is a typed **Probe** (`read` / `mutate` / `destructive`), dispatched through a session pool, and written to a local audit log. Root login is refused.
@@ -37,7 +37,12 @@ One hardware key per phone, reused for every host. That is intentional.
 | Assist (Explain / Summarise / Propose) | Working; terminal never calls a model |
 | Command history + local autocomplete | Working; no LLM path |
 | Tunnels (SSH local port forward) | Working; Play builds gate behind a one-time unlock |
-| Snippets, home widget, OS shortcuts | Working |
+| Snippets, home widget, OS shortcuts | Working; multi-host snippet runs are Pro on Play builds |
+| Terminal (PTY), agent forwarding (per host, off by default), SSH user certificates | Working |
+| Session logs (7–90 day retention, bookmarks), host and tag env vars | Working |
+| Kelola sudo rules (`/etc/sudoers.d/kelola`, set up once with the sudo password) | Working |
+| Encrypted vault sync (file free; LAN and host SFTP are Pro on Play builds) | Working; Argon2id + AES-256-GCM, no device key in the vault |
+| App lock | Working |
 | Kubernetes workloads | Working; read, restart/scale/delete, logs, one-shot exec via host kubectl |
 
 
@@ -61,7 +66,7 @@ One hardware key per phone, reused for every host. That is intentional.
 | `sshd` | Already on every Linux distro |
 | Public key in `~/.ssh/authorized_keys` | One line from the enrollment screen |
 | A non-root sudoer | Kelola will not log in as `root` |
-| Passwordless sudo (optional) | Required for mutate actions; Kelola never prompts for a sudo password |
+| Passwordless sudo (optional) | Required for mutate actions. Kelola can set up scoped `NOPASSWD` rules in `/etc/sudoers.d/kelola` for you; it asks for the sudo password once for that and does not store it |
 | `systemd-journal` group (optional) | Sudo-free log reads, later milestone |
 
 From the phone, use the host's **LAN or public IP**. `10.0.2.2` is emulator-only.
@@ -103,17 +108,18 @@ readiness/         product spec and milestone plan
 
 ## Security notes
 
-- No password authentication. Ever.
+- Key-only logins. A password is used once, only to install the key (then key login is verified) or to set up Kelola's sudo rules, and is never stored.
 - Cipher/KEX allowlist is modern-only (ChaCha20, AES-GCM, AES-CTR, curve25519, ECDH P-256). No SHA-1, no CBC.
 - Stopping `sshd` or a network unit requires typing the host alias.
-- Private keys never appear in logs, backups, or the UI. Restoring inventory on a new phone means re-enrollment.
+- Private keys never appear in logs, backups, vault files, or the UI. Vault sync moves inventory to a new phone, but the new phone's key still has to be enrolled on each host.
+- App data is excluded from Android cloud backup and device transfer.
 - Report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
 
 ## Support
 
 Kelola is free and open source, with no accounts and no telemetry. Source and
-debug builds unlock every feature. Play builds gate tunnels and unlimited fleet
-hosts behind a one-time unlock; later items in that bundle ship to the same
+debug builds unlock every feature. Play builds gate tunnels, unlimited fleet
+hosts, multi-host snippets, and LAN/SFTP vault sync behind a one-time unlock; later items in that bundle ship to the same
 purchase at no further cost. If it saves you time, you can support development:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/hendrawandaryonokarso)
