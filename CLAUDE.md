@@ -51,7 +51,7 @@ Password auth exists only as a non-pooled bootstrap that installs the key (`runP
 - Paid features ride an existing `ProFeature` (`tunnels`, `fleetUnlimited`, `snippetMulti`, `vaultSync`). Check `isUnlocked` in presentation or controllers only, never in `lib/domain` / `lib/data`. A new enum value must be added to both the stub and private `kelola-pro`.
 - `test/pro_entitlement_architecture_test.dart` (and `tunnels_screen_test.dart`) pin every gate call site. A new paid entry point means adding its file there deliberately.
 - Never move a feature that already shipped free behind the gate (see `docs/specs/m32-k8s-pro.md`).
-- Before uploading an AAB, install it and check the hosts colophon reads `ext` (billing). `std` means the stub was bundled and every Pro feature is open: never upload that.
+- Before uploading an AAB, install it and check Settings → Version reads `ext` (billing), for example `0.8.0 · build 123 · ext`. `std` means the stub was bundled and every Pro feature is open: never upload that.
 
 **Feature specs** live in `docs/specs/m*.md` (milestones such as jump host, vault sync, k8s workloads, tunnels, PTY). Read the matching spec before changing a feature.
 
