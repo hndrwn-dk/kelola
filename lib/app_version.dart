@@ -6,14 +6,14 @@
 /// installed package. Do not add package_info_plus for this.
 const kelolaAppVersion = String.fromEnvironment(
   'KELOLA_VERSION',
-  defaultValue: '0.7.0',
+  defaultValue: '0.8.0',
 );
 
 /// Build number (Play versionCode) from pubspec `version:` after `+`.
 /// `scripts/build_play_aab.sh` injects the same value via `KELOLA_BUILD`.
 const kelolaVersionCode = String.fromEnvironment(
   'KELOLA_BUILD',
-  defaultValue: '122',
+  defaultValue: '123',
 );
 
 /// Flutter SDK line from README. Keep in lockstep; not read from the device.
