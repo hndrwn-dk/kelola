@@ -9,9 +9,7 @@ import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
 import 'package:kelola/data/hosts/coreos_ack_store.dart';
 import 'package:kelola/data/k8s/cluster_kind_store.dart';
-import 'package:kelola/data/fleet/fleet_watch_bridge.dart';
 import 'package:kelola/data/vault/vault_store.dart';
-import 'package:kelola/presentation/fleet/fleet_watch_controller.dart';
 import 'package:kelola/presentation/vault/vault_controller.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/secrets/flutter_secure_secret_store.dart';
@@ -404,29 +402,6 @@ final fleetProbeSelectionProvider =
 );
 
 /// Live host membership and attention from Drift table watches.
-final fleetWatchBridgeProvider = Provider<FleetWatchBridge>((ref) {
-  return MethodChannelFleetWatchBridge();
-});
-
-final fleetWatchControllerProvider = Provider<FleetWatchController>((ref) {
-  final bridge = ref.watch(fleetWatchBridgeProvider);
-  final controller = FleetWatchController(
-    hosts: ref.watch(hostRepositoryProvider),
-    pool: ref.watch(sessionPoolProvider),
-    bridge: bridge,
-    widgetBridge: ref.watch(homeWidgetBridgeProvider),
-    entitlement: ref.watch(entitlementProvider),
-    selectedHostIds: () async =>
-        ref.read(fleetProbeSelectionProvider).valueOrNull,
-    clusterKinds: () => ref.read(clusterKindStoreProvider.future),
-  );
-  bridge.setTickHandler(controller.maybeTick);
-  ref.onDispose(() {
-    bridge.setTickHandler(null);
-  });
-  return controller;
-});
-
 final vaultStoreProvider = Provider<VaultStore>((ref) {
   return VaultStore(
     db: ref.watch(databaseProvider),

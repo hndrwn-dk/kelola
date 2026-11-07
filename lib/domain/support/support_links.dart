@@ -68,7 +68,7 @@ const kSupportFaq = <SupportFaqItem>[
   SupportFaqItem(
     question: 'What does Kelola Pro add?',
     answer:
-        'A one-time unlock for tunnels, unlimited fleet hosts, fleet watch, running snippets on several hosts, and vault sync. Restore purchase brings it back on the same Google account.',
+        'A one-time unlock for tunnels, unlimited fleet hosts, running snippets on several hosts, and vault sync. Restore purchase brings it back on the same Google account.',
   ),
   SupportFaqItem(
     question: 'How do I report a problem?',

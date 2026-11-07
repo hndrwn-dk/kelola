@@ -15,7 +15,6 @@ void main() {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
-    // KelolaApp's FleetWatchResume reads providers on the first frame.
     final db = KelolaDatabase.memory();
     addTearDown(db.close);
     await tester.pumpWidget(
