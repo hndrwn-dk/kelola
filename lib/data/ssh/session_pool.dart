@@ -598,6 +598,7 @@ class SshSessionPool {
         host,
         visiting: {host.id},
         onUnknownHostKey: onUnknownHostKey,
+        forwardAgent: true,
       );
       client = opened;
       final session = await opened.shell(
@@ -730,6 +731,7 @@ class SshSessionPool {
     Set<String>? visiting,
     UnknownHostKeyHandler? onUnknownHostKey,
     FutureOr<String?> Function()? onPasswordRequest,
+    bool forwardAgent = false,
   }) async {
     visiting ??= <String>{host.id};
     final usePassword = onPasswordRequest != null;
@@ -792,9 +794,14 @@ class SshSessionPool {
         identities: identities,
         onVerifyHostKey: verifyHostKey,
         onPasswordRequest: passwordHandler,
-        agentHandler: usePassword || !host.agentForward
+        agentHandler: usePassword || !forwardAgent || !host.agentForward
             ? null
-            : HardwareSshAgent(_identityFor(host)),
+            : HardwareSshAgent(
+                _identityFor(host),
+                confirmPresence: () => _signer.confirmPresence(
+                  reason: 'Let ${host.alias} use your SSH key',
+                ),
+              ),
       );
     } catch (e) {
       // Mirror execute: changed pins must surface HostKeyMismatchException so
@@ -842,6 +849,9 @@ class SshSessionPool {
       // Must outlast the TOFU prompt. dartssh2 holds NEWKEYS until verify
       // returns; a 20s cap made first connect look like issue #83.
       await client.authenticated.timeout(const Duration(minutes: 2));
+      if (agentHandler is HardwareSshAgent) {
+        agentHandler.markAuthenticated();
+      }
       return client;
     } catch (_) {
       await client.close();

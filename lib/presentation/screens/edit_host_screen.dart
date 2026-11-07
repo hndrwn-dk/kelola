@@ -156,8 +156,9 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
       final ok = await showMutateConfirm(
         context,
         title: 'Forward agent on ${host.alias}?',
-        body: 'This host may ask Kelola to sign with the on-device key. '
-            'The private key never leaves the phone. sshd must allow agent forwarding.',
+        body: 'From Terminal, this host can ask to log in elsewhere with your '
+            'on-device key. Each request needs your fingerprint. If you cancel, it cannot ask '
+            'again until it reconnects. sshd must allow agent forwarding.',
         confirmLabel: 'Forward agent',
       );
       if (!ok || !mounted) {
