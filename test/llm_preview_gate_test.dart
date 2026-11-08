@@ -30,7 +30,7 @@ void main() {
 
     test('Ollama + public endpoint → preview; approve clears for same key', () {
       final gate = AssistPreviewGate();
-      final settings = _ollama('http://203.0.113.10:11434');
+      final settings = _ollama('https://203.0.113.10:11434');
       expect(gate.needsPreview(settings), isTrue);
       gate.markApproved(settings);
       expect(gate.needsPreview(settings), isFalse);
@@ -54,8 +54,8 @@ void main() {
 
     test('approving endpoint A does not approve endpoint B', () {
       final gate = AssistPreviewGate();
-      final a = _ollama('http://203.0.113.10:11434');
-      final b = _ollama('http://198.51.100.20:11434');
+      final a = _ollama('https://203.0.113.10:11434');
+      final b = _ollama('https://198.51.100.20:11434');
       gate.markApproved(a);
       expect(gate.needsPreview(a), isFalse);
       expect(gate.needsPreview(b), isTrue);
@@ -64,7 +64,7 @@ void main() {
     test('approving OpenAI does not approve public Ollama', () {
       final gate = AssistPreviewGate();
       final cloud = _openai('https://api.openai.com/v1');
-      final publicOllama = _ollama('http://203.0.113.10:11434');
+      final publicOllama = _ollama('https://203.0.113.10:11434');
       gate.markApproved(cloud);
       expect(gate.needsPreview(cloud), isFalse);
       expect(gate.needsPreview(publicOllama), isTrue);
@@ -75,12 +75,12 @@ void main() {
     test('unapproved public Ollama throws Preview not approved', () {
       final service = AssistService(
         http: RecordingLlmHttpClient(
-          allowedBase: Uri.parse('http://203.0.113.10:11434'),
+          allowedBase: Uri.parse('https://203.0.113.10:11434'),
         ),
       );
       expect(
         () => service.explainFailedUnit(
-          settings: _ollama('http://203.0.113.10:11434'),
+          settings: _ollama('https://203.0.113.10:11434'),
           unitName: 'nginx.service',
           showOutput: 'ActiveState=failed',
           journal: 'fail',
@@ -101,11 +101,11 @@ void main() {
       final gate = AssistPreviewGate();
       final service = AssistService(
         http: RecordingLlmHttpClient(
-          allowedBase: Uri.parse('http://203.0.113.10:11434'),
+          allowedBase: Uri.parse('https://203.0.113.10:11434'),
         ),
         gate: gate,
       );
-      final settings = _ollama('http://203.0.113.10:11434');
+      final settings = _ollama('https://203.0.113.10:11434');
       expect(service.needsPreview(settings), isTrue);
       service.approvePreview(settings);
       expect(service.needsPreview(settings), isFalse);
