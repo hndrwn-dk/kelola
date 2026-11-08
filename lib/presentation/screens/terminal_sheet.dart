@@ -367,6 +367,10 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
             ),
             const SizedBox(height: 10),
             TextField(
+              autocorrect: false,
+              enableSuggestions: false,
+              smartDashesType: SmartDashesType.disabled,
+              smartQuotesType: SmartQuotesType.disabled,
               controller: _input,
               enabled: !_busy,
               style: KelolaType.mono(color: c.text, size: 13),
@@ -458,6 +462,10 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         TextField(
+          autocorrect: false,
+          enableSuggestions: false,
+          smartDashesType: SmartDashesType.disabled,
+          smartQuotesType: SmartQuotesType.disabled,
           controller: _historySearch,
           style: KelolaType.mono(color: c.text, size: 13),
           decoration: InputDecoration(
@@ -514,6 +522,10 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         TextField(
+          autocorrect: false,
+          enableSuggestions: false,
+          smartDashesType: SmartDashesType.disabled,
+          smartQuotesType: SmartQuotesType.disabled,
           controller: _logSearch,
           style: KelolaType.mono(color: c.text, size: 13),
           decoration: InputDecoration(

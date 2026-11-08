@@ -264,7 +264,7 @@ class _ContainerDetailScreenState extends ConsumerState<ContainerDetailScreen> {
   String _actionMeta(ContainerVerb verb) {
     if (isLockoutContainerAction(verb.name, widget.row,
         sshPort: widget.host.port)) {
-      return 'destructive · will end this session';
+      return 'destructive · may end this session';
     }
     if (verb == ContainerVerb.remove) {
       return 'destructive · type ${widget.row.title}';

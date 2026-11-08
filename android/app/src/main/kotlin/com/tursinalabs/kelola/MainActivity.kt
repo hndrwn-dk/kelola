@@ -14,7 +14,7 @@ class MainActivity : FlutterFragmentActivity() {
         flutterEngine.plugins.add(AppLockPlugin())
         flutterEngine.plugins.add(KelolaWidgetPlugin())
         flutterEngine.plugins.add(TunnelPlugin())
-        flutterEngine.plugins.add(FleetWatchPlugin())
+        LegacyFleetWatchCleanup.run(applicationContext)
         flutterEngine.plugins.add(ShortcutsPlugin())
         links = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

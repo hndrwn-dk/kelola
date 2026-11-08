@@ -1,4 +1,5 @@
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/host_tags.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
 enum EnvScope { host, tag }
@@ -29,7 +30,7 @@ Map<String, String> resolveHostEnv(Host host, List<EnvBinding> all) {
   for (final tag in tags) {
     for (final binding in all) {
       if (binding.scope == EnvScope.tag &&
-          binding.scopeId == tag &&
+          normalizeHostTag(binding.scopeId) == tag &&
           isEnvName(binding.name)) {
         resolved[binding.name] = binding.value;
       }

@@ -1,8 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/data/db/database.dart';
-import 'package:kelola/data/db/host_repository.dart';
-import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
@@ -42,24 +40,5 @@ CREATE TABLE app_settings (
       "SELECT name FROM sqlite_master WHERE type='table' AND name='fleet_watch_state'",
     ).get();
     expect(table, isNotEmpty);
-  });
-
-  test('repository stores watch settings and fingerprints', () async {
-    final db = KelolaDatabase.memory();
-    addTearDown(db.close);
-    final hosts = HostRepository(db);
-
-    expect(await hosts.fleetWatchEnabled(), isFalse);
-    await hosts.setFleetWatchEnabled(true);
-    await hosts.setFleetWatchThresholds(
-      const FleetWatchThresholds(diskPercent: 80, memPercent: 85, failedUnits: 2),
-    );
-    expect(await hosts.fleetWatchEnabled(), isTrue);
-    expect((await hosts.fleetWatchThresholds()).diskPercent, 80);
-    expect((await hosts.fleetWatchThresholds()).failedUnits, 2);
-
-    await hosts.setFleetWatchFingerprint('h1', 'failedUnit');
-    expect(await hosts.fleetWatchFingerprint('h1'), 'failedUnit');
-    expect(await hosts.fleetWatchFingerprint('missing'), isNull);
   });
 }

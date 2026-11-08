@@ -48,10 +48,10 @@ Password auth exists only as a non-pooled bootstrap that installs the key (`runP
 **Persistence:** Drift (`lib/data/db/tables.dart`, `database.dart`). Schema changes need a `schemaVersion` bump, a migration, and a `build_runner` regen. `HostRepository` is the main facade. Vault sync (`lib/data/vault`) serialises hosts, pins, snippets, tunnels and prefs as records with tombstones.
 
 **Billing gate:** `packages/kelola_pro` is an open stub that unlocks everything. Play builds must swap in the private `hndrwn-dk/kelola-pro` through a gitignored `pubspec_overrides.yaml` (the checkout lives at `.gate_tmp_kelola_pro/` or a sibling `../kelola-pro`; the overrides file names the path). `scripts/check_play_billing.dart` refuses a stub build. Never commit the overrides file, keystores, or that checkout.
-- Paid features ride an existing `ProFeature` (`tunnels`, `fleetUnlimited`, `fleetWatch`, `snippetMulti`, `vaultSync`). Check `isUnlocked` in presentation or controllers only, never in `lib/domain` / `lib/data`. A new enum value must be added to both the stub and private `kelola-pro`.
+- Paid features ride an existing `ProFeature` (`tunnels`, `fleetUnlimited`, `snippetMulti`, `vaultSync`). Check `isUnlocked` in presentation or controllers only, never in `lib/domain` / `lib/data`. A new enum value must be added to both the stub and private `kelola-pro`.
 - `test/pro_entitlement_architecture_test.dart` (and `tunnels_screen_test.dart`) pin every gate call site. A new paid entry point means adding its file there deliberately.
 - Never move a feature that already shipped free behind the gate (see `docs/specs/m32-k8s-pro.md`).
-- Before uploading an AAB, install it and check the hosts colophon reads `ext` (billing). `std` means the stub was bundled and every Pro feature is open: never upload that.
+- Before uploading an AAB, install it and check Settings → Version reads `ext` (billing), for example `0.8.0 · build 123 · ext`. `std` means the stub was bundled and every Pro feature is open: never upload that.
 
 **Feature specs** live in `docs/specs/m*.md` (milestones such as jump host, vault sync, k8s workloads, tunnels, PTY). Read the matching spec before changing a feature.
 

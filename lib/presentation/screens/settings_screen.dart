@@ -6,7 +6,6 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/app_lock/app_lock_timeout.dart';
 import 'package:kelola/domain/session_logs/session_log.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
-import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/support/support_links.dart';
 import 'package:kelola/domain/vault/vault.dart';
@@ -49,6 +48,66 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _restoreNote;
+
+  Future<void> _pickScreenshots() async {
+    final c = context.kc;
+    final allowed = ref.read(allowScreenshotsProvider).asData?.value ?? false;
+    final chosen = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: c.surface,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        side: BorderSide(color: c.line),
+      ),
+      builder: (ctx) {
+        return KelolaSheet(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Screenshots',
+                  style: KelolaType.display(color: c.text, size: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'While App lock is on, Kelola blocks screenshots and screen '
+                  'recording. Allowing them can capture host names, addresses '
+                  'and command output. Below Android 13 and on iOS it also '
+                  'shows the last screen in the app switcher while locked.',
+                  style: KelolaType.body(color: c.muted, size: 13),
+                ),
+                const SizedBox(height: 12),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Blocked',
+                  meta: allowed ? 'with App lock' : 'selected',
+                  onTap: () => Navigator.of(ctx).pop(false),
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
+                  name: 'Allowed',
+                  meta: allowed ? 'selected' : 'always',
+                  onTap: () => Navigator.of(ctx).pop(true),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (chosen == null || chosen == allowed) {
+      return;
+    }
+    await ref.read(hostRepositoryProvider).setAllowScreenshots(chosen);
+    ref.invalidate(allowScreenshotsProvider);
+  }
 
   Future<void> _pickLockTimeout() async {
     final can = ref.read(appLockAvailableProvider).asData?.value ?? false;
@@ -150,167 +209,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         .read(hostRepositoryProvider)
         .setSessionLogRetentionDays(chosen.days);
     ref.invalidate(sessionLogRetentionProvider);
-  }
-
-  Future<void> _openFleetWatch() async {
-    final entitlement = ref.read(entitlementProvider);
-    if (!entitlement.isUnlocked(ProFeature.fleetWatch)) {
-      await showProLockedSheet(
-        context,
-        title: 'Fleet watch',
-        body: 'Background fleet watch refreshes selected hosts about hourly '
-            'and alerts locally when a watched signal changes. '
-            'This build keeps watch locked.',
-        priceLabel: entitlement.priceLabel,
-        onPurchase: () => entitlement.purchase(),
-      );
-      return;
-    }
-    final hosts = ref.read(hostRepositoryProvider);
-    var enabled = await hosts.fleetWatchEnabled();
-    var thresholds = await hosts.fleetWatchThresholds();
-    if (!mounted) {
-      return;
-    }
-    final c = context.kc;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: c.surface,
-      isScrollControlled: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(KelolaRadii.lg),
-        ),
-        side: BorderSide(color: c.line),
-      ),
-      builder: (ctx) {
-        return KelolaSheet(
-          child: StatefulBuilder(
-            builder: (ctx, setSheet) {
-              return SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                    Text(
-                      'Fleet watch',
-                      style: KelolaType.display(color: c.text, size: 16),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Roughly hourly. Local alerts only.',
-                      style: KelolaType.body(color: c.muted, size: 13),
-                    ),
-                    const SizedBox(height: 12),
-                    ServiceRow(
-                      risk: RiskLevel.read,
-                      name: enabled ? 'On' : 'Off',
-                      meta: 'default off',
-                      onTap: () async {
-                        enabled = !enabled;
-                        await ref
-                            .read(fleetWatchControllerProvider)
-                            .setEnabled(enabled);
-                        setSheet(() {});
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _WatchPillRow(
-                      label: 'Disk',
-                      values: const ['80', '90', '95'],
-                      selected: '${thresholds.diskPercent}',
-                      onPick: (raw) async {
-                        thresholds = FleetWatchThresholds(
-                          diskPercent: int.parse(raw),
-                          memPercent: thresholds.memPercent,
-                          failedUnits: thresholds.failedUnits,
-                          containers: thresholds.containers,
-                          reboot: thresholds.reboot,
-                        );
-                        await hosts.setFleetWatchThresholds(thresholds);
-                        setSheet(() {});
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    _WatchPillRow(
-                      label: 'Memory',
-                      values: const ['80', '90', '95'],
-                      selected: '${thresholds.memPercent}',
-                      onPick: (raw) async {
-                        thresholds = FleetWatchThresholds(
-                          diskPercent: thresholds.diskPercent,
-                          memPercent: int.parse(raw),
-                          failedUnits: thresholds.failedUnits,
-                          containers: thresholds.containers,
-                          reboot: thresholds.reboot,
-                        );
-                        await hosts.setFleetWatchThresholds(thresholds);
-                        setSheet(() {});
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    _WatchPillRow(
-                      label: 'Failed units',
-                      values: const ['1', '2', '5'],
-                      selected: '${thresholds.failedUnits}',
-                      onPick: (raw) async {
-                        thresholds = FleetWatchThresholds(
-                          diskPercent: thresholds.diskPercent,
-                          memPercent: thresholds.memPercent,
-                          failedUnits: int.parse(raw),
-                          containers: thresholds.containers,
-                          reboot: thresholds.reboot,
-                        );
-                        await hosts.setFleetWatchThresholds(thresholds);
-                        setSheet(() {});
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    _WatchPillRow(
-                      label: 'Containers',
-                      values: const ['1', '2', '5'],
-                      selected: '${thresholds.containers}',
-                      onPick: (raw) async {
-                        thresholds = FleetWatchThresholds(
-                          diskPercent: thresholds.diskPercent,
-                          memPercent: thresholds.memPercent,
-                          failedUnits: thresholds.failedUnits,
-                          containers: int.parse(raw),
-                          reboot: thresholds.reboot,
-                        );
-                        await hosts.setFleetWatchThresholds(thresholds);
-                        setSheet(() {});
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    _WatchPillRow(
-                      label: 'Reboot',
-                      values: const ['on', 'off'],
-                      selected: thresholds.reboot ? 'on' : 'off',
-                      onPick: (raw) async {
-                        thresholds = FleetWatchThresholds(
-                          diskPercent: thresholds.diskPercent,
-                          memPercent: thresholds.memPercent,
-                          failedUnits: thresholds.failedUnits,
-                          containers: thresholds.containers,
-                          reboot: raw == 'on',
-                        );
-                        await hosts.setFleetWatchThresholds(thresholds);
-                        setSheet(() {});
-                      },
-                    ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-    if (mounted) setState(() {});
   }
 
   Future<void> _openVault() async {
@@ -807,7 +705,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return showProLockedSheet(
       context,
       title: 'Kelola Pro',
-      body: 'Pro unlocks unlimited fleet, fleet watch, tunnels, '
+      body: 'Pro unlocks unlimited fleet, tunnels, '
           'multi-host snippets, and vault sync.',
       priceLabel: entitlement.priceLabel,
       onPurchase: () => entitlement.purchase(),
@@ -879,6 +777,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final timeout = ref.watch(appLockTimeoutProvider).asData?.value ?? 0;
+    final screenshotsAllowed =
+        ref.watch(allowScreenshotsProvider).asData?.value ?? false;
     final retentionDays = ref.watch(sessionLogRetentionProvider).asData?.value ??
         kDefaultSessionLogRetentionDays;
     final canAuth = ref.watch(appLockAvailableProvider).asData?.value ?? false;
@@ -945,6 +845,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: 8),
                 ServiceRow(
                   risk: RiskLevel.read,
+                  name: 'Screenshots',
+                  meta: screenshotsAllowed || timeout == 0
+                      ? 'allowed'
+                      : 'blocked with App lock',
+                  onTap: _pickScreenshots,
+                ),
+                const SizedBox(height: 8),
+                ServiceRow(
+                  risk: RiskLevel.read,
                   name: 'Session logs',
                   meta: SessionLogRetention.fromDays(retentionDays).label,
                   onTap: _pickRetention,
@@ -952,16 +861,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: 8),
                 ServiceRow(
                   risk: RiskLevel.read,
-                  name: 'Environments',
-                  meta: 'tag variables',
+                  name: 'Tag variables',
+                  meta: 'for commands and snippets',
                   onTap: () => showTagEnvironmentsSheet(context: context),
-                ),
-                const SizedBox(height: 8),
-                ServiceRow(
-                  risk: RiskLevel.read,
-                  name: 'Fleet watch',
-                  meta: paid ? 'roughly hourly' : 'unlock required',
-                  onTap: _openFleetWatch,
                 ),
                 const SizedBox(height: 8),
                 ServiceRow(
@@ -1067,44 +969,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ],
       ),
-    );
-  }
-}
-
-class _WatchPillRow extends StatelessWidget {
-  const _WatchPillRow({
-    required this.label,
-    required this.values,
-    required this.selected,
-    required this.onPick,
-  });
-
-  final String label;
-  final List<String> values;
-  final String selected;
-  final Future<void> Function(String raw) onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.kc;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: KelolaType.body(color: c.muted, size: 12)),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 5,
-          runSpacing: 5,
-          children: [
-            for (final value in values)
-              FilterPill(
-                label: value,
-                selected: value == selected,
-                onTap: () => onPick(value),
-              ),
-          ],
-        ),
-      ],
     );
   }
 }

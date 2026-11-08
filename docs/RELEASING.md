@@ -63,8 +63,12 @@ in CI drifted from pubspec).
    `android/key.properties` locally.
 2. `bash scripts/build_play_aab.sh` → `bundles_release/v<version>/`.
 3. Upload the AAB in Play Console → Internal testing. Paste
-   `docs/store/whatsnew/whatsnew-en-US` as release notes and upload
-   `build/app/outputs/mapping/release/mapping.txt` for deobfuscation.
+   `docs/store/whatsnew/whatsnew-en-US` as release notes. The R8 mapping
+   ships inside the AAB (`BUNDLE-METADATA/.../obfuscation/proguard.map`), so
+   no separate upload is needed. To check, open the bundle under Test and
+   release → Latest releases and bundles → Downloads → Assets. If ReTrace
+   mapping file is empty, upload
+   `build/app/outputs/mapping/release/mapping.txt` there.
 4. Install on the Pixel 8 Pro and verify against lab SSH hosts /
    StrongBox. Settings → Version must read `name (+N)` from pubspec.
 5. **Promote** the same artifact to production in Play Console (no

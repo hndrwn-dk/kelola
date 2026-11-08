@@ -95,7 +95,7 @@ void main() {
         kubectlRun(f, 'get pods'),
         '$bin get pods || sudo -n $bin get pods',
       );
-      expect(kubectlStdin(f, 'apply -f -', 'a: 1'), contains('| $bin apply -f -'));
+      expect(kubectlStdin(f, 'apply -f -', 'a: 1'), contains('then $bin apply -f -'));
       expect(
         kubectlPortForwardCommand(f, resource: 'svc/web', port: 80),
         startsWith('LC_ALL=C $bin '),

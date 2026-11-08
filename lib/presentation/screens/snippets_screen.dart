@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
@@ -5,6 +7,7 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/entitlement/entitlement.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/host_tags.dart';
 import 'package:kelola/domain/probes/command_runner_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/snippet_probe.dart';
@@ -716,6 +719,8 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
   late Set<String> _selected;
   List<SnippetMultiOutcome> _outcomes = const [];
   bool _busy = false;
+  String? _tag;
+  final _resultsKey = GlobalKey();
 
   @override
   void initState() {
@@ -754,6 +759,26 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
           style: KelolaType.body(color: c.muted, size: 13),
         ),
         const SizedBox(height: 12),
+        if (snippetMultiTags(widget.hosts).isNotEmpty) ...[
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              FilterPill(
+                label: 'All',
+                selected: _tag == null,
+                onTap: _busy ? null : () => _pickTag(null),
+              ),
+              for (final tag in snippetMultiTags(widget.hosts))
+                FilterPill(
+                  label: tag,
+                  selected: _tag == tag,
+                  onTap: _busy ? null : () => _pickTag(tag),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+        ],
         if (widget.hosts.isEmpty)
           Text(
             'No hosts match this snippet.',
@@ -809,6 +834,7 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
           const SizedBox(height: 12),
           Text('Running', style: KelolaType.mono(color: c.muted, size: 10.5)),
         ],
+        SizedBox(key: _resultsKey, height: 0),
         for (final outcome in _outcomes) ...[
           const SizedBox(height: 10),
           ServiceRow(
@@ -838,6 +864,25 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
         ],
       ],
     );
+  }
+
+  void _pickTag(String? tag) {
+    setState(() {
+      _tag = tag;
+      _selected = snippetMultiSelectTag(widget.hosts, tag);
+    });
+  }
+
+  void _revealResults() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _resultsKey.currentContext;
+      if (target != null && target.mounted) {
+        Scrollable.ensureVisible(
+          target,
+          duration: const Duration(milliseconds: 250),
+        );
+      }
+    });
   }
 
   Future<void> _runSelected() async {
@@ -889,6 +934,7 @@ class _SnippetMultiSheetState extends ConsumerState<_SnippetMultiSheet> {
         return;
       }
       setState(() => _outcomes = outcomes);
+      _revealResults();
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -945,17 +991,18 @@ Future<Snippet?> _editSnippet(
   );
 }
 
-class _SnippetEditor extends StatefulWidget {
+class _SnippetEditor extends ConsumerStatefulWidget {
   const _SnippetEditor({required this.host, required this.current});
 
   final Host host;
   final Snippet current;
 
   @override
-  State<_SnippetEditor> createState() => _SnippetEditorState();
+  ConsumerState<_SnippetEditor> createState() => _SnippetEditorState();
 }
 
-class _SnippetEditorState extends State<_SnippetEditor> {
+class _SnippetEditorState extends ConsumerState<_SnippetEditor> {
+  List<String> _knownTags = const [];
   late final TextEditingController _name;
   late final TextEditingController _template;
   late final TextEditingController _tag;
@@ -977,6 +1024,14 @@ class _SnippetEditorState extends State<_SnippetEditor> {
       _scope = _SnippetScope.all;
     }
     _startup = current.startup;
+    unawaited(_loadTags());
+  }
+
+  Future<void> _loadTags() async {
+    final hosts = await ref.read(hostRepositoryProvider).list();
+    if (mounted) {
+      setState(() => _knownTags = knownHostTags(hosts));
+    }
   }
 
   @override
@@ -998,7 +1053,7 @@ class _SnippetEditorState extends State<_SnippetEditor> {
   }
 
   void _save() {
-    final tag = _tag.text.trim();
+    final tag = normalizeHostTag(_tag.text);
     Navigator.of(context).pop(
       _SnippetDraft(
         name: _name.text.trim(),
@@ -1040,7 +1095,27 @@ class _SnippetEditorState extends State<_SnippetEditor> {
           ),
           if (_scope == _SnippetScope.tag) ...[
             const SizedBox(height: 10),
-            KelolaInput(label: 'Tag', controller: _tag),
+            KelolaInput(
+              label: 'Tag',
+              controller: _tag,
+              plain: true,
+              onChanged: (_) => setState(() {}),
+            ),
+            if (_knownTags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 5,
+                runSpacing: 5,
+                children: [
+                  for (final tag in _knownTags)
+                    FilterPill(
+                      label: tag,
+                      selected: normalizeHostTag(_tag.text) == tag,
+                      onTap: () => setState(() => _tag.text = tag),
+                    ),
+                ],
+              ),
+            ],
           ],
           const SizedBox(height: 6),
           ServiceRow(

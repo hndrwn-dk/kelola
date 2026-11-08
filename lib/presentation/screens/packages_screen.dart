@@ -36,6 +36,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
   Host? _host;
   HostFacts? _facts;
   PackageSnapshot? _snap;
+  DateTime? _fetchedAt;
   PackageListFilter _filter = PackageListFilter.all;
   bool _landed = false;
   String? _error;
@@ -54,7 +55,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool force = false}) async {
     _listCancel?.cancel();
     final cancel = TransferCancel();
     _listCancel = cancel;
@@ -101,8 +102,26 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
             updates: const [],
             rebootRequired: false,
           );
+          _fetchedAt = null;
         });
         return;
+      }
+      if (!force) {
+        final cached = await repo.loadPackageListCache(host.id);
+        if (cached != null && !cancel.isCancelled && mounted) {
+          setState(() {
+            _host = host;
+            _facts = resolved;
+            _snap = cached.snapshot;
+            _fetchedAt = cached.fetchedAt;
+            _error = null;
+            if (!_landed) {
+              _filter = defaultPackageFilter(cached.snapshot);
+              _landed = true;
+            }
+          });
+          return;
+        }
       }
       final snap = await runHostProbe(
         ref: ref,
@@ -115,6 +134,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
       if (cancel.isCancelled || !mounted) {
         return;
       }
+      await repo.savePackageListCache(hostId: host.id, snapshot: snap);
       await repo.savePackageUpdateCounts(
         hostId: host.id,
         alias: host.alias,
@@ -127,6 +147,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
         _host = host;
         _facts = resolved;
         _snap = snap;
+        _fetchedAt = DateTime.now().toUtc();
         if (!_landed) {
           _filter = defaultPackageFilter(snap);
           _landed = true;
@@ -206,7 +227,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
         ),
         facts: facts,
       );
-      await _load();
+      await _load(force: true);
     } on ReadOnlyViolation {
       setState(() => _error = 'This host is read-only.');
     } catch (e) {
@@ -276,6 +297,17 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
                 ],
               ),
             ),
+          if (snap != null && _fetchedAt != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Updated ${Host.ageLabel(_fetchedAt!)}',
+                  style: KelolaType.body(color: c.muted, size: 12),
+                ),
+              ),
+            ),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
@@ -293,14 +325,14 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
                           facts: _facts,
                         );
                         if (ok && mounted) {
-                          await _load();
+                          await _load(force: true);
                         }
                       },
               ),
             ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _load,
+              onRefresh: () => _load(force: true),
               child: _body(snap, visible),
             ),
           ),

@@ -7,7 +7,6 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/fleet/fleet_k8s.dart';
-import 'package:kelola/domain/fleet/fleet_watch.dart';
 import 'package:kelola/domain/k8s/cluster_health_parser.dart';
 import 'package:kelola/domain/k8s/cluster_kind.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
@@ -287,36 +286,15 @@ void main() {
       );
     });
 
-    test('fleet watch: OCP failed is a transition; warnings are not watched',
-        () {
-      const thresholds = FleetWatchThresholds();
-      final healthy = fleetWatchAssessment(
-        _host(_healthyK8s.withOcp(const FleetOcpSummary(version: '4.17.3'))),
-        thresholds,
-      );
-      final failed = fleetWatchAssessment(
+    test('a failed OCP cluster names its degraded operators', () {
+      final failed = assessFleetHost(
         _host(
           _healthyK8s.withOcp(
             const FleetOcpSummary(version: '4.17.3', operatorsDegraded: 2),
           ),
         ),
-        thresholds,
       );
-      final warn = fleetWatchAssessment(
-        _host(_healthyK8s.withOcp(const FleetOcpSummary(pendingCsrs: 1))),
-        thresholds,
-      );
-      expect(fleetWatchFingerprint(healthy), 'healthy');
-      expect(fleetWatchFingerprint(failed), 'ocpDegraded');
-      expect(fleetWatchFingerprint(warn), 'healthy');
-      expect(
-        fleetWatchShouldNotify(
-          previous: fleetWatchFingerprint(healthy),
-          current: fleetWatchFingerprint(failed),
-        ),
-        isTrue,
-      );
-      expect(fleetWatchNoticeBody(failed), 'OCP 4.17.3 · 2 operators degraded');
+      expect(failed.issues.single.meta, 'OCP 4.17.3 · 2 operators degraded');
     });
   });
 

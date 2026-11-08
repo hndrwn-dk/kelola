@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/files/sftp_entry.dart';
+import 'package:kelola/domain/files/sftp_local_name.dart';
 import 'package:kelola/domain/files/sftp_path.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
 
@@ -35,7 +36,10 @@ class DartSshSftpPort implements SftpPort {
       final names = await _sftp.listdir(path);
       return [
         for (final n in names)
-          sftpEntryFromListing(
+          // Server-chosen names: drop anything that is not one plain name
+          // (`../x`, `a/b`, NUL) so it cannot steer a local or remote path.
+          if (isSafeSftpEntryName(n.filename))
+            sftpEntryFromListing(
             name: n.filename,
             path: joinSftpPath(path, n.filename),
             longname: n.longname,

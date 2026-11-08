@@ -157,25 +157,16 @@ class _LlmSettingsScreenState extends ConsumerState<LlmSettingsScreen> {
     }
   }
 
+  /// Follows the row being edited, not what is saved, so the badge cannot say
+  /// None while another provider's fields are open.
   String? _pillFor(LlmProvider p) {
-    if (_bundle.activeProvider == p) {
-      if (p == LlmProvider.openaiCompatible) {
-        final c = _bundle.configFor(p);
-        final complete = c.hasValidBaseUrlFor(p) &&
-            (c.model?.trim().isNotEmpty ?? false) &&
-            _openaiKeyPresent;
-        if (p.enabled && !complete) {
-          return 'set up';
-        }
-      } else if (p.enabled && !_bundle.configFor(p).isCompleteFor(p)) {
-        return 'set up';
-      }
-      return 'selected';
+    if (_draft != p) {
+      return null;
     }
-    if (_draft == p && p.enabled && !_draftConfig.isCompleteFor(p)) {
+    if (p.enabled && !_draftConfig.isCompleteFor(p)) {
       return 'set up';
     }
-    return null;
+    return _bundle.activeProvider == p ? 'selected' : 'save to use';
   }
 
   Future<void> _onReplaceKey(String trimmed) async {

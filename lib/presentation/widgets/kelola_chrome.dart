@@ -580,6 +580,10 @@ class KelolaField extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         TextField(
+          autocorrect: false,
+          enableSuggestions: false,
+          smartDashesType: SmartDashesType.disabled,
+          smartQuotesType: SmartQuotesType.disabled,
           controller: controller,
           keyboardType: keyboardType,
           minLines: minLines,

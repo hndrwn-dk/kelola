@@ -124,6 +124,7 @@ class ClusterHealth {
     this.nodes = const [],
     this.isOpenShift,
     this.authExpired = false,
+    this.kubeconfigDenied = false,
     this.kubeContext = '',
   });
 
@@ -148,6 +149,17 @@ class ClusterHealth {
   /// (`oc login` token expired). The API answered, so this is never
   /// "API down".
   final bool authExpired;
+
+  /// readyz failed because this login cannot read its kubeconfig (k3s keeps
+  /// it root-only by default). The API may be fine; we just cannot ask it.
+  final bool kubeconfigDenied;
+
+  String get apiLabel {
+    if (apiReachable) {
+      return 'reachable';
+    }
+    return kubeconfigDenied ? 'no kubeconfig access' : 'unreachable';
+  }
 
   /// `config current-context` on the host. Empty when unknown.
   final String kubeContext;
@@ -191,7 +203,7 @@ class ClusterHealth {
       return HealthStatus.unknown;
     }
     // A distinct state, shown on its own; not a dead API.
-    if (authExpired) {
+    if (authExpired || kubeconfigDenied) {
       return HealthStatus.unknown;
     }
     if (!apiReachable) {
@@ -234,6 +246,7 @@ class ClusterHealth {
       nodes: nodes,
       isOpenShift: isOpenShift,
       authExpired: authExpired,
+      kubeconfigDenied: kubeconfigDenied,
       kubeContext: kubeContext,
     );
   }

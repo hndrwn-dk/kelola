@@ -11,6 +11,7 @@ import 'package:kelola/domain/fleet/fleet_k8s.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/host_env/host_env.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/host_tags.dart';
 import 'package:kelola/domain/hosts/host_edit.dart';
 import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/domain/hosts/ssh_config_import.dart';
@@ -205,6 +206,9 @@ class HostRepository {
       )..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.snippets)..where((t) => t.hostId.equals(id))).go();
       await (_db.delete(_db.pins)..where((t) => t.hostId.equals(id))).go();
+      await (_db.delete(
+        _db.packageListCache,
+      )..where((t) => t.hostId.equals(id))).go();
       final last = await lastHostId();
       if (last == id) {
         await setLastHost(null);
@@ -1241,7 +1245,7 @@ class HostRepository {
   Future<void> setHostTags(String hostId, List<String> tags) async {
     final cleaned =
         tags
-            .map((t) => t.trim().toLowerCase())
+            .map(normalizeHostTag)
             .where((t) => t.isNotEmpty)
             .toSet()
             .toList()
@@ -1262,6 +1266,53 @@ class HostRepository {
     final rows = await _db.select(_db.hostTags).get();
     final set = rows.map((r) => r.tag).toSet().toList()..sort();
     return set;
+  }
+
+  Future<({PackageSnapshot snapshot, DateTime fetchedAt})?>
+      loadPackageListCache(String hostId) async {
+    final row = await (_db.select(_db.packageListCache)
+          ..where((t) => t.hostId.equals(hostId)))
+        .getSingleOrNull();
+    if (row == null) {
+      return null;
+    }
+    try {
+      final map = jsonDecode(row.snapshotJson);
+      if (map is! Map) {
+        return null;
+      }
+      return (
+        snapshot: PackageSnapshot.fromJson(Map<String, dynamic>.from(map)),
+        fetchedAt: row.fetchedAt.toUtc(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Pending updates the dashboard may show, or null until a package list
+  /// was read. Fleet rows hold 0 for "never checked", so 0 alone proves nothing.
+  Future<int?> knownPendingUpdates(String hostId) async {
+    final listed = await loadPackageListCache(hostId);
+    if (listed != null) {
+      return listed.snapshot.updates.length;
+    }
+    final fleet = (await loadFleetCacheByHost())[hostId]?.pendingUpdates;
+    return fleet != null && fleet > 0 ? fleet : null;
+  }
+
+  Future<void> savePackageListCache({
+    required String hostId,
+    required PackageSnapshot snapshot,
+  }) async {
+    final now = DateTime.now().toUtc();
+    await _db.into(_db.packageListCache).insertOnConflictUpdate(
+      PackageListCacheCompanion.insert(
+        hostId: hostId,
+        snapshotJson: jsonEncode(snapshot.toJson()),
+        fetchedAt: now,
+      ),
+    );
   }
 
   Future<void> savePackageUpdateCounts({
@@ -1413,83 +1464,17 @@ class HostRepository {
     return (await _settings())?.appLockTimeoutSec ?? 0;
   }
 
-  Future<bool> fleetWatchEnabled() async {
-    return (await _settings())?.fleetWatchEnabled ?? false;
+  Future<bool> allowScreenshots() async {
+    return (await _settings())?.allowScreenshots ?? false;
   }
 
-  Future<void> setFleetWatchEnabled(bool value) async {
+  Future<void> setAllowScreenshots(bool value) async {
     final existing = await _settings();
-    await _db.into(_db.appSettings).insertOnConflictUpdate(
-          _appSettingsWrite(existing, fleetWatchEnabled: Value(value)),
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
+          _appSettingsWrite(existing, allowScreenshots: Value(value)),
         );
-  }
-
-  Future<FleetWatchThresholds> fleetWatchThresholds() async {
-    final row = await _settings();
-    return FleetWatchThresholds(
-      diskPercent: _clampWatchPercent(row?.fleetWatchDiskPercent ?? 90),
-      memPercent: _clampWatchPercent(row?.fleetWatchMemPercent ?? 90),
-      failedUnits: _clampWatchCount(row?.fleetWatchFailedUnits ?? 1),
-      containers: _clampWatchCount(row?.fleetWatchContainers ?? 1),
-      reboot: row?.fleetWatchReboot ?? true,
-    );
-  }
-
-  Future<void> setFleetWatchThresholds(FleetWatchThresholds value) async {
-    final existing = await _settings();
-    await _db.into(_db.appSettings).insertOnConflictUpdate(
-          _appSettingsWrite(
-            existing,
-            fleetWatchDiskPercent: Value(_clampWatchPercent(value.diskPercent)),
-            fleetWatchMemPercent: Value(_clampWatchPercent(value.memPercent)),
-            fleetWatchFailedUnits: Value(_clampWatchCount(value.failedUnits)),
-            fleetWatchContainers: Value(_clampWatchCount(value.containers)),
-            fleetWatchReboot: Value(value.reboot),
-          ),
-        );
-  }
-
-  Future<DateTime?> fleetWatchLastTickAt() async {
-    return (await _settings())?.fleetWatchLastTickAt;
-  }
-
-  Future<void> setFleetWatchLastTickAt(DateTime value) async {
-    final existing = await _settings();
-    await _db.into(_db.appSettings).insertOnConflictUpdate(
-          _appSettingsWrite(
-            existing,
-            fleetWatchLastTickAt: Value(value.toUtc()),
-          ),
-        );
-  }
-
-  Future<String?> fleetWatchFingerprint(String hostId) async {
-    final row = await (_db.select(_db.fleetWatchState)
-          ..where((t) => t.hostId.equals(hostId)))
-        .getSingleOrNull();
-    return row?.fingerprint;
-  }
-
-  Future<void> setFleetWatchFingerprint(String hostId, String fingerprint) {
-    return _db.into(_db.fleetWatchState).insertOnConflictUpdate(
-          FleetWatchStateCompanion.insert(
-            hostId: hostId,
-            fingerprint: fingerprint,
-            updatedAt: DateTime.now().toUtc(),
-          ),
-        );
-  }
-
-  static int _clampWatchPercent(int value) {
-    if (value < 50) return 50;
-    if (value > 99) return 99;
-    return value;
-  }
-
-  static int _clampWatchCount(int value) {
-    if (value < 1) return 1;
-    if (value > 20) return 20;
-    return value;
   }
 
   Future<void> setAppLockTimeoutSec(int value) async {
@@ -1650,6 +1635,7 @@ class HostRepository {
     Value<int> tunnelIdleMinutes = const Value.absent(),
     Value<bool> snippetLibraryReady = const Value.absent(),
     Value<int> appLockTimeoutSec = const Value.absent(),
+    Value<bool> allowScreenshots = const Value.absent(),
     Value<int> sessionLogRetentionDays = const Value.absent(),
     Value<bool> fleetWatchEnabled = const Value.absent(),
     Value<int> fleetWatchDiskPercent = const Value.absent(),
@@ -1702,6 +1688,9 @@ class HostRepository {
       appLockTimeoutSec: appLockTimeoutSec.present
           ? appLockTimeoutSec
           : Value(existing?.appLockTimeoutSec ?? 0),
+      allowScreenshots: allowScreenshots.present
+          ? allowScreenshots
+          : Value(existing?.allowScreenshots ?? false),
       sessionLogRetentionDays: sessionLogRetentionDays.present
           ? sessionLogRetentionDays
           : Value(

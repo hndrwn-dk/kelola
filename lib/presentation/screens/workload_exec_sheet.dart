@@ -70,6 +70,7 @@ class _WorkloadExecSheetState extends ConsumerState<WorkloadExecSheet> {
     setState(() {
       _busy = true;
       _error = null;
+      _out = '';
     });
     try {
       await ref.read(enrollmentProvider.notifier).ensureKey();
@@ -83,11 +84,17 @@ class _WorkloadExecSheetState extends ConsumerState<WorkloadExecSheet> {
         probe: WorkloadExecProbe(workload: widget.workload, line: line),
         facts: widget.facts,
       );
-      setState(() => _out = out);
+      if (mounted) {
+        setState(() => _out = out);
+      }
     } on ReadOnlyViolation {
-      setState(() => _error = 'This host is read-only.');
+      if (mounted) {
+        setState(() => _error = 'This host is read-only.');
+      }
     } catch (e) {
-      setState(() => _error = describeSshError(e));
+      if (mounted) {
+        setState(() => _error = describeSshError(e));
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -112,6 +119,10 @@ class _WorkloadExecSheetState extends ConsumerState<WorkloadExecSheet> {
             ),
             const SizedBox(height: 10),
             TextField(
+              autocorrect: false,
+              enableSuggestions: false,
+              smartDashesType: SmartDashesType.disabled,
+              smartQuotesType: SmartQuotesType.disabled,
               controller: _input,
               enabled: !_busy,
               style: KelolaType.mono(color: c.text, size: 13),

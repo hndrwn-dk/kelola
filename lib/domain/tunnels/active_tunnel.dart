@@ -1,5 +1,16 @@
 import 'package:kelola/domain/tunnels/tunnel_target.dart';
 
+/// Whether [target] already has a live tunnel, so Start would duplicate it.
+bool tunnelTargetRunning(TunnelTarget target, Iterable<ActiveTunnel> active) {
+  return active.any(
+    (t) =>
+        t.target.id == target.id &&
+        (t.state == TunnelState.starting ||
+            t.state == TunnelState.listening ||
+            t.state == TunnelState.idleClosing),
+  );
+}
+
 enum TunnelState {
   starting,
   listening,

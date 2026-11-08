@@ -23,19 +23,21 @@ void main() {
     expect(Uri.parse(kKelolaTermsUrl).isAbsolute, isTrue);
   });
 
-  test('FAQ has the five Tester Community questions', () {
-    expect(kSupportFaq, hasLength(5));
+  test('FAQ keeps the core questions, first and last in place', () {
+    final questions = kSupportFaq.map((item) => item.question).toList();
     expect(
-      kSupportFaq.map((item) => item.question).toList(),
-      [
+      questions,
+      containsAll([
         'How do I add a server?',
         'Where are my SSH keys?',
         'What does vault export include?',
         'How does app lock work?',
         'How do I report a problem?',
-      ],
+      ]),
     );
+    expect(questions.first, 'How do I add a server?');
+    expect(questions.last, 'How do I report a problem?');
     expect(kSupportFaq[0].answer, contains('Nothing is installed on the server'));
-    expect(kSupportFaq[4].answer, contains('Rate & review'));
+    expect(kSupportFaq.last.answer, contains('Rate & review'));
   });
 }

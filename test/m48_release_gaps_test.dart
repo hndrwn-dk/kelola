@@ -3,12 +3,9 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
-import 'package:kelola/data/fleet/fleet_watch_bridge.dart';
-import 'package:kelola/data/fleet/fleet_watch_runner.dart';
 import 'package:kelola/data/hosts/coreos_ack_store.dart';
 import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/session_pool.dart';
-import 'package:kelola/data/widget/home_widget_bridge.dart';
 import 'package:kelola/domain/containers/container_list_parser.dart';
 import 'package:kelola/domain/containers/container_list_view.dart';
 import 'package:kelola/domain/containers/container_row.dart';
@@ -26,9 +23,7 @@ import 'package:kelola/domain/probes/fleet_health_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
-import 'package:kelola/domain/widget/home_widget_snapshot.dart';
 import 'package:kelola/presentation/coreos_notice_gate.dart';
-import 'package:kelola/presentation/fleet/fleet_watch_controller.dart';
 import 'package:kelola/presentation/host_inventory_ping.dart';
 
 import 'support/fakes.dart';
@@ -136,49 +131,6 @@ void main() {
       );
       expect(ping, isNotNull);
       expect(pool.kinds, [DashboardProbe]);
-    });
-  });
-
-  group('fleet watch', () {
-    test('skips an unacknowledged node, probes it once acknowledged',
-        () async {
-      final db = KelolaDatabase.memory();
-      addTearDown(db.close);
-      final repo = HostRepository(db);
-      final node = await repo.insert(
-        alias: 'okd-node',
-        address: '10.0.0.9',
-        port: 22,
-        username: 'core',
-      );
-      final web = await repo.insert(
-        alias: 'web',
-        address: '10.0.0.10',
-        port: 22,
-        username: 'ops',
-      );
-      await repo.saveFacts(node.id, _facts('fcos'));
-      await repo.saveFacts(web.id, _facts('debian'));
-      await repo.setFleetWatchEnabled(true);
-      final acks = CoreOsAckStore.memory();
-      final pool = _Pool(repository: repo);
-      final controller = FleetWatchController(
-        hosts: repo,
-        pool: pool,
-        bridge: _Bridge(),
-        widgetBridge: _Widget(),
-        entitlement: FixedEntitlement(unlocked: true),
-        selectedHostIds: () async => null,
-        coreOsAcks: () async => acks,
-      );
-
-      await controller.maybeTick(force: true);
-      expect(pool.hostIds, [web.id]);
-
-      await acks.acknowledge(node.id);
-      pool.hostIds.clear();
-      await controller.maybeTick(force: true);
-      expect(pool.hostIds.toSet(), {web.id, node.id});
     });
   });
 
@@ -330,26 +282,4 @@ class _Pool extends SshSessionPool {
     }
     throw StateError('unexpected ${probe.runtimeType}');
   }
-}
-
-class _Bridge implements FleetWatchBridge {
-  @override
-  Future<void> cancel() async {}
-
-  @override
-  Future<void> notify(FleetWatchNotice notice) async {}
-
-  @override
-  Future<bool> requestPostNotifications() async => true;
-
-  @override
-  Future<void> schedule() async {}
-
-  @override
-  void setTickHandler(Future<void> Function()? handler) {}
-}
-
-class _Widget implements HomeWidgetBridge {
-  @override
-  Future<void> write(HomeWidgetSnapshot snap) async {}
 }

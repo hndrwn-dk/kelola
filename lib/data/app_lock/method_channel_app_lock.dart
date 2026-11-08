@@ -42,4 +42,18 @@ class MethodChannelAppLock implements AppLockPort {
       return;
     }
   }
+
+  @override
+  Future<void> setRecentsPreviewHidden(bool hidden) async {
+    try {
+      await _channel.invokeMethod<void>(
+        'setRecentsPreview',
+        {'hidden': hidden},
+      );
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      return;
+    }
+  }
 }

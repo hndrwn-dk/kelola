@@ -581,7 +581,7 @@ class SshSessionPool {
       existing.resize(cols, rows);
       return existing;
     }
-    await _repository.recordAudit(
+    final auditId = await _repository.beginAudit(
       hostId: host.id,
       hostAlias: host.alias,
       remoteUser: host.username,
@@ -592,13 +592,16 @@ class SshSessionPool {
     );
     final openedAt = DateTime.now();
     final size = clampPtySize(cols, rows);
-    final client = await openSession(
-      host,
-      visiting: {host.id},
-      onUnknownHostKey: onUnknownHostKey,
-    );
+    SSHClient? client;
     try {
-      final session = await client.shell(
+      final opened = await openSession(
+        host,
+        visiting: {host.id},
+        onUnknownHostKey: onUnknownHostKey,
+        forwardAgent: true,
+      );
+      client = opened;
+      final session = await opened.shell(
         pty: SSHPtyConfig(
           type: kPtyTermType,
           width: size.$1,
@@ -607,7 +610,7 @@ class SshSessionPool {
       );
       late final PtyChannel channel;
       channel = PtyChannel(
-        client: client,
+        client: opened,
         session: session,
         onClosed: () async {
           if (!identical(_pty[host.id], channel)) {
@@ -622,13 +625,24 @@ class SshSessionPool {
             command: ptyCloseCommand(DateTime.now().difference(openedAt)),
             risk: RiskLevel.mutate.name,
             usedSudo: false,
+            exitCode: 0,
           );
         },
       );
       _pty[host.id] = channel;
+      await _repository.finishAudit(
+        auditId,
+        exitCode: 0,
+        durationMs: DateTime.now().difference(openedAt).inMilliseconds,
+      );
       return channel;
-    } catch (_) {
-      if (!client.isClosed) {
+    } catch (e) {
+      await _repository.finishAudit(
+        auditId,
+        durationMs: DateTime.now().difference(openedAt).inMilliseconds,
+        errorSummary: e.runtimeType.toString(),
+      );
+      if (client != null && !client.isClosed) {
         await client.close();
       }
       rethrow;
@@ -717,6 +731,7 @@ class SshSessionPool {
     Set<String>? visiting,
     UnknownHostKeyHandler? onUnknownHostKey,
     FutureOr<String?> Function()? onPasswordRequest,
+    bool forwardAgent = false,
   }) async {
     visiting ??= <String>{host.id};
     final usePassword = onPasswordRequest != null;
@@ -779,9 +794,14 @@ class SshSessionPool {
         identities: identities,
         onVerifyHostKey: verifyHostKey,
         onPasswordRequest: passwordHandler,
-        agentHandler: usePassword || !host.agentForward
+        agentHandler: usePassword || !forwardAgent || !host.agentForward
             ? null
-            : HardwareSshAgent(_identityFor(host)),
+            : HardwareSshAgent(
+                _identityFor(host),
+                confirmPresence: () => _signer.confirmPresence(
+                  reason: 'Let ${host.alias} use your SSH key',
+                ),
+              ),
       );
     } catch (e) {
       // Mirror execute: changed pins must surface HostKeyMismatchException so
@@ -829,6 +849,9 @@ class SshSessionPool {
       // Must outlast the TOFU prompt. dartssh2 holds NEWKEYS until verify
       // returns; a 20s cap made first connect look like issue #83.
       await client.authenticated.timeout(const Duration(minutes: 2));
+      if (agentHandler is HardwareSshAgent) {
+        agentHandler.markAuthenticated();
+      }
       return client;
     } catch (_) {
       await client.close();

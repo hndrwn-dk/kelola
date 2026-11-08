@@ -1,4 +1,5 @@
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/host_tags.dart';
 import 'package:kelola/domain/probes/command_runner_probe.dart';
 import 'package:kelola/domain/probes/snippet_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
@@ -39,6 +40,17 @@ List<Host> planSnippetMultiHosts(Snippet snippet, List<Host> hosts) {
     for (final host in hosts)
       if (snippetAppliesToHost(snippet, host)) host,
   ];
+}
+
+/// Distinct host tags, for filtering which hosts a snippet runs on.
+List<String> snippetMultiTags(List<Host> hosts) => knownHostTags(hosts);
+
+/// Hosts a tag selects. A null tag selects every host.
+Set<String> snippetMultiSelectTag(List<Host> hosts, String? tag) {
+  return {
+    for (final host in hosts)
+      if (tag == null || host.tags.contains(tag)) host.id,
+  };
 }
 
 SnippetBindings snippetMultiBindings(Host host, SnippetBindings shared) {

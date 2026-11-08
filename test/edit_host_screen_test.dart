@@ -79,6 +79,40 @@ void main() {
     expect((await repo.get(id))!.tags, unorderedEquals(['uat', 'edge']));
   });
 
+  testWidgets('tags in use can be tapped instead of retyped', (tester) async {
+    final other = await seed();
+    await repo.setHostTags(other, ['prod', 'uat']);
+    final id = await repo.insert(
+      alias: 'second',
+      address: '10.0.0.9',
+      port: 22,
+      username: 'u',
+    );
+    await repo.pinKey(
+      hostId: id.id,
+      algorithm: 'ssh-ed25519',
+      fingerprint: 'SHA256:second',
+    );
+    await repo.setHostTags(id.id, ['uat']);
+    await pumpEditor(tester, id.id);
+
+    final prod = find.byKey(const Key('edit-host-tag-prod'));
+    expect(tester.widget<FilterPill>(prod).selected, isFalse);
+    expect(
+      tester.widget<FilterPill>(find.byKey(const Key('edit-host-tag-uat'))).selected,
+      isTrue,
+    );
+
+    await tester.ensureVisible(prod);
+    await tester.tap(prod);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilterPill>(prod).selected, isTrue);
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect((await repo.get(id.id))!.tags, unorderedEquals(['prod', 'uat']));
+  });
+
   testWidgets('alias save does not show DestructiveConfirmSheet', (tester) async {
     final id = await seed();
     await pumpEditor(tester, id);

@@ -1,4 +1,5 @@
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/host_tags.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
 
 bool snippetAppliesToHost(Snippet snippet, Host host) {
@@ -8,7 +9,7 @@ bool snippetAppliesToHost(Snippet snippet, Host host) {
   }
   final tag = snippet.tag?.trim();
   if (tag != null && tag.isNotEmpty) {
-    return host.tags.contains(tag);
+    return host.tags.contains(normalizeHostTag(tag));
   }
   return true;
 }

@@ -127,8 +127,10 @@ jobs:
           fi
           echo "::notice::Release $before_line → $version_line. Build locally with scripts/build_play_aab.sh and upload the AAB in Play Console."
 
-      - name: Install SQLite (Drift)
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      # The runner's visudo is sudo-rs. The sudo package adds classic sudo's as
+      # visudo.ws, so test/kelola_sudoers_spec_test.dart can check both.
+      - name: Install SQLite (Drift) and classic sudo
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev sudo
 
       - name: Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0

@@ -1,5 +1,7 @@
 package com.tursinalabs.kelola
 
+import android.os.Handler
+import android.os.Looper
 import android.content.Context
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
@@ -30,6 +32,18 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
     private var context: Context? = null
     private var activity: FragmentActivity? = null
 
+    // The result waiting on the prompt on screen, null when none is. androidx
+    // keeps one client callback per activity, so a second BiometricPrompt would
+    // take the touch given for the first.
+    private var promptResult: MethodChannel.Result? = null
+
+    // Signatures that need a prompt while one is open. They wait for it to end,
+    // so neither loses its touch and neither is left unanswered.
+    private val waitingSigns = ArrayDeque<WaitingSign>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private class WaitingSign(val result: MethodChannel.Result, val retry: () -> Unit)
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
@@ -46,6 +60,17 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
 
     override fun onDetachedFromActivity() {
         activity = null
+        // The prompt went with the activity, so no callback will end it.
+        val waiting = promptResult
+        promptResult = null
+        waiting?.error("auth_failed", "the activity closed during the prompt", null)
+        while (waitingSigns.isNotEmpty()) {
+            waitingSigns.removeFirst().result.error(
+                "auth_failed",
+                "the activity closed before the prompt",
+                null,
+            )
+        }
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
@@ -216,10 +241,55 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         )
     }
 
+    // BiometricPrompt returns without any callback once state is saved, so a
+    // prompt is only started when it will show. Every start needs an endPrompt.
+    private fun beginPrompt(act: FragmentActivity, result: MethodChannel.Result): Boolean {
+        if (act.supportFragmentManager.isStateSaved) {
+            result.error("auth_failed", "the app is not in the foreground", null)
+            return false
+        }
+        promptResult = result
+        return true
+    }
+
+    // False once the prompt has already been ended and its result answered.
+    private fun endPrompt(result: MethodChannel.Result): Boolean {
+        if (promptResult !== result) {
+            return false
+        }
+        promptResult = null
+        if (waitingSigns.isNotEmpty()) {
+            // After the prompt has gone: androidx ignores a start while it shows.
+            mainHandler.postDelayed({ runNextSign() }, PROMPT_GAP_MS)
+        }
+        return true
+    }
+
+    // Stops at a retry that opens a prompt: its end runs the rest. A retry that
+    // signs or fails without one would otherwise strand those behind it.
+    private fun runNextSign() {
+        while (promptResult == null) {
+            val next = waitingSigns.removeFirstOrNull() ?: return
+            try {
+                next.retry()
+            } catch (e: Exception) {
+                // Off the method channel, nothing else would catch this.
+                next.result.error("sign_failed", e.message, null)
+            }
+        }
+    }
+
     private fun confirmPresence(reason: String, result: MethodChannel.Result) {
         val act = activity
         if (act == null) {
             result.error("no_activity", "confirmPresence requires an activity", null)
+            return
+        }
+        if (promptResult != null) {
+            result.error("busy", "another prompt is open", null)
+            return
+        }
+        if (!beginPrompt(act, result)) {
             return
         }
         val prompt = BiometricPrompt(
@@ -229,22 +299,32 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
                 override fun onAuthenticationSucceeded(
                     authResult: BiometricPrompt.AuthenticationResult,
                 ) {
-                    result.success(null)
+                    if (endPrompt(result)) {
+                        result.success(null)
+                    }
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    result.error("auth_failed", errString.toString(), null)
+                    if (endPrompt(result)) {
+                        result.error("auth_failed", errString.toString(), null)
+                    }
                 }
             },
         )
-        prompt.authenticate(
-            BiometricPrompt.PromptInfo.Builder()
-                .setTitle(reason)
-                .setSubtitle("Confirm it's you")
-                .setNegativeButtonText("Cancel")
-                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-                .build(),
-        )
+        try {
+            prompt.authenticate(
+                BiometricPrompt.PromptInfo.Builder()
+                    .setTitle(reason)
+                    .setSubtitle("Confirm it's you")
+                    .setNegativeButtonText("Cancel")
+                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                    .build(),
+            )
+        } catch (e: Exception) {
+            if (endPrompt(result)) {
+                result.error("auth_failed", e.message, null)
+            }
+        }
     }
 
     private fun sign(alias: String, data: ByteArray, result: MethodChannel.Result) {
@@ -261,14 +341,19 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         }
         try {
             result.success(signWith(privateKey, data))
-        } catch (_: UserNotAuthenticatedException) {
-            // Timed-auth keys (300s window): unlock with a plain BiometricPrompt.
-            // CryptoObject + initSign throws UserNotAuthenticatedException while
-            // the window is closed — the prompt never appears.
-            unlockThenSign(act, privateKey, data, result)
         } catch (e: Exception) {
-            // Per-use keys (timeout 0): must bind Signature via CryptoObject.
-            signWithCryptoObject(act, privateKey, data, result, e)
+            if (promptResult != null) {
+                // Retried whole: the touch on that prompt may open the key.
+                waitingSigns.addLast(WaitingSign(result) { sign(alias, data, result) })
+            } else if (e is UserNotAuthenticatedException) {
+                // Timed-auth keys (300s window): unlock with a plain BiometricPrompt.
+                // CryptoObject + initSign throws UserNotAuthenticatedException while
+                // the window is closed — the prompt never appears.
+                unlockThenSign(act, privateKey, data, result)
+            } else {
+                // Per-use keys (timeout 0): must bind Signature via CryptoObject.
+                signWithCryptoObject(act, privateKey, data, result, e)
+            }
         }
     }
 
@@ -285,6 +370,9 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         data: ByteArray,
         result: MethodChannel.Result,
     ) {
+        if (!beginPrompt(act, result)) {
+            return
+        }
         val prompt = BiometricPrompt(
             act,
             ContextCompat.getMainExecutor(act),
@@ -292,6 +380,9 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
                 override fun onAuthenticationSucceeded(
                     authResult: BiometricPrompt.AuthenticationResult,
                 ) {
+                    if (!endPrompt(result)) {
+                        return
+                    }
                     try {
                         result.success(signWith(privateKey, data))
                     } catch (e: Exception) {
@@ -300,18 +391,26 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    result.error("auth_failed", errString.toString(), null)
+                    if (endPrompt(result)) {
+                        result.error("auth_failed", errString.toString(), null)
+                    }
                 }
             },
         )
-        prompt.authenticate(
-            BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Sign SSH challenge")
-                .setSubtitle("The private key never leaves this device")
-                .setNegativeButtonText("Cancel")
-                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-                .build(),
-        )
+        try {
+            prompt.authenticate(
+                BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Sign SSH challenge")
+                    .setSubtitle("The private key never leaves this device")
+                    .setNegativeButtonText("Cancel")
+                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                    .build(),
+            )
+        } catch (e: Exception) {
+            if (endPrompt(result)) {
+                result.error("sign_failed", e.message, null)
+            }
+        }
     }
 
     private fun signWithCryptoObject(
@@ -321,6 +420,19 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
         result: MethodChannel.Result,
         firstError: Exception,
     ) {
+        // Before the prompt is built: building one replaces the live callback.
+        val cryptoSig = try {
+            Signature.getInstance("SHA256withECDSA").apply { initSign(privateKey) }
+        } catch (e: UserNotAuthenticatedException) {
+            unlockThenSign(act, privateKey, data, result)
+            return
+        } catch (e: Exception) {
+            result.error("sign_failed", e.message ?: firstError.message, null)
+            return
+        }
+        if (!beginPrompt(act, result)) {
+            return
+        }
         val prompt = BiometricPrompt(
             act,
             ContextCompat.getMainExecutor(act),
@@ -328,6 +440,9 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
                 override fun onAuthenticationSucceeded(
                     authResult: BiometricPrompt.AuthenticationResult,
                 ) {
+                    if (!endPrompt(result)) {
+                        return
+                    }
                     try {
                         val crypto = authResult.cryptoObject?.signature
                             ?: throw IllegalStateException(
@@ -341,13 +456,13 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    result.error("auth_failed", errString.toString(), null)
+                    if (endPrompt(result)) {
+                        result.error("auth_failed", errString.toString(), null)
+                    }
                 }
             },
         )
         try {
-            val cryptoSig = Signature.getInstance("SHA256withECDSA")
-            cryptoSig.initSign(privateKey)
             prompt.authenticate(
                 BiometricPrompt.PromptInfo.Builder()
                     .setTitle("Sign SSH challenge")
@@ -357,10 +472,10 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
                     .build(),
                 BiometricPrompt.CryptoObject(cryptoSig),
             )
-        } catch (e: UserNotAuthenticatedException) {
-            unlockThenSign(act, privateKey, data, result)
         } catch (e: Exception) {
-            result.error("sign_failed", e.message ?: firstError.message, null)
+            if (endPrompt(result)) {
+                result.error("sign_failed", e.message ?: firstError.message, null)
+            }
         }
     }
 
@@ -376,6 +491,8 @@ class HardwareSignerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Act
     )
 
     companion object {
+        // Long enough for BiometricPrompt to finish dismissing.
+        private const val PROMPT_GAP_MS = 300L
         private const val CHANNEL = "com.tursinalabs.kelola/hardware_signer"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val TAG = "KelolaSigner"

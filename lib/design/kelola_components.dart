@@ -1064,22 +1064,34 @@ class _KelolaSheetState extends State<KelolaSheet> {
   Widget build(BuildContext context) {
     final inset = kelolaSheetInset(context, childHeight: _childHeight);
     final maxBody = kelolaSheetMaxBodyHeight(context, childHeight: _childHeight);
-    return Padding(
-      padding: inset,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxBody),
-        child: _MeasureHeight(
-          onHeight: (h) {
-            if (_childHeight == h) {
-              return;
-            }
-            // Lock after first measure to avoid constrain/measure oscillation.
-            if (_childHeight != null) {
-              return;
-            }
-            setState(() => _childHeight = h);
-          },
-          child: widget.child,
+    final c = context.kc;
+    // Most callers open the sheet with a transparent background, so the sheet
+    // paints its own surface or the screen behind shows through the text.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(KelolaRadii.lg),
+        ),
+        border: Border.all(color: c.line),
+      ),
+      child: Padding(
+        padding: inset,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxBody),
+          child: _MeasureHeight(
+            onHeight: (h) {
+              if (_childHeight == h) {
+                return;
+              }
+              // Lock after first measure to avoid constrain/measure oscillation.
+              if (_childHeight != null) {
+                return;
+              }
+              setState(() => _childHeight = h);
+            },
+            child: widget.child,
+          ),
         ),
       ),
     );
@@ -1440,6 +1452,7 @@ class KelolaInput extends StatelessWidget {
     this.controller,
     this.hint,
     this.mono = false,
+    this.plain = false,
     this.keyboardType,
     this.textInputAction,
     this.focusNode,
@@ -1452,6 +1465,10 @@ class KelolaInput extends StatelessWidget {
   final TextEditingController? controller;
   final String? hint;
   final bool mono;
+
+  /// A value a host reads, shown in the UI font. Keeps the keyboard from
+  /// correcting it. [mono] fields always get this.
+  final bool plain;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final FocusNode? focusNode;
@@ -1462,6 +1479,7 @@ class KelolaInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
+    final literal = mono || plain;
     final valueStyle = mono
         ? KelolaType.mono(color: c.text, size: 13)
         : KelolaType.display(color: c.text, size: 15);
@@ -1473,6 +1491,12 @@ class KelolaInput extends StatelessWidget {
         Text(label, style: KelolaType.body(color: c.muted, size: 12)),
         const SizedBox(height: 6),
         TextField(
+          autocorrect: !literal,
+          enableSuggestions: !literal,
+          smartDashesType:
+              literal ? SmartDashesType.disabled : SmartDashesType.enabled,
+          smartQuotesType:
+              literal ? SmartQuotesType.disabled : SmartQuotesType.enabled,
           controller: controller,
           focusNode: focusNode,
           keyboardType: keyboardType,

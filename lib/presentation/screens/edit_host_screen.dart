@@ -4,6 +4,7 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/hosts/host_tags.dart';
 import 'package:kelola/domain/hosts/jump_chain.dart';
 import 'package:kelola/domain/ssh/openssh_user_cert.dart';
 import 'package:kelola/presentation/host_env/env_bindings_sheet.dart';
@@ -28,6 +29,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
   final _sshCert = TextEditingController();
   Host? _host;
   List<Host> _others = const [];
+  List<String> _knownTags = const [];
   String? _jumpHostId;
   bool _readOnly = false;
   bool _agentForward = false;
@@ -81,6 +83,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
     setState(() {
       _host = host;
       _others = all.where((h) => h.id != widget.hostId).toList();
+      _knownTags = knownHostTags(all);
       _alias.text = host?.alias ?? '';
       _address.text = host?.address ?? '';
       _port.text = '${host?.port ?? 22}';
@@ -153,8 +156,9 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
       final ok = await showMutateConfirm(
         context,
         title: 'Forward agent on ${host.alias}?',
-        body: 'This host may ask Kelola to sign with the on-device key. '
-            'The private key never leaves the phone. sshd must allow agent forwarding.',
+        body: 'From Terminal, this host can ask to log in elsewhere with your '
+            'on-device key. Each request needs your fingerprint. If you cancel, it cannot ask '
+            'again until it reconnects. sshd must allow agent forwarding.',
         confirmLabel: 'Forward agent',
       );
       if (!ok || !mounted) {
@@ -212,7 +216,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
     }
     await ref.read(hostRepositoryProvider).setHostTags(
           host.id,
-          _tags.text.split(RegExp(r'[,;\s]+')),
+          parseHostTags(_tags.text),
         );
 
     final address = _address.text.trim();
@@ -331,6 +335,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                     KelolaInput(
                       key: const Key('edit-host-address'),
                       label: 'Address',
+                      plain: true,
                       controller: _address,
                       hint: host.address,
                       mono: true,
@@ -354,6 +359,7 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                           child: KelolaInput(
                             key: const Key('edit-host-username'),
                             label: 'Username',
+                            plain: true,
                             controller: _user,
                             hint: host.username,
                             mono: true,
@@ -365,15 +371,36 @@ class _EditHostScreenState extends ConsumerState<EditHostScreen> {
                     KelolaInput(
                       key: const Key('edit-host-tags'),
                       label: 'Tags',
+                      plain: true,
                       controller: _tags,
                       hint: 'prod, staging, homelab',
+                      onChanged: (_) => setState(() {}),
                     ),
+                    if (_knownTags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 5,
+                        runSpacing: 5,
+                        children: [
+                          for (final tag in _knownTags)
+                            FilterPill(
+                              key: Key('edit-host-tag-$tag'),
+                              label: tag,
+                              selected: parseHostTags(_tags.text).contains(tag),
+                              onTap: () => setState(() {
+                                _tags.text = toggleHostTag(_tags.text, tag);
+                              }),
+                            ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     HostEnvSection(host: host),
                     const SizedBox(height: 16),
                     KelolaInput(
                       key: const Key('edit-host-ssh-cert'),
                       label: 'SSH certificate',
+                      plain: true,
                       controller: _sshCert,
                       hint: 'ecdsa-sha2-nistp256-cert-v01@openssh.com ...',
                       mono: true,

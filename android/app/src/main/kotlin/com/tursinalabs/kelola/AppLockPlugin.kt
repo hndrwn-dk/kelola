@@ -47,6 +47,10 @@ class AppLockPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAw
         when (call.method) {
             "canAuthenticate" -> result.success(canAuthenticate())
             "authenticate" -> authenticate(result)
+            "setRecentsPreview" -> {
+                setRecentsPreviewHidden(call.argument<Boolean>("hidden") == true)
+                result.success(null)
+            }
             "setSecure" -> {
                 setSecure(call.argument<Boolean>("secure") == true)
                 result.success(null)
@@ -117,6 +121,14 @@ class AppLockPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAw
                 .setAllowedAuthenticators(authenticators())
                 .build(),
         )
+    }
+
+    private fun setRecentsPreviewHidden(hidden: Boolean) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+            return
+        }
+        val act = activity ?: return
+        act.runOnUiThread { act.setRecentsScreenshotEnabled(!hidden) }
     }
 
     private fun setSecure(secure: Boolean) {

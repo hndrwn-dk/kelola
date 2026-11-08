@@ -237,6 +237,9 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
         });
         await _load();
       }));
+      // Reload only once the timer runs, so Keep and the guard against a
+      // second change are live throughout.
+      await _load();
     } on ReadOnlyViolation {
       setState(() => _error = 'This host is read-only.');
     } catch (e) {
@@ -377,7 +380,7 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
               pillText: 'keep',
             ),
           ),
-        if (rules.isEmpty && !_loading)
+        if (rules.isEmpty && !_loading && _error == null)
           const KelolaEmpty(body: 'No firewall rules reported.'),
         for (final rule in rules)
           Padding(

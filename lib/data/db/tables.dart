@@ -136,6 +136,11 @@ class AppSettings extends Table {
   /// `0` off, `-1` immediately, `60` / `300` / `900` otherwise.
   IntColumn get appLockTimeoutSec => integer().withDefault(const Constant(0))();
 
+  /// Lets screenshots through while App lock is on. Stays on this phone;
+  /// never in a vault blob.
+  BoolColumn get allowScreenshots =>
+      boolean().withDefault(const Constant(false))();
+
   /// Days to keep non-bookmarked session logs. 7 / 14 / 30 / 90.
   IntColumn get sessionLogRetentionDays =>
       integer().withDefault(const Constant(14))();
@@ -317,4 +322,14 @@ class VaultTombstones extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {id};
+}
+
+@DataClassName('PackageListCacheRow')
+class PackageListCache extends Table {
+  TextColumn get hostId => text().references(Hosts, #id)();
+  TextColumn get snapshotJson => text()();
+  DateTimeColumn get fetchedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {hostId};
 }

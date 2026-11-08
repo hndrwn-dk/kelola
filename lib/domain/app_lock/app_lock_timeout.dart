@@ -43,8 +43,19 @@ bool lockOnColdStart(int timeoutSec) {
   return AppLockTimeout.fromSeconds(timeoutSec) != AppLockTimeout.off;
 }
 
-bool recentsSecure(int timeoutSec) {
-  return AppLockTimeout.fromSeconds(timeoutSec) != AppLockTimeout.off;
+/// Whether the window blocks capture. App lock implies it unless the user
+/// chose to allow screenshots.
+bool recentsSecure(int timeoutSec, {bool allowScreenshots = false}) {
+  return AppLockTimeout.fromSeconds(timeoutSec) != AppLockTimeout.off &&
+      !allowScreenshots;
+}
+
+/// With screenshots allowed, App lock asks to hide the Recents preview.
+/// Only Android 13+ can do that without blocking capture. Below that and on
+/// iOS the preview shows, and the Settings sheet says so.
+bool recentsPreviewHidden(int timeoutSec, {required bool allowScreenshots}) {
+  return AppLockTimeout.fromSeconds(timeoutSec) != AppLockTimeout.off &&
+      allowScreenshots;
 }
 
 class AppLockLinkQueue {

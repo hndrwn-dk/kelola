@@ -6,7 +6,6 @@ import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/fleet/fleet_health.dart';
 import 'package:kelola/domain/fleet/fleet_k8s.dart';
-import 'package:kelola/domain/fleet/fleet_watch.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/probes/fleet_k8s_probe.dart';
@@ -241,38 +240,6 @@ void main() {
         ),
         '2 fail',
       );
-    });
-
-    test('fleet watch fingerprint changes when workloads start failing', () {
-      final ok = fleetWatchAssessment(
-        _host(
-          k8s: const FleetK8sSummary(
-            read: true,
-            apiReachable: true,
-            nodesReady: 1,
-            nodesTotal: 1,
-          ),
-        ),
-        FleetWatchThresholds.defaults,
-      );
-      final bad = fleetWatchAssessment(
-        _host(
-          k8s: const FleetK8sSummary(
-            read: true,
-            apiReachable: true,
-            nodesReady: 1,
-            nodesTotal: 1,
-            failedWorkloads: 2,
-          ),
-        ),
-        FleetWatchThresholds.defaults,
-      );
-      final before = fleetWatchFingerprint(ok);
-      final after = fleetWatchFingerprint(bad);
-      expect(before, 'healthy');
-      expect(after, 'k8sWorkloads');
-      expect(fleetWatchShouldNotify(previous: before, current: after), isTrue);
-      expect(fleetWatchNoticeBody(bad), 'k8s 2 failed workloads');
     });
   });
 

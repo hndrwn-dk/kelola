@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/domain/sudo_hint.dart';
+import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
@@ -46,12 +48,46 @@ class UnitDetailScreen extends ConsumerStatefulWidget {
 class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
   UnitDetail? _detail;
   String? _error;
+  final _scroll = ScrollController();
   bool _busy = true;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  /// Actions sit at the bottom of the list and the error at the top, so a
+  /// failure would otherwise look like nothing happened.
+  void _showError(String message) {
+    setState(() => _error = message);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _enableSudo() async {
+    final ok = await runEnableKelolaSudoFlow(
+      context: context,
+      ref: ref,
+      host: widget.host,
+      hint: SudoHintContext.tryParse(_error ?? ''),
+    );
+    if (ok && mounted) {
+      await _load();
+    }
   }
 
   Future<void> _load() async {
@@ -110,16 +146,15 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
         facts: widget.facts,
       );
       if (!result.ok) {
-        setState(() {
-          _error = result.stderr.isEmpty
+        _showError(
+          result.stderr.isEmpty
               ? '${verb.name} exited ${result.exitCode}'
-              : result.stderr;
-        });
+              : result.stderr,
+        );
       } else if (result.mismatch) {
-        setState(() {
-          _error =
-              '${verb.name} returned 0, but ${widget.unitName} is still ${result.activeState} (${result.subState}). A k3s/nginx pod can keep serving after the systemd unit stops.';
-        });
+        _showError(
+          '${verb.name} returned 0, but ${widget.unitName} is still ${result.activeState} (${result.subState}). A k3s/nginx pod can keep serving after the systemd unit stops.',
+        );
       } else {
         final undo = undoProbeFor(action);
         if (undo != null && mounted) {
@@ -132,9 +167,9 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
       }
       await _load();
     } on ReadOnlyViolation {
-      setState(() => _error = 'This host is read-only.');
+      _showError('This host is read-only.');
     } catch (e) {
-      setState(() => _error = describeSshError(e));
+      _showError(describeSshError(e));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -167,9 +202,9 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
       }
       await _load();
     } on ReadOnlyViolation {
-      setState(() => _error = 'This host is read-only.');
+      _showError('This host is read-only.');
     } catch (e) {
-      setState(() => _error = describeSshError(e));
+      _showError(describeSshError(e));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -202,12 +237,14 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
             child: RefreshIndicator(
               onRefresh: _load,
               child: ListView(
+                controller: _scroll,
                 padding: kelolaScrollPadding(context),
                 children: [
                   if (_error != null && detail == null)
                     KelolaError(
                       message: _error!,
                       sudoUser: widget.host.username,
+                      onEnableSudo: _enableSudo,
                     )
                   else if (detail == null && _busy)
                     const SizedBox(height: 48)
@@ -221,6 +258,7 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
                     KelolaError(
                       message: _error!,
                       sudoUser: widget.host.username,
+                      onEnableSudo: _enableSudo,
                     ),
                     const SizedBox(height: 12),
                   ],

@@ -6,21 +6,31 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/enrollment/ephemeral_password.dart';
 import 'package:kelola/domain/exceptions.dart';
+import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
 import 'package:kelola/domain/probes/sudoers_install_probe.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
+import 'package:kelola/domain/sudo/unit_sudoers_grant.dart';
+import 'package:kelola/domain/sudo/sudo_flavor.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/enrollment/password_key_install_flow.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/providers.dart';
+
+const _sudoPasswordTitle = 'Sudo password';
+const _sudoPasswordBody =
+    'Enter your sudo password for this host. Kelola uses it once and does not store it.';
 
 String kelolaSudoersGroupLabel(KelolaSudoersGroup g) {
   return switch (g) {
     KelolaSudoersGroup.packages => 'Packages',
     KelolaSudoersGroup.firewall => 'Firewall',
     KelolaSudoersGroup.hostPower => 'Host power',
+    KelolaSudoersGroup.services => 'Services',
+    KelolaSudoersGroup.processes => 'Processes',
   };
 }
 
@@ -34,12 +44,17 @@ String kelolaSudoersGroupsLabel(Set<KelolaSudoersGroup> groups) {
 /// Guided install of [kelolaSudoersPath]. Returns true on verified install.
 ///
 /// Always installs the full set available for [facts] (Packages, Firewall,
-/// Host power when present). No per-group picker.
+/// Host power, Services, Processes when present). No per-group picker.
+///
+/// [hint] is the failure that led here. On a host without regex rules the full
+/// set cannot cover a service action, so a service [hint] offers that one
+/// action instead.
 Future<bool> runEnableKelolaSudoFlow({
   required BuildContext context,
   required WidgetRef ref,
   required Host host,
   HostFacts? facts,
+  SudoHintContext? hint,
 }) async {
   await ref.read(enrollmentProvider.notifier).ensureKey();
   var resolved = facts ?? await ref.read(hostRepositoryProvider).facts(host.id);
@@ -71,7 +86,38 @@ Future<bool> runEnableKelolaSudoFlow({
     return false;
   }
 
-  final groups = defaultKelolaSudoersGroups(resolved);
+  SudoFlavor sudo = const UnknownSudo();
+  try {
+    sudo = await runHostProbe(
+      ref: ref,
+      context: context,
+      host: host,
+      probe: const SudoFlavorProbe(),
+      facts: resolved,
+    );
+  } catch (_) {
+    sudo = const UnknownSudo();
+  }
+  if (!context.mounted) {
+    return false;
+  }
+
+  final grant = hint == null ||
+          sudo.supportsArgRegex ||
+          resolved.init != InitSystem.systemd
+      ? null
+      : UnitSudoersGrant.fromHint(hint, host.username);
+  if (grant != null) {
+    return _runUnitGrantFlow(
+      context: context,
+      ref: ref,
+      host: host,
+      facts: resolved,
+      grant: grant,
+    );
+  }
+
+  final groups = defaultKelolaSudoersGroups(resolved, sudo: sudo);
   if (groups.isEmpty) {
     return false;
   }
@@ -84,6 +130,7 @@ Future<bool> runEnableKelolaSudoFlow({
       user: host.username,
       facts: resolved!,
       groups: groups,
+      sudo: sudo,
       fileExists: fileExists,
     ),
   );
@@ -95,6 +142,7 @@ Future<bool> runEnableKelolaSudoFlow({
     user: host.username,
     facts: resolved,
     groups: groups,
+    sudo: sudo,
   );
 
   final confirmed = await showModalBottomSheet<bool>(
@@ -160,6 +208,8 @@ Future<bool> runEnableKelolaSudoFlow({
     final entered = await showPasswordEntrySheet(
       context,
       password: password,
+      title: _sudoPasswordTitle,
+      body: _sudoPasswordBody,
     );
     if (!entered || !context.mounted) {
       return false;
@@ -207,6 +257,125 @@ Future<bool> runEnableKelolaSudoFlow({
   }
 }
 
+/// Confirms and installs one service action. See [UnitSudoersGrant].
+Future<bool> _runUnitGrantFlow({
+  required BuildContext context,
+  required WidgetRef ref,
+  required Host host,
+  required HostFacts facts,
+  required UnitSudoersGrant grant,
+}) async {
+  final confirmed = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) {
+      final c = ctx.kc;
+      return KelolaSheet(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 20, 14, 0),
+          child: RiskBand(
+            risk: RiskLevel.mutate,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Allow ${grant.action}?',
+                  style: KelolaType.display(color: c.text, size: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "This host's sudo cannot match a service by pattern, so "
+                  'Kelola adds one rule for this action on this service. '
+                  'Other services and actions are unchanged. Remove the line '
+                  'on the host to undo it.',
+                  style: KelolaType.body(color: c.muted, size: 13),
+                ),
+                const SizedBox(height: 12),
+                SelectableText(
+                  '$kelolaUnitSudoersPath\n${grant.line}',
+                  style: KelolaType.mono(color: c.text, size: 11),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        child: const Text('Add rule'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+  if (confirmed != true || !context.mounted) {
+    return false;
+  }
+
+  final password = EphemeralPassword();
+  final lifecycle = _SudoPasswordLifecycle(password);
+  WidgetsBinding.instance.addObserver(lifecycle);
+  try {
+    final entered = await showPasswordEntrySheet(
+      context,
+      password: password,
+      title: _sudoPasswordTitle,
+      body: _sudoPasswordBody,
+    );
+    if (!entered || !context.mounted) {
+      return false;
+    }
+    final pass = password.read();
+    if (pass == null || pass.isEmpty) {
+      return false;
+    }
+    try {
+      await runHostProbe(
+        ref: ref,
+        context: context,
+        host: host,
+        facts: facts,
+        probe: UnitSudoersGrantProbe(grant),
+        stdinBytes: utf8.encode('$pass\n'),
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${grant.action} allowed · try it again')),
+        );
+      }
+      return true;
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is KelolaException ? e.message : 'Could not add the sudo rule',
+            ),
+          ),
+        );
+      }
+      return false;
+    }
+  } finally {
+    WidgetsBinding.instance.removeObserver(lifecycle);
+    password.clear();
+  }
+}
+
 class _SudoPasswordLifecycle with WidgetsBindingObserver {
   _SudoPasswordLifecycle(this._password);
 
@@ -227,12 +396,14 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
     required this.user,
     required this.facts,
     required this.groups,
+    required this.sudo,
     required this.fileExists,
   });
 
   final String user;
   final HostFacts facts;
   final Set<KelolaSudoersGroup> groups;
+  final SudoFlavor sudo;
   final bool fileExists;
 
   @override
@@ -242,7 +413,9 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
       user: user,
       facts: facts,
       groups: groups,
+      sudo: sudo,
     );
+    final tierNote = kelolaSudoersTierNote(sudo);
     return KelolaSheet(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 18, 14, 0),
@@ -262,6 +435,13 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
               'Optional — Kelola stays useful with zero sudo.',
               style: KelolaType.body(color: c.muted, size: 13),
             ),
+            if (tierNote != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                tierNote,
+                style: KelolaType.body(color: c.muted, size: 13),
+              ),
+            ],
             const SizedBox(height: 12),
             Container(
               constraints: const BoxConstraints(maxHeight: 220),

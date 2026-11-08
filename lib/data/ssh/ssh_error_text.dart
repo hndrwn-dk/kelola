@@ -12,7 +12,7 @@ String describeSshError(Object error) {
     return error.message;
   }
   if (error is TimeoutException) {
-    return 'Timed out waiting for SSH login. Check Wi-Fi/VPN and that the host is up.';
+    return 'Timed out waiting for SSH login. Check Wi-Fi/VPN and that the host is up. If a fingerprint prompt was open, try again.';
   }
   if (error is SocketException) {
     return _describeSocketException(error);
@@ -42,6 +42,10 @@ String describeSshError(Object error) {
       return 'The host key was rejected. Confirm the fingerprint before continuing.';
     }
     return 'Connection closed before login. Try again.';
+  }
+  if (error is StateError) {
+    // toString() would show the user a "Bad state:" prefix.
+    return error.message;
   }
   return error.toString();
 }

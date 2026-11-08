@@ -381,7 +381,7 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
               entries: [
                 FactEntry(
                   label: 'API server',
-                  value: cluster.apiReachable ? 'reachable' : 'unreachable',
+                  value: cluster.apiLabel,
                 ),
                 FactEntry(label: 'Control plane', value: cluster.controlPlaneLabel),
                 FactEntry(label: 'Nodes', value: cluster.nodesLabel),
@@ -516,7 +516,10 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
           ] else ...[
             const SizedBox(height: 10),
             Text(
-              'All listed workloads ready',
+              workloadsAllClearLine(
+                apiReachable: _cluster?.apiReachable ?? false,
+                rows: _inv.rows.length,
+              ),
               style: KelolaType.body(color: c.muted, size: 13),
             ),
             const SizedBox(height: 10),

@@ -11,7 +11,8 @@ abstract final class WhatsNewStrings {
   static String label(String version) => "What's new · $version";
 
   static const notes = <String>[
-    'OpenShift support: the Kubernetes screen shows version, operators, machine config pools and pending CSRs.',
-    'OpenShift (RHCOS) nodes can be added as hosts, read-only, with a link back to their cluster.',
+    "Fleet watch alerts are gone from Pro, as a phone can't alert reliably.",
+    'Agent forwarding now asks you to confirm every signature.',
+    'Commands stay as typed, and failed pod commands show the real error.',
   ];
 }

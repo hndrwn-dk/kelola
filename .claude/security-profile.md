@@ -1,0 +1,26 @@
+# Security profile
+
+- **Project type:** flutter-mobile, android
+- **Repo visibility:** private (Apache-2.0 licensed)
+- **One-line purpose:** Agentless Android app for administering Linux servers over SSH; no server-side agent, key-only auth.
+- **Trust boundaries / attackers:**
+  - Malicious or compromised SSH server — controls banners, command output, file listings, and anything the app parses or renders
+  - Network attacker (MITM) — first-connect trust, host-key changes, LLM endpoint traffic
+  - Malicious QR code presented during key enrollment
+  - Other apps on the same device — intents, deep links, exported components, shared storage
+  - Remote LLM endpoint (cloud or public self-hosted) — receives whatever leaves the device
+- **Extra attack surfaces to prioritise:**
+  - SSH host-key verification and the known-hosts trust flow
+  - Shell command strings built from user input, hostnames, paths, or server output (command injection)
+  - Hardware-backed key handling (StrongBox) and any software-key fallback
+  - LLM redaction path and AssistPreviewGate local/public endpoint classification (must not trust provider type alone)
+  - Fleet mode: commands fanned out to many hosts
+  - Kubernetes / OpenShift features: kubeconfig and token handling
+- **Sensitive data handled:** SSH private keys, host fingerprints, server hostnames/IPs, command history and output, kubeconfigs
+- **Private dependencies not in this repo:** hndrwn-dk/kelola-pro (entitlement / Play Billing) — scan separately
+- **Exclude paths:** build/, .dart_tool/, android/.gradle/, ios/Pods/, **/*.g.dart, **/*.freezed.dart, readiness/
+- **Test command:** flutter test
+- **Recent commits window:** 7 days
+- **Memory repo:** hndrwn-dk/security-memory
+- **Reporting:** memory-repo
+- **Timezone:** Asia/Singapore

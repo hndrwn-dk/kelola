@@ -25,7 +25,7 @@ class OpenAiCompatibleAssistClient implements AssistModelClient {
         ? settings.model!.trim()
         : 'gpt-4o-mini';
     final uri = base.replace(
-      path: _join(base.path, 'v1/chat/completions'),
+      path: openAiCompletionsPath(base.path),
     );
     final body = jsonEncode({
       'model': model,
@@ -60,6 +60,13 @@ class OpenAiCompatibleAssistClient implements AssistModelClient {
     }
     return res.body;
   }
+}
+
+/// Chat completions path for a base URL. Providers document the base both
+/// with a version (`https://api.mistral.ai/v1`) and without one.
+String openAiCompletionsPath(String basePath) {
+  final hasVersion = RegExp(r'/v\d+/?$').hasMatch(basePath);
+  return _join(basePath, hasVersion ? 'chat/completions' : 'v1/chat/completions');
 }
 
 String _join(String basePath, String suffix) {

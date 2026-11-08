@@ -28,6 +28,9 @@ class _FakePort implements AppLockPort {
   Future<void> setRecentsSecure(bool value) async {
     secure = value;
   }
+
+  @override
+  Future<void> setRecentsPreviewHidden(bool hidden) async {}
 }
 
 Future<void> _flush(WidgetTester tester) async {
