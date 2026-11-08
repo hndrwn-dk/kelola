@@ -220,7 +220,7 @@ class _LlmSettingsScreenState extends ConsumerState<LlmSettingsScreen> {
             controller: _baseUrl,
             mono: true,
             hint: p == LlmProvider.ollama
-                ? 'http://192.168.1.50:11434'
+                ? 'https://ollama.lan'
                 : 'https://api.openai.com/v1',
           ),
           const SizedBox(height: 10),
@@ -240,12 +240,12 @@ class _LlmSettingsScreenState extends ConsumerState<LlmSettingsScreen> {
                 setState(() => _draftApiKey = value);
               },
             ),
-            const SizedBox(height: 8),
-            Text(
-              'HTTPS required. HTTP is only allowed on localhost.',
-              style: KelolaType.body(color: context.kc.dim, size: 12),
-            ),
           ],
+          const SizedBox(height: 8),
+          Text(
+            'HTTPS required. HTTP is only allowed on localhost.',
+            style: KelolaType.body(color: context.kc.dim, size: 12),
+          ),
         ],
       ),
     );

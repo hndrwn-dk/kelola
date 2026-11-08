@@ -34,12 +34,11 @@ class LlmEndpointConfig {
     return uri != null && uri.hasScheme && uri.host.isNotEmpty;
   }
 
+  /// Every provider needs HTTPS. Cleartext HTTP is allowed only on loopback,
+  /// so host output never crosses a network unencrypted.
   bool hasValidBaseUrlFor(LlmProvider provider) {
     if (!hasValidBaseUrl) {
       return false;
-    }
-    if (provider != LlmProvider.openaiCompatible) {
-      return true;
     }
     final uri = baseUri!;
     if (uri.scheme == 'https') {

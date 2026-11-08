@@ -9,13 +9,13 @@ void main() {
   group('LlmEndpointConfig', () {
     test('ollama complete needs base URL and model', () {
       expect(
-        const LlmEndpointConfig(baseUrl: 'http://192.168.1.5:11434')
+        const LlmEndpointConfig(baseUrl: 'https://ollama.lan')
             .isCompleteFor(LlmProvider.ollama),
         isFalse,
       );
       expect(
         const LlmEndpointConfig(
-          baseUrl: 'http://192.168.1.5:11434',
+          baseUrl: 'https://ollama.lan',
           model: 'llama3.2',
         ).isCompleteFor(LlmProvider.ollama),
         isTrue,
@@ -62,14 +62,39 @@ void main() {
         apiKey: 'sk-test',
       );
       expect(localhost.isCompleteFor(LlmProvider.openaiCompatible), isTrue);
+    });
+
+    test('ollama rejects cleartext HTTP except loopback', () {
+      const lan = LlmEndpointConfig(
+        baseUrl: 'http://192.168.1.5:11434',
+        model: 'llama3.2',
+      );
+      expect(lan.isCompleteFor(LlmProvider.ollama), isFalse);
+      expect(lan.hasValidBaseUrlFor(LlmProvider.ollama), isFalse);
 
       expect(
         const LlmEndpointConfig(
-          baseUrl: 'http://192.168.1.5:11434',
+          baseUrl: 'http://127.0.0.1:11434',
           model: 'llama3.2',
         ).isCompleteFor(LlmProvider.ollama),
         isTrue,
       );
+      expect(
+        const LlmEndpointConfig(
+          baseUrl: 'https://192.168.1.5:11434',
+          model: 'llama3.2',
+        ).isCompleteFor(LlmProvider.ollama),
+        isTrue,
+      );
+    });
+
+    test('a saved cleartext LAN Ollama endpoint is no longer configured', () {
+      const settings = LlmSettings(
+        provider: LlmProvider.ollama,
+        baseUrl: 'http://192.168.1.5:11434',
+        model: 'llama3.2',
+      );
+      expect(settings.isConfigured, isFalse);
     });
   });
 
@@ -80,12 +105,12 @@ void main() {
       bundle = bundle.persistEdit(
         draftProvider: LlmProvider.ollama,
         draftConfig: const LlmEndpointConfig(
-          baseUrl: 'http://192.168.18.113:11434',
+          baseUrl: 'https://192.168.18.113:11434',
           model: 'llama3.2:latest',
         ),
       );
       expect(bundle.activeProvider, LlmProvider.ollama);
-      expect(bundle.ollama.baseUrl, 'http://192.168.18.113:11434');
+      expect(bundle.ollama.baseUrl, 'https://192.168.18.113:11434');
 
       bundle = bundle.persistEdit(
         draftProvider: LlmProvider.openaiCompatible,
@@ -109,7 +134,7 @@ void main() {
       );
       expect(bundle.activeProvider, LlmProvider.openaiCompatible);
       expect(bundle.resolved.apiKey, 'sk-live');
-      expect(bundle.ollama.baseUrl, 'http://192.168.18.113:11434');
+      expect(bundle.ollama.baseUrl, 'https://192.168.18.113:11434');
     });
 
     test('footer meta reflects active provider', () {
@@ -167,7 +192,7 @@ void main() {
         const LlmSettingsBundle().persistEdit(
           draftProvider: LlmProvider.ollama,
           draftConfig: LlmEndpointConfig(
-            baseUrl: 'http://192.168.18.113:11434',
+            baseUrl: 'https://192.168.18.113:11434',
             model: 'llama3.2:latest',
           ),
         ),
@@ -185,7 +210,7 @@ void main() {
 
       final bundle = await repo.loadLlmSettingsBundle();
       expect(bundle.activeProvider, LlmProvider.openaiCompatible);
-      expect(bundle.ollama.baseUrl, 'http://192.168.18.113:11434');
+      expect(bundle.ollama.baseUrl, 'https://192.168.18.113:11434');
       expect(bundle.ollama.model, 'llama3.2:latest');
       expect(bundle.openaiCompatible.apiKey, 'sk-test');
 
