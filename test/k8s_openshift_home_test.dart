@@ -23,6 +23,7 @@ import 'package:kelola/domain/k8s/openshift_health_parser.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/probes/cluster_health_probe.dart';
 import 'package:kelola/domain/probes/cluster_resource_probes.dart';
+import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/openshift_health_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
@@ -90,7 +91,11 @@ void main() {
     await db.close();
   });
 
-  Future<void> pumpHome(WidgetTester tester, {HostFacts? facts}) async {
+  Future<void> pumpHome(
+    WidgetTester tester, {
+    HostFacts? facts,
+    bool cachedFacts = false,
+  }) async {
     tester.view.physicalSize = const Size(1080, 4800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -106,7 +111,7 @@ void main() {
         child: KelolaApp(
           home: KubernetesHomeScreen(
             hostId: host.id,
-            factsOverride: facts ?? _ocFacts,
+            factsOverride: cachedFacts ? null : (facts ?? _ocFacts),
             now: () => DateTime.utc(2026, 11, 3, 12),
           ),
         ),
@@ -383,6 +388,39 @@ void main() {
     });
   });
 
+  testWidgets('existing host cached without oc re-checks and finds it',
+      (tester) async {
+    // Cached before oc detection existed: podman only, no Kubernetes CLI.
+    await repo.saveFacts(
+      host.id,
+      HostFacts.undiscovered.copyWith(osId: 'rhel', runtimes: const ['podman']),
+    );
+    pool.discovered = HostFacts.undiscovered
+        .copyWith(osId: 'rhel', runtimes: const ['oc', 'podman']);
+    pool.cluster = _openShiftCluster();
+    pool.ocp = _ocp();
+    await pumpHome(tester, cachedFacts: true);
+
+    expect(pool.probes.first, isA<HostFactsProbe>());
+    expect(pool.probes.whereType<ClusterHealthProbe>(), hasLength(1));
+    expect(find.text('OPENSHIFT 4.17.3 · STABLE-4.17'), findsOneWidget);
+    expect((await repo.facts(host.id))!.runtimes, contains('oc'));
+  });
+
+  testWidgets('host cached with a Kubernetes CLI is not re-checked',
+      (tester) async {
+    await repo.saveFacts(
+      host.id,
+      HostFacts.undiscovered.copyWith(osId: 'rhel', runtimes: const ['oc']),
+    );
+    pool.cluster = _openShiftCluster();
+    pool.ocp = _ocp();
+    await pumpHome(tester, cachedFacts: true);
+
+    expect(pool.probes.whereType<HostFactsProbe>(), isEmpty);
+    expect(pool.probes.first, isA<ClusterHealthProbe>());
+  });
+
   testWidgets('vanilla cluster runs no OpenShift read and shows no section',
       (tester) async {
     pool.cluster = const ClusterHealth(
@@ -425,6 +463,9 @@ class _OcpPool extends SshSessionPool {
   OpenShiftHealth ocp = const OpenShiftHealth();
   bool ocpFails = false;
 
+  /// What a fresh HostFactsProbe reports.
+  HostFacts discovered = HostFacts.undiscovered;
+
   /// When set, OpenShiftHealthProbe waits on it (health still pending).
   Completer<void>? ocpGate;
   final probes = <Probe<dynamic>>[];
@@ -441,6 +482,9 @@ class _OcpPool extends SshSessionPool {
     List<int>? stdinBytes,
   }) async {
     probes.add(probe);
+    if (probe is HostFactsProbe) {
+      return discovered as T;
+    }
     if (probe is ClusterHealthProbe) {
       return cluster as T;
     }

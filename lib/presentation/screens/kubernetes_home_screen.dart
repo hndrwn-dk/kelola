@@ -120,7 +120,7 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
       if (facts == null) {
         facts = await ref.read(hostRepositoryProvider).facts(host.id) ??
             HostFacts.undiscovered;
-        if (facts.runtimes.isEmpty) {
+        if (factsNeedK8sRediscovery(facts)) {
           if (!mounted) {
             return;
           }

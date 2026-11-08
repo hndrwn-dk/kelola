@@ -177,7 +177,8 @@ const kPodsGroup = 'PODS';
 
 /// A row that came from `kubectl get pods`, not from docker/podman/crictl.
 bool isKubernetesPodRow(ContainerRow r) =>
-    (r.engine == 'k8s' || r.engine == 'k3s') && r.namespace.isNotEmpty;
+    (r.engine == 'k8s' || r.engine == 'k3s' || r.engine == 'oc') &&
+    r.namespace.isNotEmpty;
 
 List<ContainerStackGroup> groupContainersByCompose(List<ContainerRow> rows) {
   final stacks = <String, List<ContainerRow>>{};
@@ -285,8 +286,12 @@ K8sWorkload podWorkloadFromRow(ContainerRow r) {
 /// found kubectl/k3s itself; cached facts from an older version may not
 /// carry runtimes yet.
 HostFacts factsForPodRow(HostFacts facts, ContainerRow r) {
-  final runtime = r.engine == 'k3s' ? 'k3s' : 'kubectl';
-  if (facts.runtimes.contains('k3s') || facts.runtimes.contains('kubectl')) {
+  final runtime = switch (r.engine) {
+    'k3s' => 'k3s',
+    'oc' => 'oc',
+    _ => 'kubectl',
+  };
+  if (facts.hasK8s) {
     return facts;
   }
   return facts.copyWith(runtimes: [...facts.runtimes, runtime]);

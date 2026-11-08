@@ -17,6 +17,7 @@ import 'package:kelola/domain/incident/incident_sheet.dart';
 import 'package:kelola/domain/widget/publish_home_widget.dart';
 import 'package:kelola/domain/llm/settings.dart';
 import 'package:kelola/presentation/fleet/fleet_probe_policy.dart';
+import 'package:kelola/presentation/coreos_notice_gate.dart';
 import 'package:kelola/presentation/host_inventory_ping.dart';
 import 'package:kelola/presentation/pro_locked_sheet.dart';
 import 'package:kelola/presentation/screens/add_host_screen.dart';
@@ -687,7 +688,16 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
           pool: pool,
           repo: repo,
           host: host,
+          noticePending: (facts) => coreOsNoticeBlocks(
+            facts,
+            host.id,
+            () => ref.read(coreOsAckStoreProvider.future),
+          ),
         );
+        if (ping == null) {
+          // OpenShift/OKD node waiting for its first-connect notice.
+          return;
+        }
         await storeInventoryPing(repo: repo, host: host, ping: ping);
       },
       onItemDone: (host, error) async {

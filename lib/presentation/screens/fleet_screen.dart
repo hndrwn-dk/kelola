@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/presentation/coreos_notice_gate.dart';
 import 'package:kelola/presentation/fleet/fleet_k8s_read.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
@@ -40,6 +41,10 @@ class FleetScreen extends ConsumerStatefulWidget {
 class _FleetScreenState extends ConsumerState<FleetScreen> {
   final Map<String, FleetHostHealth> _byId = {};
   final Set<String> _loading = {};
+
+  /// M48 §4: OpenShift/OKD nodes skipped until their first-connect notice
+  /// is acknowledged on the host dashboard.
+  final Set<String> _noticePending = {};
   List<String> _allTags = const [];
   String? _tagFilter;
   bool _refreshing = false;
@@ -160,6 +165,24 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
         const scope = ProbeScope.fleet;
         final facts = await ref.read(hostRepositoryProvider).facts(host.id) ??
             HostFacts.undiscovered;
+        final pending = await coreOsNoticeBlocks(
+          facts,
+          host.id,
+          () => ref.read(coreOsAckStoreProvider.future),
+        );
+        if (!mounted) {
+          return;
+        }
+        if (pending) {
+          setState(() {
+            _noticePending.add(host.id);
+            _loading.remove(host.id);
+          });
+          return;
+        }
+        if (_noticePending.contains(host.id)) {
+          setState(() => _noticePending.remove(host.id));
+        }
         final probe = FleetHealthProbe(
           hostId: host.id,
           alias: host.alias,
@@ -435,7 +458,10 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                         itemCount: sorted.length,
                         itemBuilder: (context, i) {
                           final row = sorted[i];
-                          final monitored = plan.isMonitored(row.hostId);
+                          final pendingNotice =
+                              _noticePending.contains(row.hostId);
+                          final monitored =
+                              plan.isMonitored(row.hostId) && !pendingNotice;
                           final host = hosts.firstWhere(
                             (h) => h.id == row.hostId,
                             orElse: () => Host(
@@ -457,7 +483,9 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                             reachable: monitored && row.reachable,
                             downMessage: monitored
                                 ? (row.reachable ? null : row.tileSummary())
-                                : 'not monitored',
+                                : pendingNotice
+                                    ? 'confirm on host first'
+                                    : 'not monitored',
                             metrics: monitored
                                 ? [
                                     for (final m in row.tileMetrics())

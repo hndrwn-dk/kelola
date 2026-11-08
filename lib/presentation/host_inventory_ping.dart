@@ -10,10 +10,15 @@ import 'package:kelola/domain/probes/host_facts_probe.dart';
 /// Lightweight inventory ping: cached facts if present, otherwise
 /// [HostFactsProbe], then [DashboardProbe] to fill attention buckets.
 /// Does not write attention — the caller does that after the 10s timeout.
-Future<DashboardPing> probeInventoryHost({
+///
+/// M48 §4: returns null (nothing more runs) when [noticePending] says the
+/// host is an OpenShift/OKD node whose first-connect notice is not yet
+/// acknowledged. The facts read may itself be the first login.
+Future<DashboardPing?> probeInventoryHost({
   required SshSessionPool pool,
   required HostRepository repo,
   required Host host,
+  Future<bool> Function(HostFacts facts)? noticePending,
 }) async {
   var facts = await repo.facts(host.id) ?? HostFacts.undiscovered;
   if (facts.osId.isEmpty) {
@@ -23,6 +28,9 @@ Future<DashboardPing> probeInventoryHost({
       onUnknownHostKey: _rejectUnknownKey,
     );
     await repo.saveFacts(host.id, facts);
+  }
+  if (noticePending != null && await noticePending(facts)) {
+    return null;
   }
   final dash = await pool.execute(
     host,

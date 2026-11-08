@@ -1,6 +1,13 @@
 import 'dart:convert';
 
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/facts/host_facts.dart';
+
+/// M48 §4: on an OpenShift/OKD node nothing runs after the facts read
+/// until the first-connect notice is acknowledged. Background paths (Hosts
+/// refresh, Fleet, fleet watch) skip the host instead of asking.
+bool coreOsNoticePending(HostFacts facts, {required bool acknowledged}) =>
+    facts.isCoreOsNode && !acknowledged;
 
 /// M48 §4: what `CoreOsNodeProbe` read on an RHCOS / SCOS / FCOS node.
 /// Node-local only; never the cluster API, never node credentials.

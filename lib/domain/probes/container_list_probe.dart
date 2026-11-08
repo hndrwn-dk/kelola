@@ -16,11 +16,19 @@ class ContainerListProbe extends Probe<ContainerInventory> {
     return (r'''
 LC_ALL=C
 echo "---ENGINE---"
-command -v k3s kubectl docker podman crictl nerdctl 2>/dev/null || true
+command -v k3s kubectl oc docker podman crictl nerdctl 2>/dev/null || true
+[ -x "$HOME/.crc/bin/oc/oc" ] && echo "$HOME/.crc/bin/oc/oc"
 echo "---PODS---"
-if command -v k3s >/dev/null 2>&1; then
+# M48 precedence oc -> k3s -> kubectl. CRC keeps oc off PATH.
+oc_bin=$(command -v oc 2>/dev/null || { [ -x "$HOME/.crc/bin/oc/oc" ] && echo "$HOME/.crc/bin/oc/oc"; })
+if [ -n "$oc_bin" ]; then
+  echo "cli=oc"
+  "$oc_bin" get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || sudo -n "$oc_bin" get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || true
+elif command -v k3s >/dev/null 2>&1; then
+  echo "cli=k3s"
   sudo -n k3s kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || k3s kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || true
 elif command -v kubectl >/dev/null 2>&1; then
+  echo "cli=kubectl"
   kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || sudo -n kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || true
 fi
 echo "---PS_DOCKER---"
