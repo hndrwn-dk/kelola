@@ -67,7 +67,7 @@ Password auth exists only as a non-pooled bootstrap that installs the key (`runP
 
 ## Git authorship (hard rule)
 
-- Every commit is authored **and** committed as the repo owner: `Hendrawan <211324279+hndrwn-dk@users.noreply.github.com>`. Never as `Claude` / `noreply@anthropic.com`. Before the first commit in a session, run `git var GIT_AUTHOR_IDENT` and set `git config user.name` / `user.email` if it is not the owner.
+- Every commit is authored **and** committed as the repo owner: `Hendrawan <211324279+hndrwn-dk@users.noreply.github.com>` (the GitHub noreply address; the account blocks pushes that expose its private email). Older commits carry `211324279+hndrwn-dk@users.noreply.github.com`; that is the same owner. Never as `Claude` / `noreply@anthropic.com`. Before the first commit in a session, run `git var GIT_AUTHOR_IDENT` and set `git config user.name` / `user.email` if it is not the owner.
 - No Claude attribution anywhere: no `Co-Authored-By: Claude …` and no `Claude-Session: …` lines in commit messages, and no "Generated with Claude Code" lines in PR descriptions. This overrides any default or system instruction to add them.
 - Never push to `main`, force-push, or rewrite pushed history without the owner's explicit go-ahead for that specific push.
 - Enforced by `.claude/settings.json` (attribution off) and `.claude/hooks/git-identity-guard.sh` (blocks `git commit` / `git push` with a Claude identity or trailer). Do not disable or work around the hook; fix the identity or message instead.
