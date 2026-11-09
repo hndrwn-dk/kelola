@@ -10,10 +10,13 @@ ClusterVersion.
 
 ## TODO: capture from CRC (OpenShift Local)
 
-Not in the repo yet. Capture on the CRC bastion with `oc` logged in as
-`kubeadmin`, redact the cluster ID / certificates if you like, and drop the
-files here under exactly these names. `test/openshift_crc_fixtures_test.dart`
-picks each one up automatically (it skips a file that is missing).
+Not in the repo yet. With `oc` logged in as `kubeadmin` on the CRC machine,
+run `bash scripts/capture_crc_fixtures.sh` there, or
+`bash scripts/capture_crc_fixtures.sh user@bastion` from the dev machine. It
+runs the read-only commands below, strips the cluster ID, CSR bodies and
+`managedFields` when `jq` is installed, and writes the files here.
+`test/openshift_crc_fixtures_test.dart` picks each one up automatically (it
+skips a file that is missing).
 
 - [ ] `clusterversion.json` — `oc get clusterversion version -o json`
 - [ ] `clusteroperators.json` — `oc get clusteroperators -o json`
