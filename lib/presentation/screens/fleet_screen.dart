@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/services/service_catalog.dart';
+import 'package:kelola/domain/services/service_detection.dart';
+import 'package:kelola/presentation/fleet/fleet_service_filter.dart';
 import 'package:kelola/presentation/coreos_notice_gate.dart';
 import 'package:kelola/presentation/fleet/fleet_k8s_read.dart';
 import 'package:kelola/design/kelola_components.dart';
@@ -47,6 +50,11 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
   final Set<String> _noticePending = {};
   List<String> _allTags = const [];
   String? _tagFilter;
+
+  /// M52 §4: cached service detection per host (cache only, no SSH) and the
+  /// single-select service filter.
+  Map<String, ServiceDetection> _serviceCache = const {};
+  ServiceId? _serviceFilter;
   bool _refreshing = false;
   var _probesStarted = false;
   ProviderSubscription<AsyncValue<Set<String>?>>? _selectionSub;
@@ -63,6 +71,21 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
     super.dispose();
   }
 
+  /// Reads the per-host detection cache. Any failure is an empty cache.
+  Future<void> _loadServiceCache() async {
+    Map<String, ServiceDetection> cache;
+    try {
+      final store = await ref.read(serviceLensStoreProvider.future);
+      cache = await store.readAll();
+    } catch (_) {
+      cache = const {};
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() => _serviceCache = cache);
+  }
+
   Future<void> _bootstrap() async {
     final repo = ref.read(hostRepositoryProvider);
     final cache = await repo.loadFleetCacheByHost();
@@ -76,6 +99,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
         ..addAll(cache);
       _allTags = tags;
     });
+    unawaited(_loadServiceCache());
     // Do not await the selection future here. path_provider's channel can
     // outlive the first frame, and awaiting it from initState deadlocks
     // widget tests. Refresh once the selection value or error is in.
@@ -116,6 +140,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
     if (!mounted) {
       return;
     }
+    unawaited(_loadServiceCache());
     if (hosts.isEmpty) {
       setState(() {
         _refreshing = false;
@@ -363,7 +388,18 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                 fromCache: h.attentionAt != null,
               ),
     ];
-    final filtered = filterFleetByTag(rows, tagsByHost, _tagFilter);
+    final hostIds = [for (final h in hosts) h.id];
+    final serviceTally = serviceCounts(_serviceCache, hostIds);
+    final serviceFilter =
+        serviceTally.containsKey(_serviceFilter) ? _serviceFilter : null;
+    final cachedHostCount =
+        hostIds.where((id) => _serviceCache.containsKey(id)).length;
+    final showServiceHint =
+        serviceTally.isNotEmpty && cachedHostCount < hostIds.length;
+    final filtered = [
+      for (final r in filterFleetByTag(rows, tagsByHost, _tagFilter))
+        if (matchesService(_serviceCache[r.hostId], serviceFilter)) r,
+    ];
     final sorted = sortFleetHealth(filtered);
     final width = MediaQuery.sizeOf(context).width;
     final columns = width >= 700 ? 4 : 3;
@@ -405,23 +441,45 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                 style: KelolaType.body(color: c.muted, size: 13),
               ),
             ),
-          if (_allTags.isNotEmpty)
+          if (_allTags.isNotEmpty || serviceTally.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
               child: Wrap(
                 spacing: 5,
                 runSpacing: 5,
                 children: [
-                  FilterPill(
-                    label: 'all',
-                    selected: _tagFilter == null,
-                    onTap: () => setState(() => _tagFilter = null),
-                  ),
+                  if (_allTags.isNotEmpty)
+                    FilterPill(
+                      label: 'all',
+                      selected: _tagFilter == null,
+                      onTap: () => setState(() => _tagFilter = null),
+                    ),
                   for (final tag in _allTags)
                     FilterPill(
                       label: tag,
                       selected: _tagFilter == tag,
                       onTap: () => setState(() => _tagFilter = tag),
+                    ),
+                  for (final e in serviceTally.entries)
+                    FilterPill(
+                      label: servicePillLabel(e.key, e.value),
+                      selected: serviceFilter == e.key,
+                      onTap: () => setState(
+                        () => _serviceFilter =
+                            serviceFilter == e.key ? null : e.key,
+                      ),
+                    ),
+                  if (showServiceHint)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Text(
+                        'detected on open',
+                        style: KelolaType.mono(
+                          color: c.dim,
+                          size: 9.5,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -437,7 +495,9 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
                 : sorted.isEmpty
                     ? Center(
                         child: Text(
-                          'No hosts with this tag.',
+                          serviceFilter != null
+                              ? 'No hosts with this service.'
+                              : 'No hosts with this tag.',
                           style: KelolaType.body(color: c.muted, size: 14),
                         ),
                       )

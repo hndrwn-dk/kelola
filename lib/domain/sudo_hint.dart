@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
+import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 
 const sudoRequiredTitle = 'sudo needs a password';
@@ -33,6 +34,10 @@ enum SudoHintKind {
   processSignal,
   packages,
   firewall,
+
+  /// M52 lens reads (config test, config dump, certificate and log reads).
+  /// Granted per lens in `/etc/sudoers.d/kelola-web`, never by Enable.
+  webServices,
 }
 
 class SudoHintContext {
@@ -69,6 +74,20 @@ class SudoHintContext {
       binary: bin,
       verb: verb,
       target: target,
+    );
+  }
+
+  /// M52: a web lens read needs sudo. [service] is `nginx` or `apache`
+  /// ([ServiceId] name), carried in [target]. [binary] is `rc-service` when
+  /// an OpenRC reload (not a read) was refused: no lens grant covers that.
+  factory SudoHintContext.webServices({
+    required String service,
+    String? binary,
+  }) {
+    return SudoHintContext(
+      kind: SudoHintKind.webServices,
+      target: service,
+      binary: binary,
     );
   }
 
@@ -255,6 +274,11 @@ SudoHint kelolaSudoHint({
     case SudoHintKind.firewall:
       final spec = context.binary ?? '/usr/bin/firewall-cmd --list-all';
       return _binaryHint(user: user, spec: spec, bodyLead: spec);
+    case SudoHintKind.webServices:
+      if (context.binary == webOpenRcReloadBinary) {
+        return _openRcReloadHint(service: context.target);
+      }
+      return _webServicesHint(user: user, service: context.target);
     case SudoHintKind.generic:
       return SudoHint(
         body: sudoRequiredBody,
@@ -308,6 +332,59 @@ SudoHint _binaryHint({
         '$visudoKelolaCommand\n'
         '# then paste:\n'
         '$rule\n',
+  );
+}
+
+/// [SudoHintContext.binary] of an OpenRC reload refused by sudo.
+const webOpenRcReloadBinary = 'rc-service';
+
+/// An OpenRC `rc-service <svc> reload` was refused. The per-unit grant is
+/// systemctl only (§7a), so there is nothing to offer; say so.
+SudoHint _openRcReloadHint({String? service}) {
+  final label = switch (service) {
+    'nginx' => 'nginx',
+    'apache' => 'Apache',
+    _ => 'the web server',
+  };
+  return SudoHint(
+    body:
+        'This host\'s sudo asks for a password, so rc-service could not '
+        'reload $label. Kelola never prompts for a sudo password, and offers '
+        'no rule for OpenRC reloads. Reload it on the host, or add a NOPASSWD '
+        'line for that one rc-service reload yourself at $visudoKelolaPath '
+        '(mode 0440).',
+    snippet: '# path: $visudoKelolaPath  mode: 0440\n'
+        '$visudoKelolaCommand\n'
+        '# One exact command, never a wildcard, for example:\n'
+        '# <user> ALL=(root) NOPASSWD: <rc-service path> <service> reload\n',
+  );
+}
+
+SudoHint _webServicesHint({required String user, String? service}) {
+  // [service] travels through the exception text; only known names are shown.
+  final (label, bin, dump) = switch (service) {
+    'nginx' => ('nginx', '<nginx>', '-T'),
+    'apache' => ('Apache', '<apachectl>', '-S'),
+    _ => ('this web server', '<server>', '-T'),
+  };
+  return SudoHint(
+    body:
+        'This host\'s sudo asks for a password, so Kelola could not read the '
+        '$label configuration. Kelola never prompts for a sudo password. '
+        'Use Grant read access for this lens: it adds exact read-only lines '
+        '(config test, config dump, each certificate, the error and access '
+        'logs) to $kelolaWebSudoersPath. Enable Kelola sudo does not cover lens '
+        'reads.',
+    snippet:
+        '# path: $kelolaWebSudoersPath  mode: 0440\n'
+        '# Use "Grant read access for this lens" on the $label lens.\n'
+        '# It writes exact lines only, never a wildcard, for example:\n'
+        '# $user ALL=(root) NOPASSWD: $bin -t\n'
+        '# $user ALL=(root) NOPASSWD: $bin $dump\n'
+        '# $user ALL=(root) NOPASSWD: <openssl> x509 -noout -enddate '
+        '-subject -ext subjectAltName -in <one certificate path>\n'
+        '# $user ALL=(root) NOPASSWD: <tail> -n 60 <error log>\n'
+        '# $user ALL=(root) NOPASSWD: <tail> -n 2000 <access log>\n',
   );
 }
 

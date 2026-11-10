@@ -19,4 +19,17 @@ void main() {
     expect(body.contains('RiskLevel'), isFalse);
     expect(body.contains('HealthStatus'), isTrue);
   });
+
+  test('fleet_screen source never references WebLensProbe or ServiceDetectProbe',
+      () {
+    final src = File('lib/presentation/screens/fleet_screen.dart').readAsStringSync();
+    expect(src.contains('WebLensProbe'), isFalse);
+    expect(src.contains('ServiceDetectProbe'), isFalse);
+    expect(src.contains('ConfigTestedReloadProbe'), isFalse);
+    expect(src.contains('web_lens_probe'), isFalse);
+    expect(src.contains('service_detect_probe'), isFalse);
+    expect(src.contains('config_tested_reload_probe'), isFalse);
+    // The service pills read the cache only.
+    expect(src.contains('serviceLensStoreProvider'), isTrue);
+  });
 }
