@@ -829,13 +829,24 @@ cp "\$src" "\$dst"''');
 
     List<String> calls() => log.existsSync() ? log.readAsLinesSync() : [];
 
-    // The host-side path check is real (only find is stubbed), so the cert
-    // and log arguments are files every Linux has; these tests cover the
-    // merge, the path check has its own tests.
     final g = WebSudoersGrant.tryCreate(
       user: 'hendr',
       id: ServiceId.nginx,
       binaries: _nginxBins,
+      toolPaths: _tools,
+      certPaths: const ['/etc/ssl/certs/a.pem', '/etc/ssl/certs/b.pem'],
+      errorLog: '/var/log/nginx/error.log',
+      accessLog: '/var/log/nginx/access.log',
+    )!;
+
+    // For the merge tests. Only find is stubbed: the walk still needs each
+    // binary and path to exist, so these name files every Linux has (no
+    // nginx binary, which CI does not install). The checks have their own
+    // tests on real files.
+    final merge = WebSudoersGrant.tryCreate(
+      user: 'hendr',
+      id: ServiceId.nginx,
+      binaries: const {},
       toolPaths: _tools,
       certPaths: const ['/etc/passwd', '/etc/group'],
       errorLog: '/etc/passwd',
@@ -850,16 +861,16 @@ cp "\$src" "\$dst"''');
         await installStub();
         await stub('visudo', 'echo "visudo \$*" >> ${log.path}');
         const unrelated = 'hendr ALL=(root) NOPASSWD: /usr/bin/du -sh /srv';
-        target.writeAsStringSync('# my notes\n$unrelated\n${g.lines[2]}\n');
+        target.writeAsStringSync('# my notes\n$unrelated\n${merge.lines[2]}\n');
 
-        final r = await run(g);
+        final r = await run(merge);
         expect(r.exitCode, 0, reason: '${r.stdout}${r.stderr}');
         expect(r.stdout, contains(webGrantOkMarker));
         final lines = target.readAsLinesSync();
-        expect(lines.take(3), ['# my notes', unrelated, g.lines[2]]);
+        expect(lines.take(3), ['# my notes', unrelated, merge.lines[2]]);
         expect(lines.skip(3), [
-          for (final l in g.lines)
-            if (l != g.lines[2]) l,
+          for (final l in merge.lines)
+            if (l != merge.lines[2]) l,
         ]);
         final c = calls();
         final visudo = c.indexWhere((l) => l.startsWith('visudo -c -f'));
@@ -870,7 +881,7 @@ cp "\$src" "\$dst"''');
         expect(install, greaterThan(visudo), reason: '$c');
 
         // Run again: nothing is added twice.
-        final again = await run(g);
+        final again = await run(merge);
         expect(again.exitCode, 0);
         expect(target.readAsLinesSync(), lines);
       },
@@ -882,11 +893,11 @@ cp "\$src" "\$dst"''');
       await trustedFind();
       await installStub();
       await stub('visudo', 'exit 0');
-      final r = await run(g);
+      final r = await run(merge);
       expect(r.exitCode, 0, reason: '${r.stdout}${r.stderr}');
       expect(target.readAsLinesSync(), [
         '# Kelola: lens read rules, one command per line. Safe to edit.',
-        ...g.lines,
+        ...merge.lines,
       ]);
     }, skip: Platform.isWindows);
 
@@ -922,7 +933,7 @@ cp "\$src" "\$dst"''');
       await installStub();
       await stub('visudo', 'echo "visudo \$*" >> ${log.path}\nexit 1');
       target.writeAsStringSync('# old\n');
-      final r = await run(g);
+      final r = await run(merge);
       expect(r.exitCode, isNot(0));
       expect(r.stdout, isNot(contains(webGrantOkMarker)));
       expect(calls().where((l) => l.startsWith('install')), isEmpty);
@@ -936,7 +947,7 @@ cp "\$src" "\$dst"''');
       await stub('visudo', 'exit 0');
       final p = await Process.start(
         'sh',
-        ['-c', buildWebGrantScript(g)],
+        ['-c', buildWebGrantScript(merge)],
         environment: {'PATH': '${dir.path}:/usr/bin:/bin'},
       );
       p.stdin.write('wrong\n');
