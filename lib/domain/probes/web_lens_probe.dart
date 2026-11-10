@@ -44,6 +44,12 @@ String? safeWebUnit(String? unit) {
   return isSudoersSafeUnitName(unit) ? unit : null;
 }
 
+/// Shell, first line of every lens script: Debian's default PATH for a
+/// non-root login has no sbin directory, where nginx, apache2 and apachectl
+/// live. Appended, so the login's own PATH order still wins. Constant text.
+const webSbinPathLine =
+    r'PATH="$PATH:/usr/local/sbin:/usr/sbin:/sbin"; export PATH';
+
 /// Shell: prints `$1` with a `|` prefix per line, so host output can never
 /// look like a marker or an `@key=value` line.
 const webOutShellFn =
@@ -61,7 +67,7 @@ const webOutShellFn =
 String webSudoRefusedCondition(String rcVar, String outVar) =>
     '[ "\$$rcVar" != 0 ] && { ! command -v sudo >/dev/null 2>&1 || '
     "printf '%s\\n' \"\$$outVar\" | grep -qiE "
-    "'^sudo(-rs)?: .*(password|interactive authentication|no tty|askpass|a terminal is required|can.t do that)"
+    "'^sudo(-rs)?: .*(password|interactive authentication|no tty|askpass|a terminal is required|can.t do that|must have a tty)"
     "|^sorry, user .* (is not allowed to execute|may not run sudo)"
     "|^[^ ]+ is not in the sudoers'; }";
 
@@ -143,6 +149,7 @@ class WebLensProbe extends Probe<WebLens> {
             access: '/var/log/nginx/access.log',
           );
     return [
+      webSbinPathLine,
       'export LC_ALL=C',
       r'try() { "$@" 2>/dev/null || sudo -n "$@" 2>/dev/null; }',
       // Prints the value of directive $1 (whole first token, any case),
@@ -181,10 +188,20 @@ class WebLensProbe extends Probe<WebLens> {
         r'd=$(try "$B" -T </dev/null)',
       r'out "$d"',
       'echo ---CERTS---',
-      if (_apache)
-        'grep -rhsi SSLCertificateFile ${shellSingleQuote(apacheConfigDir(facts))} '
-            '| pick sslcertificatefile $maxCerts |'
-      else
+      if (_apache) ...[
+        // Only the enabled config (sites-available holds disabled sites),
+        // following the enabled symlinks; a plain read. Nothing readable:
+        // `@src=none`, so the section is an error, not an empty list.
+        'D=${shellSingleQuote(apacheConfigDir(facts))}',
+        'n=0',
+        'for f in ${apacheEnabledConfigGlobs(facts).join(' ')}; do',
+        r'  [ -f "$f" ] && [ -r "$f" ] && n=$((n + 1))',
+        'done',
+        r'[ "$n" -gt 0 ] || echo @src=none',
+        'for f in ${apacheEnabledConfigGlobs(facts).join(' ')}; do',
+        r'  [ -f "$f" ] && [ -r "$f" ] && grep -hsi SSLCertificateFile -- "$f"',
+        'done | pick sslcertificatefile $maxCerts |',
+      ] else
         'printf \'%s\\n\' "\$d" | pick ssl_certificate $maxCerts |',
       r'while IFS= read -r p; do',
       r'  echo "@cert=$p"',

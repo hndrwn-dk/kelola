@@ -657,6 +657,190 @@ void main() {
       expect(openrc, contains("rc-service 'nginx' status"));
     });
 
+    test('sbin dirs are appended to PATH before any command -v', () {
+      const line = r'PATH="$PATH:/usr/local/sbin:/usr/sbin:/sbin"; export PATH';
+      for (final p in [nginx, apache]) {
+        for (final f in [ubuntu, rocky]) {
+          final cmd = p.command(f);
+          expect(cmd.split('\n').first, line);
+          expect(cmd.indexOf(line), lessThan(cmd.indexOf('command -v')));
+        }
+      }
+    });
+
+    test('tools only in an sbin dir are found (executed)', () async {
+      final dir = await Directory.systemTemp.createTemp('kelola_lens_sbin');
+      addTearDown(() => dir.delete(recursive: true));
+      File('${dir.path}/openssl').writeAsStringSync('#!/bin/sh\nexit 1\n');
+      await Process.run('chmod', ['+x', '${dir.path}/openssl']);
+      final cmd = const WebLensProbe(
+        id: ServiceId.nginx,
+        binaries: {},
+      ).command(ubuntu).replaceFirst(
+        ':/usr/local/sbin:/usr/sbin:/sbin"',
+        ':${dir.path}"',
+      );
+      final r = await Process.run(
+        '/bin/sh',
+        ['-c', cmd],
+        // No openssl on the login PATH: only the appended dir has one.
+        environment: {'PATH': '/nonexistent'},
+      );
+      expect(r.stdout, contains('|openssl ${dir.path}/openssl'));
+    }, skip: Platform.isWindows);
+
+    group('sudo refusal wording in the config test (executed)', () {
+      for (final msg in [
+        'sudo: sorry, you must have a tty to run sudo',
+        'sudo-rs: interactive authentication is required',
+        "sudo-rs: I'm sorry deploy. I'm afraid I can't do that",
+      ]) {
+        test(msg, () async {
+          final dir = await Directory.systemTemp.createTemp('kelola_tty');
+          addTearDown(() => dir.delete(recursive: true));
+          Future<void> stub(String name, String body) async {
+            File('${dir.path}/$name').writeAsStringSync('#!/bin/sh\n$body\n');
+            await Process.run('chmod', ['+x', '${dir.path}/$name']);
+          }
+
+          await stub('sudo', "echo '${msg.replaceAll("'", r"'\''")}' >&2\nexit 1");
+          await stub(
+            'nginx',
+            'echo "nginx: [alert] could not open error log file: open() '
+                '\\"/var/log/nginx/error.log\\" failed (13: Permission denied)" >&2\n'
+                'exit 1',
+          );
+          final probe = WebLensProbe(
+            id: ServiceId.nginx,
+            binaries: {'nginx': '${dir.path}/nginx'},
+          );
+          final r = await Process.run(
+            'sh',
+            ['-c', probe.command(ubuntu)],
+            environment: {'PATH': '${dir.path}:/usr/bin:/bin'},
+          );
+          expect(r.stdout, contains('---CONFTEST---\n@rc=nosudo\n'));
+          // Never a failed config test: sudo was refused.
+          expect(
+            () => parseWebLens(r.stdout as String, id: ServiceId.nginx, now: now),
+            throwsA(isA<SudoRequiredException>()),
+          );
+        }, skip: Platform.isWindows);
+      }
+    });
+
+    group('Apache certificates come from the enabled config only (executed)', () {
+      late Directory dir;
+      late Directory conf;
+      late File log;
+
+      Future<void> stub(String name, String body) async {
+        File('${dir.path}/$name').writeAsStringSync('#!/bin/sh\n$body\n');
+        await Process.run('chmod', ['+x', '${dir.path}/$name']);
+      }
+
+      setUp(() async {
+        dir = await Directory.systemTemp.createTemp('kelola_apache_certs');
+        conf = Directory('${dir.path}/apache2')..createSync();
+        log = File('${dir.path}/openssl.log');
+        await stub('apache2ctl', '''
+case "\$1" in
+  -t) echo "Syntax OK" >&2 ;;
+  -S) cat <<'DUMP'
+VirtualHost configuration:
+*:443                  site.example (${conf.path}/sites-enabled/site.conf:2)
+DUMP
+  ;;
+esac''');
+        await stub('openssl', '''
+echo "\$*" >> ${log.path}
+echo "notAfter=Nov 15 01:32:00 2030 GMT"
+echo "subject=CN = site.example"''');
+        await stub('tail', 'exit 0');
+      });
+
+      tearDown(() => dir.delete(recursive: true));
+
+      void write(String rel, String text) {
+        final f = File('${conf.path}/$rel')..createSync(recursive: true);
+        f.writeAsStringSync(text);
+      }
+
+      Future<(ProcessResult, WebLens)> run() async {
+        final probe = WebLensProbe(
+          id: ServiceId.apache,
+          binaries: {'apache2ctl': '${dir.path}/apache2ctl'},
+        );
+        final cmd = probe.command(ubuntu);
+        // Production always reads apacheConfigDir(facts); the test points
+        // that one assignment at the temp tree.
+        expect("D='/etc/apache2'".allMatches(cmd), hasLength(1));
+        final r = await Process.run(
+          'sh',
+          ['-c', cmd.replaceFirst("D='/etc/apache2'", "D='${conf.path}'")],
+          environment: {'PATH': '${dir.path}:/usr/bin:/bin'},
+        );
+        return (
+          r,
+          parseWebLens(r.stdout as String, id: ServiceId.apache, now: now),
+        );
+      }
+
+      List<String> calls() => log.existsSync() ? log.readAsLinesSync() : [];
+
+      test('disabled sites are not read; enabled symlinks are followed', () async {
+        write('apache2.conf', 'IncludeOptional sites-enabled/*.conf\n');
+        write(
+          'sites-available/site.conf',
+          '<VirtualHost *:443>\n'
+              '  SSLCertificateFile /etc/ssl/site.pem\n'
+              '  SSLCertificateKeyFile /etc/ssl/private/site.key\n'
+              '</VirtualHost>\n',
+        );
+        write(
+          'sites-available/disabled.conf',
+          '<VirtualHost *:443>\n  SSLCertificateFile /etc/ssl/old.pem\n</VirtualHost>\n',
+        );
+        Directory('${conf.path}/sites-enabled').createSync();
+        Link('${conf.path}/sites-enabled/site.conf')
+            .createSync('../sites-available/site.conf');
+        write('mods-available/ssl.conf', 'SSLCertificateFile /etc/ssl/mod.pem\n');
+        Directory('${conf.path}/mods-enabled').createSync();
+        Link('${conf.path}/mods-enabled/ssl.conf')
+            .createSync('${conf.path}/mods-available/ssl.conf');
+        write('mods-enabled/ssl.load', 'SSLCertificateFile /etc/ssl/load.pem\n');
+        write(
+          'conf-enabled/x.conf',
+          '#SSLCertificateFile /etc/ssl/commented.pem\n',
+        );
+        final (r, lens) = await run();
+        expect(calls(), [
+          'x509 -noout -enddate -subject -ext subjectAltName -in /etc/ssl/site.pem',
+          'x509 -noout -enddate -subject -ext subjectAltName -in /etc/ssl/mod.pem',
+        ], reason: '${r.stdout}');
+        expect(lens.certsByPath.keys, ['/etc/ssl/site.pem', '/etc/ssl/mod.pem']);
+        expect(lens.sectionErrors[WebLensSection.certs], isNull);
+        expect(r.stdout, isNot(contains('.key')));
+      }, skip: Platform.isWindows);
+
+      test('a missing config dir is a cert section error, not 443 without cert', () async {
+        conf.deleteSync(recursive: true);
+        final (_, lens) = await run();
+        expect(calls(), isEmpty);
+        expect(
+          lens.sectionErrors[WebLensSection.certs],
+          'Could not read the Apache httpd config for certificates',
+        );
+        expect(lens.vhosts.single.listen.single, '*:443');
+        expect(
+          lens.findings.where(
+            (f) => f.kind == WebFindingKind.listens443WithoutCert,
+          ),
+          isEmpty,
+        );
+      }, skip: Platform.isWindows);
+    });
+
     test('shell cert loop passes only ssl_certificate paths to openssl (executed)', () async {
       final dir = await Directory.systemTemp.createTemp('kelola_weblens');
       addTearDown(() => dir.delete(recursive: true));

@@ -129,6 +129,7 @@ class ConfigTestedReloadProbe extends Probe<ReloadResult> {
         return 'echo @refused=init\nexit 2';
     }
     return [
+      webSbinPathLine,
       'export LC_ALL=C',
       webOutShellFn,
       'echo @init=$init',

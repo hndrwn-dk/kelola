@@ -18,6 +18,9 @@ class ServiceDetectProbe extends Probe<ServiceDetection> {
   @override
   String command(HostFacts facts) {
     return [
+      // Debian's non-root PATH has no sbin dirs (nginx, apache2, apachectl);
+      // appended, so the login's own order wins. Same as webSbinPathLine.
+      r'PATH="$PATH:/usr/local/sbin:/usr/sbin:/sbin"; export PATH',
       'export LC_ALL=C',
       'echo ---UNITS---',
       ..._unitsLines(facts.init),

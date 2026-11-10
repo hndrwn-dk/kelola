@@ -237,6 +237,38 @@ void main() {
       }
     });
 
+    test('sbin dirs are appended to PATH before any command -v', () {
+      const line = 'PATH="\$PATH:/usr/local/sbin:/usr/sbin:/sbin"; export PATH';
+      for (final i in InitSystem.values) {
+        final c = probe.command(facts(i));
+        expect(c, contains(line));
+        expect(c.indexOf(line), lessThan(c.indexOf('command -v')));
+        expect(line.allMatches(c), hasLength(1));
+      }
+    });
+
+    test('a binary only in an sbin dir is detected (executed)', () async {
+      final dir = await Directory.systemTemp.createTemp('kelola_detect_sbin');
+      addTearDown(() => dir.delete(recursive: true));
+      File('${dir.path}/nginx')
+          .writeAsStringSync('#!/bin/sh\necho "nginx version: nginx/1.24.0" >&2\n');
+      await Process.run('chmod', ['+x', '${dir.path}/nginx']);
+      // The temp dir stands in for /usr/sbin; the login PATH has no sbin.
+      final c = probe.command(facts(InitSystem.unknown)).replaceFirst(
+        ':/usr/local/sbin:/usr/sbin:/sbin"',
+        ':${dir.path}"',
+      );
+      final r = await Process.run(
+        'sh',
+        ['-c', c],
+        environment: {'PATH': '/usr/bin:/bin'},
+      );
+      final d = probe.parse(r.stdout as String, r.stderr as String, r.exitCode);
+      final nginx = d.services.singleWhere((s) => s.id == ServiceId.nginx);
+      expect(nginx.binaries['nginx'], '${dir.path}/nginx');
+      expect(nginx.version, '1.24.0');
+    }, skip: Platform.isWindows);
+
     test('parse delegates to the parser', () {
       final r = probe.parse(
         '---UNITS---\nnginx.service active running\n',

@@ -65,15 +65,22 @@ void main() {
 
   test('config dir by package manager', () {
     HostFacts f(PackageManager p) => HostFacts.undiscovered.copyWith(pkg: p);
-    for (final p in [
-      PackageManager.dnf,
-      PackageManager.yum,
-      PackageManager.zypper,
-    ]) {
+    // Only the RHEL family is httpd.
+    for (final p in [PackageManager.dnf, PackageManager.yum]) {
       expect(apacheConfigDir(f(p)), '/etc/httpd');
       expect(apacheDefaultLogs(f(p)).error, '/var/log/httpd/error_log');
       expect(apacheDefaultLogs(f(p)).access, '/var/log/httpd/access_log');
     }
+    // SUSE: /etc/apache2, with RHEL-style log names.
+    expect(apacheConfigDir(f(PackageManager.zypper)), '/etc/apache2');
+    expect(
+      apacheDefaultLogs(f(PackageManager.zypper)).error,
+      '/var/log/apache2/error_log',
+    );
+    expect(
+      apacheDefaultLogs(f(PackageManager.zypper)).access,
+      '/var/log/apache2/access_log',
+    );
     expect(apacheConfigDir(f(PackageManager.apt)), '/etc/apache2');
     expect(
       apacheDefaultLogs(f(PackageManager.apt)).error,

@@ -507,6 +507,43 @@ void main() {
       }
     }, skip: Platform.isWindows);
 
+    test('requiretty and sudo-rs refusals on the test leg are sudo-required, never testFailed', () async {
+      for (final msg in [
+        'sudo: sorry, you must have a tty to run sudo',
+        'sudo-rs: interactive authentication is required',
+        "sudo-rs: I'm sorry deploy. I'm afraid I can't do that",
+      ]) {
+        await stub('sudo', "echo '${msg.replaceAll("'", r"'\''")}' >&2\nexit 1");
+        await stub('systemctl', 'echo "systemctl \$*" >> ${log.path}');
+        final p = ConfigTestedReloadProbe(
+          id: ServiceId.nginx,
+          unit: 'nginx.service',
+          testBin: '${dir.path}/nginx',
+        );
+        final r = await run(p, ubuntu);
+        expect(r.exitCode, 4, reason: msg);
+        expect(calls(), isEmpty, reason: msg);
+        expect(
+          () => p.parse(r.stdout as String, r.stderr as String, r.exitCode),
+          throwsA(sudoHint(SudoHintKind.webServices, target: 'nginx')),
+          reason: msg,
+        );
+      }
+    }, skip: Platform.isWindows);
+
+    test('sbin dirs are appended to PATH first', () {
+      const line = r'PATH="$PATH:/usr/local/sbin:/usr/sbin:/sbin"; export PATH';
+      for (final init in [InitSystem.systemd, InitSystem.openrc]) {
+        final cmd = ConfigTestedReloadProbe(
+          id: ServiceId.nginx,
+          unit: 'nginx.service',
+          testBin: '/usr/sbin/nginx',
+        ).command(HostFacts.undiscovered.copyWith(init: init));
+        expect(cmd.split('\n').first, line);
+        expect(cmd.indexOf(line), lessThan(cmd.indexOf('command -v')));
+      }
+    });
+
     test('test output cannot forge markers', () async {
       await passThroughSudo();
       await stub(

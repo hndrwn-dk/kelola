@@ -174,6 +174,12 @@ WebLens parseWebLens(
       errors[WebLensSection.certs] =
           'Could not read $unreadable of ${certs.length} certificates';
     }
+    // Apache: no enabled config file could be read, so the certificate
+    // list is unknown, not empty.
+    if (certSec.metaValue('src') == 'none') {
+      errors[WebLensSection.certs] =
+          'Could not read the $label config for certificates';
+    }
   }
 
   // ERRLOG

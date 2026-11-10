@@ -100,10 +100,12 @@ String? _loc(String w) {
   return inner;
 }
 
+/// RHEL family: `/etc/httpd`, `httpd`, `*_log` names.
 bool _httpdFamily(HostFacts f) =>
-    f.pkg == PackageManager.dnf ||
-    f.pkg == PackageManager.yum ||
-    f.pkg == PackageManager.zypper;
+    f.pkg == PackageManager.dnf || f.pkg == PackageManager.yum;
+
+/// SUSE: `/etc/apache2` like Debian, but `*_log` names.
+bool _suse(HostFacts f) => f.pkg == PackageManager.zypper;
 
 String apacheConfigDir(HostFacts f) =>
     _httpdFamily(f) ? '/etc/httpd' : '/etc/apache2';
@@ -111,7 +113,31 @@ String apacheConfigDir(HostFacts f) =>
 ({String error, String access}) apacheDefaultLogs(HostFacts f) =>
     _httpdFamily(f)
     ? (error: '/var/log/httpd/error_log', access: '/var/log/httpd/access_log')
+    : _suse(f)
+    ? (
+        error: '/var/log/apache2/error_log',
+        access: '/var/log/apache2/access_log',
+      )
     : (
         error: '/var/log/apache2/error.log',
         access: '/var/log/apache2/access.log',
       );
+
+/// Shell words (relative to `$D`, the [apacheConfigDir]) naming the config
+/// files the distro's main config includes: only enabled sites, confs and
+/// modules, each `*.conf` as Apache includes them. Constant text; unmatched
+/// globs stay literal and fail `[ -f ]`.
+List<String> apacheEnabledConfigGlobs(HostFacts f) => _httpdFamily(f)
+    ? const [
+        r'"$D"/conf/*.conf',
+        r'"$D"/conf.d/*.conf',
+        r'"$D"/conf.modules.d/*.conf',
+      ]
+    : _suse(f)
+    ? const [r'"$D"/*.conf', r'"$D"/vhosts.d/*.conf', r'"$D"/conf.d/*.conf']
+    : const [
+        r'"$D"/apache2.conf',
+        r'"$D"/sites-enabled/*.conf',
+        r'"$D"/conf-enabled/*.conf',
+        r'"$D"/mods-enabled/*.conf',
+      ];
