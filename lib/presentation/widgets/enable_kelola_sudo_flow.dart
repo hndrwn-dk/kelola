@@ -288,10 +288,14 @@ Future<bool> _runUnitGrantFlow({
 
 /// M52 §7b: confirms and installs a web lens's exact read rules in
 /// [kelolaWebSudoersPath], the same way as a per-service grant. Returns true
-/// once the host confirmed every line.
+/// once the host confirmed every line it installed.
 ///
 /// [certsLater]: the config could not be read yet, so certificate and log
 /// lines can only come with a second grant.
+///
+/// [onConfigRefused]: the host left out the config test lines because the
+/// server config is not root-controlled (whether or not other lines went
+/// in), so the screen can keep showing why.
 Future<bool> runWebGrantFlow({
   required BuildContext context,
   required WidgetRef ref,
@@ -299,6 +303,7 @@ Future<bool> runWebGrantFlow({
   required HostFacts facts,
   required WebSudoersGrant grant,
   bool certsLater = false,
+  void Function(WebGrantConfigRefusal refusal)? onConfigRefused,
 }) {
   return _runExactGrantFlow(
     context: context,
@@ -313,20 +318,71 @@ Future<bool> runWebGrantFlow({
         ? 'Certificate and log lines come with a second grant, once the '
             'config can be read.'
         : null,
-    footer: 'These rules let this login run the listed commands as root. The '
-        'config test loads modules named in the server config, so only grant '
-        'this where that config is root-owned.',
+    footer: webGrantSheetFooter,
     path: kelolaWebSudoersPath,
     lines: grant.lines,
     confirmLabel: 'Add rules',
     probe: WebSudoersGrantProbe(grant),
     done: 'Read access granted · reading again',
-    // Cert or log paths the host refused (directory not root-owned or
-    // writable): their lines were left out, the rest installed.
-    doneDetail: (skipped) => (skipped as List<String>)
-        .map(webGrantSkippedCopy)
-        .join('\n'),
+    // What the host left out (cert or log directory, or a config that is
+    // not root-controlled); the rest was installed.
+    doneNotes: (result) {
+      final r = result as WebGrantResult;
+      final config = r.config;
+      if (config != null) onConfigRefused?.call(config);
+      return webGrantNotes(config: config, skipped: r.skipped);
+    },
+    errorNotes: (error) {
+      if (error is! WebGrantRefusedException) return null;
+      final config = error.config;
+      if (config != null) onConfigRefused?.call(config);
+      return webGrantNotes(config: config, skipped: error.skipped);
+    },
     failed: 'Could not add the sudo rules',
+  );
+}
+
+/// The web grant sheet's trade-off line (fix 1: enforced on the host).
+const webGrantSheetFooter =
+    'These rules let this login run the listed commands as root. The config '
+    'test loads modules named in the server config, so Kelola adds it only '
+    'when that config and its module directories are root-owned and not '
+    'writable by others.';
+
+/// One line of grant result copy: [lead], a host path, [tail].
+typedef GrantNote = ({String lead, String path, String tail});
+
+/// The "not granted" lines for a web grant result, config test first.
+List<GrantNote> webGrantNotes({
+  WebGrantConfigRefusal? config,
+  List<String> skipped = const [],
+}) => [
+  if (config != null) webGrantConfigCopyParts(config),
+  ...skipped.map(webGrantSkippedCopyParts),
+];
+
+/// [notes] as one text, each on its own line after [head] (if any), with
+/// every host path in mono. [style] is the human copy's style.
+Text grantNotesText(
+  BuildContext context, {
+  String? head,
+  required List<GrantNote> notes,
+  required TextStyle style,
+}) {
+  final mono = KelolaType.mono(
+    color: style.color ?? context.kc.text,
+    size: style.fontSize ?? 13,
+  );
+  final spans = <InlineSpan>[];
+  for (final n in notes) {
+    if (spans.isNotEmpty || head != null) spans.add(const TextSpan(text: '\n'));
+    spans
+      ..add(TextSpan(text: n.lead))
+      ..add(TextSpan(text: n.path, style: mono))
+      ..add(TextSpan(text: n.tail));
+  }
+  return Text.rich(
+    TextSpan(text: head, style: style, children: spans),
   );
 }
 
@@ -346,7 +402,8 @@ Future<bool> _runExactGrantFlow({
   required String confirmLabel,
   required Probe<Object?> probe,
   required String done,
-  String Function(Object? result)? doneDetail,
+  List<GrantNote> Function(Object? result)? doneNotes,
+  List<GrantNote>? Function(Object error)? errorNotes,
   required String failed,
 }) async {
   final confirmed = await showModalBottomSheet<bool>(
@@ -452,20 +509,38 @@ Future<bool> _runExactGrantFlow({
         probe: probe,
         stdinBytes: utf8.encode('$pass\n'),
       );
-      final detail = doneDetail?.call(result) ?? '';
+      final notes = doneNotes?.call(result) ?? const <GrantNote>[];
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(detail.isEmpty ? done : '$done\n$detail'),
+            content: notes.isEmpty
+                ? Text(done)
+                : Builder(
+                    builder: (ctx) => grantNotesText(
+                      ctx,
+                      head: done,
+                      notes: notes,
+                      style: DefaultTextStyle.of(ctx).style,
+                    ),
+                  ),
           ),
         );
       }
       return true;
     } catch (e) {
+      final notes = errorNotes?.call(e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e is KelolaException ? e.message : failed),
+            content: notes != null && notes.isNotEmpty
+                ? Builder(
+                    builder: (ctx) => grantNotesText(
+                      ctx,
+                      notes: notes,
+                      style: DefaultTextStyle.of(ctx).style,
+                    ),
+                  )
+                : Text(e is KelolaException ? e.message : failed),
           ),
         );
       }

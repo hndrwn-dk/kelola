@@ -389,4 +389,35 @@ http { access_log off; access_log /var/log/\$host.log;
       -2,
     );
   });
+
+  test('section files are listed once each, in order, and bounded', () {
+    final r = parseNginxDump(fixture('nginx_T_ubuntu.txt'));
+    expect(r.sourceFiles, [
+      '/etc/nginx/nginx.conf',
+      '/etc/nginx/mime.types',
+      '/etc/nginx/conf.d/soon.conf',
+      '/etc/nginx/sites-enabled/default',
+    ]);
+    // The stderr preamble's "configuration file ... syntax is ok" is not a
+    // section; a repeated header is listed once.
+    final twice = parseNginxDump(
+      '# configuration file /etc/nginx/nginx.conf:\nevents {}\n'
+      '# configuration file /etc/letsencrypt/options-ssl-nginx.conf:\n'
+      '# configuration file /etc/nginx/nginx.conf:\n',
+    );
+    expect(twice.sourceFiles, [
+      '/etc/nginx/nginx.conf',
+      '/etc/letsencrypt/options-ssl-nginx.conf',
+    ]);
+    // Past the section bound: one more than the bound is kept, so a caller
+    // can tell there were too many to check.
+    final many = StringBuffer();
+    for (var i = 0; i < nginxMaxSections + 50; i++) {
+      many.writeln('# configuration file /etc/nginx/conf.d/$i.conf:');
+    }
+    final big = parseNginxDump(many.toString());
+    expect(big.sourceFiles, hasLength(nginxMaxSections + 1));
+    expect(parseNginxDump('').sourceFiles, isEmpty);
+    expect(parseNginxDump('junk { ; } } {').sourceFiles, isEmpty);
+  });
 }

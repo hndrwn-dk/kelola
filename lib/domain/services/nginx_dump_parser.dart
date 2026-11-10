@@ -25,6 +25,7 @@ class NginxDumpResult {
     this.errorLogPaths = const [],
     this.accessLogPaths = const [],
     this.truncated = false,
+    this.sourceFiles = const [],
   });
 
   final List<WebVhost> vhosts;
@@ -34,6 +35,11 @@ class NginxDumpResult {
   /// The dump ended (or a new section began) inside an open block, or a
   /// bound below was hit.
   final bool truncated;
+
+  /// Each `# configuration file <path>:` section's path, once, in dump
+  /// order: every file nginx read. At most [nginxMaxSections] + 1, so a
+  /// caller can tell there were more than it may check.
+  final List<String> sourceFiles;
 
   @override
   String toString() =>
@@ -168,6 +174,7 @@ NginxDumpResult parseNginxDump(String dump) {
   var base = <String>[];
   var truncated = false;
   var currentFile = '';
+  final sourceFiles = <String>{};
   String? mainFile;
   // Blocks open past [nginxMaxDepth]: skipped whole.
   var skipDepth = 0;
@@ -247,6 +254,7 @@ NginxDumpResult parseNginxDump(String dump) {
     word.clear();
     inWord = false;
     currentFile = file;
+    if (sourceFiles.length <= nginxMaxSections) sourceFiles.add(file);
     if (mainFile == null) {
       mainFile = file;
       base = [];
@@ -413,6 +421,7 @@ NginxDumpResult parseNginxDump(String dump) {
     errorLogPaths: errorLogs,
     accessLogPaths: accessLogs,
     truncated: truncated,
+    sourceFiles: List.unmodifiable(sourceFiles),
   );
 }
 

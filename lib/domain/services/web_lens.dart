@@ -108,6 +108,7 @@ class WebLens {
     this.toolPaths = const {},
     this.errorLogPath,
     this.accessLogPath,
+    this.configFiles = const [],
   });
 
   final ServiceId id;
@@ -129,6 +130,11 @@ class WebLens {
   final Map<String, String> toolPaths;
   final String? errorLogPath;
   final String? accessLogPath;
+
+  /// Config files the dump named, as the host printed them: nginx's
+  /// `# configuration file` sections, Apache's vhost files from `-S`. The
+  /// read grant checks each on the host before it adds the config test.
+  final List<String> configFiles;
 
   /// Worst finding (facts never count). [HealthStatus.unknown] only when no
   /// section at all could be read.

@@ -332,6 +332,77 @@ void main() {
       );
     });
 
+    test('config trust locations are the real ones in lib (test-only prefix unused)', () {
+      for (final f in _dartFilesUnder('lib')) {
+        final src = f.readAsStringSync();
+        expect(src, isNot(contains('configPrefix:')), reason: f.path);
+      }
+      final src = _read('lib/domain/sudo/web_sudoers_grant.dart');
+      expect(src, contains("@visibleForTesting String configPrefix = '',"));
+      final grant = WebSudoersGrant.tryCreate(
+        user: 'alice',
+        id: ServiceId.nginx,
+        binaries: const {'nginx': '/usr/sbin/nginx'},
+      )!;
+      expect(buildWebGrantScript(grant), contains('\nkelola_pre=\n'));
+    });
+
+    test('every config test line is gated by the host-side config trust check', () {
+      // Whatever the grant holds, a `-t` / `-T` / `-S` line is never merged
+      // or confirmed unless the config check passed (fix 1).
+      final cases = <WebSudoersGrant?>[
+        for (final id in [ServiceId.nginx, ServiceId.apache])
+          for (final bins in [
+            {'nginx': '/usr/sbin/nginx'},
+            {'apachectl': '/usr/sbin/apachectl'},
+            {'apache2ctl': '/usr/sbin/apache2ctl', 'httpd': '/usr/sbin/httpd'},
+            {'httpd': '/usr/sbin/httpd'},
+          ])
+            for (final tools in [
+              const <String, String>{},
+              const {'openssl': '/usr/bin/openssl', 'tail': '/usr/bin/tail'},
+            ])
+              WebSudoersGrant.tryCreate(
+                user: 'alice',
+                id: id,
+                binaries: bins,
+                toolPaths: tools,
+                certPaths: const ['/etc/ssl/certs/site.pem'],
+                errorLog: '/var/log/x/error.log',
+                accessLog: '/var/log/x/access.log',
+                configFiles: const ['/etc/nginx/nginx.conf'],
+              ),
+      ];
+      var gated = 0;
+      for (final g in cases.nonNulls) {
+        final script = buildWebGrantScript(g);
+        final config = [
+          for (var i = 0; i < g.lines.length; i++)
+            if (RegExp(r' -[tTS]$').hasMatch(g.lines[i])) i,
+        ];
+        if (config.isEmpty) {
+          expect(script, isNot(contains('kelola_cfg')));
+          continue;
+        }
+        gated++;
+        expect(script, contains('if kelola_cfg; then KELOLA_CFG=1; else'));
+        for (final i in config) {
+          final v = i == 0 ? 'LINE' : 'LINE$i';
+          expect(g.linePaths[i], isNull);
+          expect(
+            script,
+            contains('if [ "\$KELOLA_CFG" = 1 ]; then grep -qxF -- "\$$v" '),
+          );
+          // Never merged without the gate.
+          expect(
+            script,
+            isNot(contains('\ngrep -qxF -- "\$$v" "\$TMP"')),
+          );
+        }
+      }
+      expect(gated, greaterThan(0));
+    });
+
     test('path is the pinned kelola-web file', () {
       expect(kelolaWebSudoersPath, '/etc/sudoers.d/kelola-web');
     });

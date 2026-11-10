@@ -1016,7 +1016,8 @@ void main() {
           find.text(
             'These rules let this login run the listed commands as root. '
             'The config test loads modules named in the server config, so '
-            'only grant this where that config is root-owned.',
+            'Kelola adds it only when that config and its module directories '
+            'are root-owned and not writable by others.',
           ),
           findsOneWidget,
         );
@@ -1252,6 +1253,78 @@ void main() {
         );
         // The rest was installed, so the lens reads again.
         expect(pool.probes.whereType<WebLensProbe>(), hasLength(2));
+        await dispose(tester);
+      });
+
+      testWidgets('a config refusal names the path in mono, in the result and in ACTIONS',
+          (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        const bad = '/etc/nginx/sites-enabled';
+        pool.grantStdout = '$webGrantConfigMarker '
+            '${base64Encode(utf8.encode(bad))} mode\n'
+            '$webGrantOkMarker\n';
+        pool.grantExit = 0;
+        await pumpLens(tester);
+        await tapGrant(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Add rules'));
+        await frames(tester, 8);
+        pool.error = null;
+        pool.lens = _healthyLens();
+        await enterPassword(tester);
+        const copy =
+            'Config test not granted: $bad is writable by group or others.';
+        expect(
+          find.text('Read access granted · reading again\n$copy'),
+          findsOneWidget,
+        );
+        final mono = KelolaType.mono(color: Colors.black).fontFamily;
+        bool monoPath(Widget w) {
+          if (w is! RichText) return false;
+          var found = false;
+          w.text.visitChildren((span) {
+            if (span is TextSpan &&
+                span.text == bad &&
+                span.style?.fontFamily == mono) {
+              found = true;
+            }
+            return !found;
+          });
+          return found;
+        }
+
+        expect(find.byWidgetPredicate(monoPath), findsWidgets);
+        // The lens read again; the refusal stays in ACTIONS, in mono.
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(2));
+        await tester.pump(const Duration(seconds: 10));
+        await frames(tester, 8);
+        expect(find.text(copy), findsOneWidget);
+        expect(find.byWidgetPredicate(monoPath), findsOneWidget);
+        await dispose(tester);
+      });
+
+      testWidgets('config test lines refused and nothing else: the refusal is the error, no re-read',
+          (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        const bad = '/opt/le/options-ssl-nginx.conf';
+        pool.grantStdout = '$webGrantConfigMarker '
+            '${base64Encode(utf8.encode(bad))} owner\n';
+        pool.grantExit = webGrantNothingExit;
+        await pumpLens(tester);
+        await tapGrant(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Add rules'));
+        await frames(tester, 8);
+        await enterPassword(tester);
+        const copy = 'Config test not granted: $bad is not root-owned.';
+        expect(find.text(copy), findsWidgets);
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(1));
+        // Under the hint's grant row as well, once the snackbar is gone.
+        await tester.pump(const Duration(seconds: 10));
+        await frames(tester, 8);
+        expect(find.text(copy), findsOneWidget);
         await dispose(tester);
       });
 

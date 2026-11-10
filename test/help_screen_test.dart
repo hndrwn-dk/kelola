@@ -49,5 +49,9 @@ void main() {
       expect(p.length, lessThan(500), reason: p);
     }
     expect(answer, contains('not root-owned, or that others can write'));
+    // Fix 1: root-owned config is enforced on the host, not just advised.
+    expect(answer, isNot(contains('grant it only where')));
+    expect(answer, contains('module directories'));
+    expect(answer, contains('leaves the config test out'));
   });
 }

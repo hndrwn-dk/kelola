@@ -404,6 +404,29 @@ void main() {
       );
       expect(lens.vhosts, isNotEmpty);
       expect(lens.sectionErrors.containsKey(WebLensSection.dump), isFalse);
+      // The vhost files from -S, without their line numbers (fix 1).
+      expect(lens.configFiles, [
+        '/etc/httpd/conf.d/ssl.conf',
+        '/etc/httpd/conf.d/other.conf',
+        '/etc/httpd/conf.d/site.conf',
+      ]);
+    });
+
+    test('nginx config files come from the dump sections', () {
+      final lens = parseWebLens(nginxOutput(), id: ServiceId.nginx, now: now);
+      expect(lens.configFiles, [
+        '/etc/nginx/nginx.conf',
+        '/etc/nginx/mime.types',
+        '/etc/nginx/conf.d/soon.conf',
+        '/etc/nginx/sites-enabled/default',
+      ]);
+      // No dump: none known.
+      final none = parseWebLens(
+        nginxOutput(dump: const []),
+        id: ServiceId.nginx,
+        now: now,
+      );
+      expect(none.configFiles, isEmpty);
     });
 
     test('unsafe tool and log paths are dropped', () {

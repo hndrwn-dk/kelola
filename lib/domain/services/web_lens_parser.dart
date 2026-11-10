@@ -138,6 +138,7 @@ WebLens parseWebLens(
 
   // DUMP
   var vhosts = const <WebVhost>[];
+  var configFiles = const <String>[];
   final dumpLines = sections[_Sec.dump]?.data ?? const <String>[];
   final dumpText = dumpLines.join('\n');
   if (dumpText.trim().isEmpty) {
@@ -151,9 +152,11 @@ WebLens parseWebLens(
         : 'Could not read the config dump';
   } else if (id == ServiceId.apache) {
     vhosts = parseApacheVhosts(dumpText);
+    configFiles = _apacheConfigFiles(vhosts);
   } else {
     final r = parseNginxDump(dumpText);
     vhosts = r.vhosts;
+    configFiles = r.sourceFiles;
     if (r.truncated) {
       errors[WebLensSection.dump] =
           'Config dump truncated; showing complete vhosts only';
@@ -226,7 +229,19 @@ WebLens parseWebLens(
     toolPaths: toolPaths,
     errorLogPath: el.path,
     accessLogPath: ac.path,
+    configFiles: configFiles,
   );
+}
+
+/// The files `-S` names for vhosts (`path:line`, line dropped), once each.
+List<String> _apacheConfigFiles(List<WebVhost> vhosts) {
+  final out = <String>{};
+  for (final v in vhosts) {
+    final i = v.sourceFile.lastIndexOf(':');
+    if (i <= 0) continue;
+    out.add(v.sourceFile.substring(0, i));
+  }
+  return List.unmodifiable(out);
 }
 
 /// `@cert=<path>`, `@read=ok|fail`, then openssl's lines for that path.

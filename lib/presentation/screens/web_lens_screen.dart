@@ -286,6 +286,9 @@ WebSudoersGrant? webReadGrantFor({
     certPaths: lens?.certsByPath.keys.toList() ?? const [],
     errorLog: lens?.errorLogPath ?? defaults.error,
     accessLog: lens?.accessLogPath ?? defaults.access,
+    // Files the dump named, checked on the host before the config test is
+    // added (includes outside the config root, e.g. /etc/letsencrypt).
+    configFiles: lens?.configFiles ?? const [],
   );
 }
 
@@ -412,6 +415,10 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
 
   /// Host output of the last failed reload, shown in mono under [_error].
   String _reloadOutput = '';
+
+  /// Why the host left out the config test lines of the last read grant
+  /// (fix 1), shown with the grant until a grant adds them.
+  WebGrantConfigRefusal? _configRefusal;
 
   @override
   void initState() {
@@ -653,9 +660,23 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
                 : 'Exact read-only sudo rules for this lens.',
             onTap: _busy ? null : () => _grantRead(grant),
           ),
+        // With a lens, ACTIONS shows it instead.
+        if (lens == null && _configRefusal != null) ...[
+          const SizedBox(height: 6),
+          _configRefusalNote(context, _configRefusal!),
+        ],
       ],
     );
   }
+
+  /// Fix 1: which config path kept the config test out, and why; the path
+  /// is host text, in mono.
+  Widget _configRefusalNote(BuildContext context, WebGrantConfigRefusal r) =>
+      grantNotesText(
+        context,
+        notes: webGrantNotes(config: r),
+        style: KelolaType.body(color: context.kc.muted, size: 12),
+      );
 
   /// PR #17: the reload leg was refused on systemd. The flow offers the one
   /// `systemctl reload <unit>` rule (or Enable on regex-tier hosts, whose
@@ -678,6 +699,7 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     final host = _host;
     final facts = _facts;
     if (host == null || facts == null || _busy) return;
+    WebGrantConfigRefusal? refused;
     final ok = await runWebGrantFlow(
       context: context,
       ref: ref,
@@ -685,7 +707,11 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
       facts: facts,
       grant: grant,
       certsLater: _lens == null,
+      onConfigRefused: (r) => refused = r,
     );
+    if ((ok || refused != null) && mounted) {
+      setState(() => _configRefusal = refused);
+    }
     if (ok && mounted) await _load();
   }
 
@@ -787,6 +813,11 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Text(gap, style: KelolaType.body(color: c.muted, size: 12)),
+        ),
+      if (_configRefusal != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: _configRefusalNote(context, _configRefusal!),
         ),
       ServiceRow(
         risk: RiskLevel.mutate,
