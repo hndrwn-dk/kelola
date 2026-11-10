@@ -11,17 +11,18 @@ const kelolaWebSudoersPath = '/etc/sudoers.d/kelola-web';
 
 const webGrantOkMarker = 'KELOLA_WEB_GRANT_OK';
 
-/// Root-owned system directories. A NOPASSWD rule on a binary the login user
-/// can replace would be a root shell, and binary paths come from the host's
-/// own output, so only these directories are ever granted.
-const webGrantSystemDirs = {
-  '/usr/bin',
-  '/usr/sbin',
-  '/bin',
-  '/sbin',
-  '/usr/local/bin',
-  '/usr/local/sbin',
-};
+/// Printed (with the binary's path, base64) when a binary failed the
+/// host-side ownership check; nothing is written then.
+const webGrantUntrustedMarker = 'KELOLA_WEB_GRANT_UNTRUSTED';
+
+/// System directories. A NOPASSWD rule on a binary the login user can
+/// replace would be a root shell, and binary paths come from the host's own
+/// output, so only these directories are ever granted (not `/usr/local`,
+/// which is often group-writable). The grant script also checks on the host
+/// that each binary, every directory above it and the directory it was
+/// found in are root-owned and not group- or other-writable
+/// ([webBinaryTrustShell]).
+const webGrantSystemDirs = {'/usr/bin', '/usr/sbin', '/bin', '/sbin'};
 
 final _userName = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_.-]*$');
 
@@ -69,7 +70,10 @@ List<String> webGrantLines({
   String? errorLog,
   String? accessLog,
 }) {
-  if (!_userName.hasMatch(user)) return const [];
+  // `ALL` in the user field would be every user.
+  if (!_userName.hasMatch(user) || user.toUpperCase() == 'ALL') {
+    return const [];
+  }
   if (id != ServiceId.nginx && id != ServiceId.apache) return const [];
   final commands = <String>[];
 
@@ -150,18 +154,104 @@ class WebSudoersGrant {
 
   bool get hasCertLines => lines.any((l) => l.contains(' x509 '));
 
+  /// Each distinct binary the lines name, in order.
+  List<String> get binaries {
+    const sep = ' NOPASSWD: ';
+    final out = <String>[];
+    for (final l in lines) {
+      final cmd = l.substring(l.indexOf(sep) + sep.length);
+      final bin = cmd.substring(0, cmd.indexOf(' '));
+      if (!out.contains(bin)) out.add(bin);
+    }
+    return out;
+  }
+
   String get linesHash =>
       sha256.convert(utf8.encode(lines.join('\n'))).toString();
 }
 
 /// Remote sh that reads the sudo password on stdin (one line) and adds the
 /// grant's lines to [kelolaWebSudoersPath], keeping the lines already there.
-/// Same script as the per-unit grant ([buildSudoersGrantScript]).
+/// Same script as the per-unit grant ([buildSudoersGrantScript]), with the
+/// binary ownership check ([webBinaryTrustShell]) first.
 String buildWebGrantScript(WebSudoersGrant g) {
   return buildSudoersGrantScript(
     path: kelolaWebSudoersPath,
     header: '# Kelola: lens read rules, one command per line. Safe to edit.',
     lines: g.lines,
     okMarker: webGrantOkMarker,
+    preamble: webBinaryTrustShell(g.binaries),
   );
 }
+
+/// Shell (for `set -eu`) that stops the grant unless every one of
+/// [binaries] is trusted on the host: the resolved file (`readlink -f`),
+/// every directory above it, and the resolved directory it was named in,
+/// are each owned by root and neither group- nor other-writable. On the
+/// first failure it prints [webGrantUntrustedMarker] and the path (base64)
+/// and exits 5, before the sudoers file is read or written.
+///
+/// Plain `find`, no sudo: system binaries are readable. Only POSIX `find`
+/// options that busybox also has (`-maxdepth`, `-user`, `-perm -mode`; not
+/// `-perm /mode`). Binaries travel base64-encoded, never as shell text.
+String webBinaryTrustShell(List<String> binaries) {
+  final b = StringBuffer()
+    ..writeln('kelola_owned() {')
+    ..writeln(
+      r'  [ -n "$(find "$1" -maxdepth 0 -user root ! -perm -020 ! -perm -002 '
+      r'2>/dev/null)" ]',
+    )
+    ..writeln('}')
+    // Every component of a resolved (symlink-free) absolute path.
+    ..writeln('kelola_chain() {')
+    ..writeln(r'  case "$1" in /*) ;; *) return 1 ;; esac')
+    ..writeln(r'  p=$1')
+    ..writeln('  while :; do')
+    ..writeln(r'    kelola_owned "$p" || return 1')
+    ..writeln(r'    [ "$p" != / ] || return 0')
+    ..writeln(r'    p=${p%/*}')
+    ..writeln(r'    [ -n "$p" ] || p=/')
+    ..writeln('  done')
+    ..writeln('}')
+    ..writeln('kelola_trust() {')
+    ..writeln(r'  f=$(readlink -f "$1" 2>/dev/null || true)')
+    ..writeln(r'  d=${1%/*}')
+    ..writeln(r'  [ -n "$d" ] || d=/')
+    ..writeln(r'  d=$(readlink -f "$d" 2>/dev/null || true)')
+    ..writeln(r'  if kelola_chain "$f" && kelola_chain "$d"; then return 0; fi')
+    ..writeln(
+      "  printf '%s %s\\n' '$webGrantUntrustedMarker' "
+      r'''"$(printf '%s' "$1" | base64 | tr -d '\n')"''',
+    )
+    ..writeln('  exit 5')
+    ..writeln('}');
+  for (final bin in binaries) {
+    final b64 = base64Encode(utf8.encode(bin));
+    b.writeln("kelola_trust \"\$(printf '%s' '$b64' | base64 -d)\"");
+  }
+  return b.toString();
+}
+
+/// The binary named after [webGrantUntrustedMarker] in [stdout], if any:
+/// the decoded path when it is a plain absolute path, else `a binary`.
+/// Null when the marker is absent.
+String? webGrantUntrustedBinary(String stdout) {
+  for (final line in const LineSplitter().convert(stdout)) {
+    if (!line.startsWith('$webGrantUntrustedMarker ') &&
+        line != webGrantUntrustedMarker) {
+      continue;
+    }
+    final raw = line.substring(webGrantUntrustedMarker.length).trim();
+    try {
+      final path = utf8.decode(base64Decode(raw));
+      if (isGrantableWebPath(path)) return path;
+    } on FormatException {
+      // Fall through.
+    }
+    return 'a binary';
+  }
+  return null;
+}
+
+String webGrantUntrustedCopy(String binary) =>
+    'Not granted: $binary is not root-owned or is writable by others.';

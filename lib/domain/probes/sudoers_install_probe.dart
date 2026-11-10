@@ -111,6 +111,10 @@ class WebSudoersGrantProbe extends Probe<void> {
 
   @override
   void parse(String stdout, String stderr, int exitCode) {
+    final untrusted = webGrantUntrustedBinary(stdout);
+    if (untrusted != null) {
+      throw KelolaException(webGrantUntrustedCopy(untrusted));
+    }
     if (exitCode == 0 && stdout.contains(webGrantOkMarker)) {
       return;
     }

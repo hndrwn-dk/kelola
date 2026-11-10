@@ -313,6 +313,9 @@ Future<bool> runWebGrantFlow({
         ? 'Certificate and log lines come with a second grant, once the '
             'config can be read.'
         : null,
+    footer: 'These rules let this login run the listed commands as root. The '
+        'config test loads modules named in the server config, so only grant '
+        'this where that config is root-owned.',
     path: kelolaWebSudoersPath,
     lines: grant.lines,
     confirmLabel: 'Add rules',
@@ -332,6 +335,7 @@ Future<bool> _runExactGrantFlow({
   required String title,
   required String body,
   String? note,
+  String? footer,
   required String path,
   required List<String> lines,
   required String confirmLabel,
@@ -380,6 +384,13 @@ Future<bool> _runExactGrantFlow({
                     ),
                   ),
                 ),
+                if (footer != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    footer,
+                    style: KelolaType.body(color: c.muted, size: 13),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 Row(
                   children: [

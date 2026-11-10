@@ -899,9 +899,15 @@ void main() {
 
     group('lens sudo grants', () {
       Finder grantButton() => find.widgetWithText(
-            FilledButton,
+            ServiceRow,
             'Grant read access for this lens',
           );
+
+      Future<void> tapGrant(WidgetTester tester) async {
+        await tester.ensureVisible(grantButton());
+        await tester.tap(grantButton());
+        await frames(tester, 8);
+      }
 
       Future<void> enterPassword(WidgetTester tester) async {
         await tester.enterText(find.byType(TextField), 's3cret');
@@ -916,11 +922,18 @@ void main() {
         );
         await pumpLens(tester);
         expect(grantButton(), findsOneWidget);
-        // Never Enable Kelola sudo for lens reads.
+        expect(tester.widget<ServiceRow>(grantButton()).risk, RiskLevel.mutate);
+        // Never Enable Kelola sudo for lens reads: the hint has no button.
         expect(find.text('Enable Kelola sudo…'), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(ActionableError),
+            matching: find.byType(FilledButton),
+          ),
+          findsNothing,
+        );
 
-        await tester.tap(grantButton());
-        await frames(tester, 8);
+        await tapGrant(tester);
         expect(find.text('Grant read access for this lens?'), findsOneWidget);
         const first = 'hendra ALL=(root) NOPASSWD: /usr/sbin/nginx -t';
         const second = 'hendra ALL=(root) NOPASSWD: /usr/sbin/nginx -T';
@@ -933,6 +946,14 @@ void main() {
         expect(selectable.style?.fontFamily, mono);
         expect(find.textContaining('second grant'), findsOneWidget);
         expect(find.textContaining('remove stale'), findsOneWidget);
+        expect(
+          find.text(
+            'These rules let this login run the listed commands as root. '
+            'The config test loads modules named in the server config, so '
+            'only grant this where that config is root-owned.',
+          ),
+          findsOneWidget,
+        );
 
         pool.error = null;
         pool.lens = _healthyLens();
@@ -1107,13 +1128,89 @@ void main() {
         await tapReloadAndConfirm(tester);
         expect(find.byType(ActionableError), findsOneWidget);
         expect(find.text('Enable Kelola sudo…'), findsNothing);
-        await tester.tap(grantButton());
-        await frames(tester, 8);
+        await tapGrant(tester);
         expect(
           find.textContaining('hendra ALL=(root) NOPASSWD: /usr/sbin/nginx -t'),
           findsOneWidget,
         );
         await dispose(tester);
+      });
+
+      testWidgets('an untrusted binary shows Not granted', (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        pool.grantStdout = '$webGrantUntrustedMarker '
+            '${base64Encode(utf8.encode('/usr/sbin/nginx'))}\n';
+        await pumpLens(tester);
+        await tapGrant(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Add rules'));
+        await frames(tester, 8);
+        await enterPassword(tester);
+        expect(
+          find.text(
+            'Not granted: /usr/sbin/nginx is not root-owned or is writable '
+            'by others.',
+          ),
+          findsOneWidget,
+        );
+        // Not re-read: nothing was granted.
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(1));
+        await dispose(tester);
+      });
+
+      testWidgets('certs failing with openssl outside system dirs: no row, one reason',
+          (tester) async {
+        pool.lens = WebLens(
+          id: ServiceId.nginx,
+          readAt: DateTime.now().toUtc(),
+          activeState: 'active',
+          configOk: true,
+          vhosts: const [_shop],
+          certsByPath: const {
+            '/etc/ssl/certs/shop.crt': WebCert(path: '/etc/ssl/certs/shop.crt'),
+          },
+          sectionErrors: const {
+            WebLensSection.certs: 'Could not read 1 of 1 certificates',
+          },
+          toolPaths: const {
+            'openssl': '/opt/ssl/bin/openssl',
+            'tail': '/usr/bin/tail',
+          },
+          errorLogPath: '/var/log/nginx/error.log',
+          accessLogPath: '/var/log/nginx/access.log',
+        );
+        await pumpLens(tester);
+        expect(grantButton(), findsNothing);
+        expect(
+          find.text(
+            'Certificate lines not offered: openssl is not in /usr/bin, '
+            '/usr/sbin, /bin or /sbin.',
+          ),
+          findsOneWidget,
+        );
+        await dispose(tester);
+      });
+
+      testWidgets('a lens with nothing a grant can fix shows no grant row',
+          (tester) async {
+        pool.lens = _healthyLens();
+        await pumpLens(tester);
+        expect(grantButton(), findsNothing);
+        expect(find.textContaining('not offered'), findsNothing);
+        await dispose(tester);
+      });
+
+      test('no grant without host facts', () async {
+        final h = (await repo.get(host.id))!;
+        expect(
+          webReadGrantFor(host: h, service: _nginx, facts: null),
+          isNull,
+        );
+        expect(
+          webReadGrantFor(host: h, service: _nginx, facts: _facts()),
+          isNotNull,
+        );
       });
 
       testWidgets('read-only host is offered no grant', (tester) async {
@@ -1157,6 +1254,7 @@ class _Pool extends SshSessionPool {
   String? reloadStdout;
   int reloadExit = 0;
   List<int>? stdin;
+  String? grantStdout;
 
   @override
   Future<T> execute<T>(
@@ -1192,6 +1290,10 @@ class _Pool extends SshSessionPool {
     }
     if (probe is WebSudoersGrantProbe || probe is UnitSudoersGrantProbe) {
       stdin = stdinBytes;
+      final out = grantStdout;
+      if (out != null && probe is WebSudoersGrantProbe) {
+        probe.parse(out, '', 5);
+      }
       return null as T;
     }
     throw StateError('unexpected probe ${probe.runtimeType}');

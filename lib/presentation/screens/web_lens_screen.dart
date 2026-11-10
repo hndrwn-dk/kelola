@@ -250,17 +250,19 @@ String webReloadFailedCopy(ReloadResult r) {
 const webReadGrantLabel = 'Grant read access for this lens';
 
 /// The `kelola-web` grant for [service] (spec §7b), or null when no line can
-/// be granted. Before the lens has loaded ([lens] null) only the server
-/// binary's lines are known; cert and log lines need a lens read for the tool
-/// paths, so they come with a second grant.
+/// be granted or host [facts] are not known yet (the install probe needs
+/// them). Before the lens has loaded ([lens] null) only the server binary's
+/// lines are known; cert and log lines need a lens read for the tool paths,
+/// so they come with a second grant.
 WebSudoersGrant? webReadGrantFor({
   required Host host,
   required DetectedService service,
-  HostFacts? facts,
+  required HostFacts? facts,
   WebLens? lens,
 }) {
+  if (facts == null) return null;
   final defaults = service.id == ServiceId.apache
-      ? (facts == null ? null : apacheDefaultLogs(facts))
+      ? apacheDefaultLogs(facts)
       : (
           error: '/var/log/nginx/error.log',
           access: '/var/log/nginx/access.log',
@@ -272,8 +274,8 @@ WebSudoersGrant? webReadGrantFor({
     toolPaths: lens?.toolPaths ?? const {},
     // Certificate directives only: never a key path.
     certPaths: lens?.certsByPath.keys.toList() ?? const [],
-    errorLog: lens?.errorLogPath ?? defaults?.error,
-    accessLog: lens?.accessLogPath ?? defaults?.access,
+    errorLog: lens?.errorLogPath ?? defaults.error,
+    accessLog: lens?.accessLogPath ?? defaults.access,
   );
 }
 
@@ -290,18 +292,90 @@ String webReadGrantBlockedCopy(Host host, DetectedService service) {
     return 'No grant offered: the login name cannot go in a sudoers rule.';
   }
   final label = descriptorFor(service.id).label;
-  return 'No grant offered: the $label binary is not in /usr/sbin, /usr/bin '
-      'or another system directory.';
+  return 'No grant offered: the $label binary is not in $_grantDirsCopy.';
 }
 
-/// True when a loaded lens has a section that a read grant could fix: the
-/// config test refused by sudo, or certificates or logs that could not be
-/// read.
-bool webLensNeedsReadGrant(WebLens l) =>
-    l.sectionErrors[WebLensSection.configTest] == webConfigTestNoSudo ||
-    l.sectionErrors.containsKey(WebLensSection.certs) ||
-    l.sectionErrors.containsKey(WebLensSection.errorLog) ||
-    l.sectionErrors.containsKey(WebLensSection.access);
+const _grantDirsCopy = '/usr/bin, /usr/sbin, /bin or /sbin';
+
+/// The read grant a loaded lens offers (spec §7b), and one line for each
+/// failing section it cannot cover.
+///
+/// [grant] is non-null only when it has a line for at least one failing
+/// section a grant can fix: the config test refused by sudo, certificates or
+/// a log that could not be read. The probe reports a failed read the same
+/// whether the file is missing or needs root, so both count. Null [facts]:
+/// nothing (no action that could not run).
+({WebSudoersGrant? grant, List<String> gaps}) webLensReadGrantOffer({
+  required Host host,
+  required DetectedService service,
+  required HostFacts? facts,
+  required WebLens lens,
+}) {
+  final errors = lens.sectionErrors;
+  final config = errors[WebLensSection.configTest] == webConfigTestNoSudo;
+  final certs =
+      errors.containsKey(WebLensSection.certs) && lens.certsByPath.isNotEmpty;
+  final errLog = errors.containsKey(WebLensSection.errorLog);
+  final access = errors.containsKey(WebLensSection.access);
+  if (facts == null || !(config || certs || errLog || access)) {
+    return (grant: null, gaps: const []);
+  }
+  final grant = webReadGrantFor(
+    host: host,
+    service: service,
+    facts: facts,
+    lens: lens,
+  );
+  final lines = grant?.lines ?? const <String>[];
+  bool has(bool Function(String) test) => lines.any(test);
+  final coversConfig = config && has((l) => l.endsWith(' -t'));
+  final coversCerts = certs && has((l) => l.contains(' x509 '));
+  final coversErr = errLog && has((l) => l.contains(' -n 60 '));
+  final coversAccess = access && has((l) => l.contains(' -n 2000 '));
+
+  final userOk = webGrantLines(
+    user: host.username,
+    id: ServiceId.nginx,
+    binaries: const {'nginx': '/usr/sbin/nginx'},
+  ).isNotEmpty;
+  final gaps = <String>[];
+  if (!userOk) {
+    gaps.add(webReadGrantBlockedCopy(host, service));
+  } else {
+    if (config && !coversConfig) {
+      gaps.add(webReadGrantBlockedCopy(host, service));
+    }
+    if (certs && !coversCerts) {
+      gaps.add(
+        isGrantableWebBinary(lens.toolPaths['openssl'], 'openssl')
+            ? 'Certificate lines not offered: no certificate path can go in '
+                  'a sudoers rule.'
+            : 'Certificate lines not offered: openssl is not in '
+                  '$_grantDirsCopy.',
+      );
+    }
+    if ((errLog && !coversErr) || (access && !coversAccess)) {
+      if (!isGrantableWebBinary(lens.toolPaths['tail'], 'tail')) {
+        gaps.add('Log lines not offered: tail is not in $_grantDirsCopy.');
+      } else {
+        if (errLog && !coversErr) {
+          gaps.add(
+            'Error log line not offered: its path cannot go in a sudoers '
+            'rule.',
+          );
+        }
+        if (access && !coversAccess) {
+          gaps.add(
+            'Access log line not offered: its path cannot go in a sudoers '
+            'rule.',
+          );
+        }
+      }
+    }
+  }
+  final helps = coversConfig || coversCerts || coversErr || coversAccess;
+  return (grant: helps ? grant : null, gaps: gaps);
+}
 
 /// M52 §5d: the web lens (nginx / Apache httpd). One [WebLensProbe] read;
 /// pull to refresh re-reads.
@@ -476,38 +550,65 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
   Widget _errorView() {
     final message = _error!;
     final host = _host;
-    VoidCallback? action;
-    var label = 'Enable Kelola sudo…';
-    String? note;
-    if (host != null && !host.readOnly && looksLikeSudoRequired(message)) {
-      final hint = SudoHintContext.tryParse(message);
-      switch (hint.kind) {
-        case SudoHintKind.systemd:
-          action = () => _grantUnit(hint);
-        case SudoHintKind.webServices
-            when hint.binary != webOpenRcReloadBinary:
-          final grant = webReadGrantFor(
-            host: host,
-            service: widget.service,
-            facts: _facts,
-            lens: _lens,
-          );
-          if (grant == null) {
-            note = webReadGrantBlockedCopy(host, widget.service);
-          } else {
-            label = webReadGrantLabel;
-            action = () => _grantRead(grant);
-          }
-        default:
-          break;
-      }
-    }
-    return KelolaError(
+    final hint = SudoHintContext.tryParse(message);
+    final sudo =
+        host != null && !host.readOnly && looksLikeSudoRequired(message);
+    // The stock button only for the per-unit grant (same path as service
+    // detail). Lens reads never get Enable Kelola sudo.
+    final unitGrant = sudo && hint.kind == SudoHintKind.systemd;
+    final readGrant =
+        sudo &&
+        hint.kind == SudoHintKind.webServices &&
+        hint.binary != webOpenRcReloadBinary;
+    final error = KelolaError(
       message: message,
       sudoUser: host?.username,
-      onEnableSudo: action,
-      enableSudoLabel: label,
-      sudoNote: note,
+      onEnableSudo: unitGrant ? () => _grantUnit(hint) : null,
+    );
+    final facts = _facts;
+    if (!readGrant || facts == null) return error;
+    final lens = _lens;
+    // A loaded lens offers the same grant in ACTIONS; show it once.
+    if (lens != null &&
+        webLensReadGrantOffer(
+              host: host,
+              service: widget.service,
+              facts: facts,
+              lens: lens,
+            ).grant !=
+            null) {
+      return error;
+    }
+    final grant = webReadGrantFor(
+      host: host,
+      service: widget.service,
+      facts: facts,
+      lens: lens,
+    );
+    final c = context.kc;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        error,
+        const SizedBox(height: 8),
+        if (grant == null)
+          Text(
+            webReadGrantBlockedCopy(host, widget.service),
+            style: KelolaType.body(color: c.muted, size: 12),
+          )
+        else
+          ServiceRow(
+            risk: RiskLevel.mutate,
+            name: webReadGrantLabel,
+            meta: kelolaWebSudoersPath,
+            detail: lens == null
+                ? 'Config test and dump; cert and log rules follow once the '
+                      'lens loads.'
+                : 'Exact read-only sudo rules for this lens.',
+            onTap: _busy ? null : () => _grantRead(grant),
+          ),
+      ],
     );
   }
 
@@ -614,31 +715,34 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     );
     final label = descriptorFor(widget.service.id).label;
     final failed = _testFailedOutput;
-    final offerGrant = !host.readOnly && webLensNeedsReadGrant(l);
-    final grant = offerGrant
-        ? webReadGrantFor(
+    final offer = host.readOnly
+        ? null
+        : webLensReadGrantOffer(
             host: host,
             service: widget.service,
             facts: _facts,
             lens: l,
-          )
-        : null;
+          );
+    final grant = offer?.grant;
     return [
       const SizedBox(height: 14),
       Text('ACTIONS', style: _slabStyle(c)),
       const SizedBox(height: 8),
-      if (offerGrant) ...[
+      if (grant != null) ...[
         ServiceRow(
           risk: RiskLevel.mutate,
           name: webReadGrantLabel,
           meta: kelolaWebSudoersPath,
-          detail: grant == null
-              ? webReadGrantBlockedCopy(host, widget.service)
-              : 'Exact read-only sudo rules for the sections that failed.',
-          onTap: grant != null && !_busy ? () => _grantRead(grant) : null,
+          detail: 'Exact read-only sudo rules for the sections that failed.',
+          onTap: _busy ? null : () => _grantRead(grant),
         ),
         const SizedBox(height: 6),
       ],
+      for (final gap in offer?.gaps ?? const <String>[])
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(gap, style: KelolaType.body(color: c.muted, size: 12)),
+        ),
       ServiceRow(
         risk: RiskLevel.mutate,
         name: 'Reload $label',

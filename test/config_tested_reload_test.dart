@@ -231,6 +231,34 @@ void main() {
           ReloadOutcome.testFailed);
     });
 
+    test('an OpenRC reload refusal carries the rc-service marker', () {
+      const rc = '@init=openrc\n---TEST---\n@rc=0\n'
+          '---RELOAD---\n@rc=nosudo\n---VERIFY---\n| * status: started\n';
+      const openrcProbe = ConfigTestedReloadProbe(
+        id: ServiceId.nginx,
+        unit: 'nginx',
+        testBin: '/usr/sbin/nginx',
+      );
+      expect(
+        () => openrcProbe.parse(rc, '', 1),
+        throwsA(
+          isA<SudoRequiredException>()
+              .having((e) => e.context.kind, 'kind', SudoHintKind.webServices)
+              .having((e) => e.context.binary, 'binary', webOpenRcReloadBinary),
+        ),
+      );
+      // A refused config test is a read the lens grant covers: no marker.
+      const test = '@init=openrc\n---TEST---\n@rc=nosudo\n';
+      expect(
+        () => openrcProbe.parse(test, '', 4),
+        throwsA(
+          isA<SudoRequiredException>()
+              .having((e) => e.context.kind, 'kind', SudoHintKind.webServices)
+              .having((e) => e.context.binary, 'binary', isNull),
+        ),
+      );
+    });
+
     test('reload leg sudo refusal: systemd hint on systemd, webServices on openrc',
         () {
       const sd = '@init=systemd\n---TEST---\n|nginx: test is successful\n@rc=0\n'

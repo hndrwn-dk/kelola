@@ -149,6 +149,8 @@ void main() {
         '/tmp/nginx',
         '/opt/nginx/sbin/nginx',
         '/usr/local/nginx/sbin/nginx',
+        '/usr/local/bin/nginx',
+        '/usr/local/sbin/nginx',
         '/usr/sbin/../../tmp/nginx',
         '/usr/sbin/./nginx',
         '/usr//sbin/nginx',
@@ -169,14 +171,7 @@ void main() {
       for (final dir in webGrantSystemDirs) {
         expect(isGrantableWebBinary('$dir/nginx', 'nginx'), isTrue);
       }
-      expect(webGrantSystemDirs, {
-        '/usr/bin',
-        '/usr/sbin',
-        '/bin',
-        '/sbin',
-        '/usr/local/bin',
-        '/usr/local/sbin',
-      });
+      expect(webGrantSystemDirs, {'/usr/bin', '/usr/sbin', '/bin', '/sbin'});
     });
 
     test('tools outside a system directory, or misnamed, get no line', () {
@@ -185,6 +180,8 @@ void main() {
         {'openssl': 'openssl', 'tail': 'tail'},
         {'openssl': '/usr/bin/tail', 'tail': '/usr/bin/openssl'},
         {'openssl': '/opt/ssl/bin/openssl', 'tail': '/usr/bin/../../tmp/tail'},
+        {'openssl': '/usr/local/bin/openssl', 'tail': '/usr/local/bin/tail'},
+        {'openssl': '/usr/local/sbin/openssl', 'tail': '/usr/local/sbin/tail'},
         <String, String>{},
       ]) {
         final lines = _nginxLines(toolPaths: tools);
@@ -295,6 +292,10 @@ void main() {
         'a\nb',
         '#0',
         'root ALL',
+        'ALL',
+        'all',
+        'All',
+        'aLl',
       ]) {
         final lines = webGrantLines(
           user: user,
@@ -516,6 +517,39 @@ echo "subject=CN = shop.example.com"''');
       );
       expect(script, contains(webGrantOkMarker));
       expect(webGrantOkMarker, isNot(unitGrantOkMarker));
+      // The binaries are checked before anything is read or written.
+      final trust = script.indexOf('kelola_trust "');
+      expect(trust, greaterThan(0));
+      expect(trust, lessThan(script.indexOf('test -f')));
+      expect(trust, lessThan(script.indexOf('visudo -c -f')));
+      expect(trust, lessThan(script.indexOf(' install -o root')));
+      for (final b in [
+        '/usr/sbin/nginx',
+        '/usr/bin/openssl',
+        '/usr/bin/tail',
+      ]) {
+        expect(
+          'kelola_trust "\$(printf \'%s\' \'${base64Encode(utf8.encode(b))}\' | base64 -d)"'
+              .allMatches(script)
+              .length,
+          1,
+          reason: b,
+        );
+      }
+      // Portable find only (busybox has no -perm /mode).
+      expect(script, isNot(contains('-perm /')));
+      expect(script, contains('! -perm -020 ! -perm -002'));
+      // The unit script has no trust check (it stays byte-identical).
+      expect(
+        buildUnitGrantScript(
+          UnitSudoersGrant.tryCreate(
+            user: 'hendr',
+            verb: 'reload',
+            unit: 'nginx.service',
+          )!,
+        ),
+        isNot(contains('kelola_trust')),
+      );
       for (final line in grant().lines) {
         // Carried encoded, never raw.
         expect(script, contains(base64Encode(utf8.encode(line))));
@@ -675,6 +709,10 @@ done
 echo "sudo \$1" >> ${log.path}
 exec "\$@"''');
 
+    /// find: every binary counts as root-owned and not writable, so these
+    /// tests cover the merge. The real check has its own tests.
+    Future<void> trustedFind() => stub('find', 'printf "%s\\n" "\$1"');
+
     Future<void> installStub() => stub('install', '''
 echo "install \$*" >> ${log.path}
 eval "src=\\\${\$((\$# - 1))}"
@@ -710,6 +748,7 @@ cp "\$src" "\$dst"''');
       'existing lines kept, missing added once, visudo before install',
       () async {
         await sudoStub();
+        await trustedFind();
         await installStub();
         await stub('visudo', 'echo "visudo \$*" >> ${log.path}');
         const unrelated = 'hendr ALL=(root) NOPASSWD: /usr/bin/du -sh /srv';
@@ -742,6 +781,7 @@ cp "\$src" "\$dst"''');
 
     test('no file yet: header then the lines', () async {
       await sudoStub();
+      await trustedFind();
       await installStub();
       await stub('visudo', 'exit 0');
       final r = await run(g);
@@ -752,8 +792,35 @@ cp "\$src" "\$dst"''');
       ]);
     }, skip: Platform.isWindows);
 
+    test('an untrusted binary writes nothing', () async {
+      await sudoStub();
+      await installStub();
+      await stub('visudo', 'echo "visudo \$*" >> ${log.path}');
+      // find prints nothing: not root-owned or writable.
+      await stub('find', 'exit 0');
+      final r = await run(g);
+      expect(r.exitCode, isNot(0));
+      expect(r.stdout, contains('$webGrantUntrustedMarker '));
+      expect(r.stdout, isNot(contains(webGrantOkMarker)));
+      // No sudo at all: nothing read, merged, checked or installed.
+      expect(calls(), isEmpty);
+      expect(target.existsSync(), isFalse);
+      final probe = WebSudoersGrantProbe(g);
+      expect(
+        () => probe.parse(r.stdout as String, r.stderr as String, r.exitCode),
+        throwsA(
+          isA<KelolaException>().having(
+            (e) => e.message,
+            'message',
+            startsWith('Not granted: /usr/sbin/nginx '),
+          ),
+        ),
+      );
+    }, skip: Platform.isWindows);
+
     test('a visudo failure installs nothing', () async {
       await sudoStub();
+      await trustedFind();
       await installStub();
       await stub('visudo', 'echo "visudo \$*" >> ${log.path}\nexit 1');
       target.writeAsStringSync('# old\n');
@@ -766,6 +833,7 @@ cp "\$src" "\$dst"''');
 
     test('a wrong password installs nothing', () async {
       await sudoStub();
+      await trustedFind();
       await installStub();
       await stub('visudo', 'exit 0');
       final p = await Process.start(
@@ -827,6 +895,8 @@ done
 exec "\$@"''');
           // The script's own visudo call runs the real binary.
           stub('visudo', 'exec $visudo "\$@"');
+          // /usr/sbin/nginx is not installed here; trust it.
+          stub('find', 'printf "%s\\n" "\$1"');
           stub('install', '''
 eval "src=\\\${\$((\$# - 1))}"
 eval "dst=\\\${\$#}"
@@ -925,6 +995,167 @@ cp "\$src" "\$dst"''');
         throwsA(isA<KelolaException>()),
       );
       probe.parse(webGrantOkMarker, '', 0);
+    });
+
+    test('an untrusted binary names itself, validated', () {
+      final b64 = base64Encode(utf8.encode('/usr/sbin/nginx'));
+      expect(
+        () => probe.parse('$webGrantUntrustedMarker $b64\n', '', 5),
+        throwsA(
+          isA<KelolaException>().having(
+            (e) => e.message,
+            'message',
+            'Not granted: /usr/sbin/nginx is not root-owned or is writable '
+                'by others.',
+          ),
+        ),
+      );
+      // Even with exit 0 and the OK marker, an untrusted binary fails.
+      expect(
+        () => probe.parse(
+          '$webGrantUntrustedMarker $b64\n$webGrantOkMarker',
+          '',
+          0,
+        ),
+        throwsA(isA<KelolaException>()),
+      );
+      for (final junk in [
+        'not-base64!',
+        base64Encode(utf8.encode('/tmp/a b\nroot')),
+        '',
+      ]) {
+        expect(
+          () => probe.parse('$webGrantUntrustedMarker $junk\n', '', 5),
+          throwsA(
+            isA<KelolaException>().having(
+              (e) => e.message,
+              'message',
+              'Not granted: a binary is not root-owned or is writable by '
+                  'others.',
+            ),
+          ),
+          reason: junk,
+        );
+      }
+    });
+  });
+
+  group('binary trust check (real files)', () {
+    final isRoot =
+        Platform.isLinux &&
+        (Process.runSync('id', ['-u']).stdout as String).trim() == '0';
+    late Directory dir;
+
+    setUp(() {
+      // Not under /tmp: the check walks every parent, and /tmp is world
+      // writable. The repo's .dart_tool is root-owned 0755 in this container.
+      dir = Directory('${Directory.current.path}/.dart_tool')
+          .createTempSync('kelola_trust');
+      Process.runSync('chmod', ['755', dir.path]);
+    });
+
+    tearDown(() {
+      Process.runSync('chmod', ['-R', 'u+rwx', dir.path]);
+      dir.deleteSync(recursive: true);
+    });
+
+    /// Runs the trust snippet under `sh -eu`; returns (exit, stdout).
+    Future<(int, String)> check(List<String> binaries) async {
+      final r = await Process.run('sh', [
+        '-c',
+        'set -eu\n${webBinaryTrustShell(binaries)}echo CHECK_PASSED',
+      ]);
+      return (r.exitCode, r.stdout as String);
+    }
+
+    String? untrusted(String out) {
+      final m = RegExp(
+        '^$webGrantUntrustedMarker (\\S+)\$',
+        multiLine: true,
+      ).firstMatch(out);
+      return m == null ? null : utf8.decode(base64Decode(m.group(1)!));
+    }
+
+    File exe(String path) {
+      final f = File(path)..writeAsStringSync('#!/bin/sh\n');
+      Process.runSync('chmod', ['755', f.path]);
+      return f;
+    }
+
+    test('a root-owned system binary passes', () async {
+      final (rc, out) = await check(['/usr/bin/tail']);
+      expect(rc, 0, reason: out);
+      expect(out, contains('CHECK_PASSED'));
+    }, skip: !Platform.isLinux);
+
+    test('a clean root-owned file passes', () async {
+      if (!isRoot) {
+        markTestSkipped('needs root to own the temp file');
+        return;
+      }
+      final f = exe('${dir.path}/nginx');
+      final (rc, out) = await check([f.path, '/usr/bin/tail']);
+      expect(rc, 0, reason: out);
+      expect(out, contains('CHECK_PASSED'));
+    });
+
+    test('a group-writable file fails', () async {
+      final f = exe('${dir.path}/nginx');
+      Process.runSync('chmod', ['775', f.path]);
+      final (rc, out) = await check(['/usr/bin/tail', f.path]);
+      expect(rc, isNot(0));
+      expect(out, isNot(contains('CHECK_PASSED')));
+      expect(untrusted(out), f.path);
+    }, skip: !Platform.isLinux);
+
+    test('an other-writable file fails', () async {
+      final f = exe('${dir.path}/nginx');
+      Process.runSync('chmod', ['757', f.path]);
+      final (rc, out) = await check([f.path]);
+      expect(rc, isNot(0));
+      expect(untrusted(out), f.path);
+    }, skip: !Platform.isLinux);
+
+    test('an other-writable directory fails', () async {
+      final sub = Directory('${dir.path}/sbin')..createSync();
+      final f = exe('${sub.path}/nginx');
+      Process.runSync('chmod', ['777', sub.path]);
+      final (rc, out) = await check([f.path]);
+      expect(rc, isNot(0));
+      expect(untrusted(out), f.path);
+    }, skip: !Platform.isLinux);
+
+    test('a writable parent further up fails', () async {
+      final sub = Directory('${dir.path}/a/b')..createSync(recursive: true);
+      final f = exe('${sub.path}/nginx');
+      Process.runSync('chmod', ['775', '${dir.path}/a']);
+      final (rc, out) = await check([f.path]);
+      expect(rc, isNot(0));
+      expect(untrusted(out), f.path);
+    }, skip: !Platform.isLinux);
+
+    test('a symlink to a writable target fails', () async {
+      final bad = Directory('${dir.path}/bad')..createSync();
+      final target = exe('${bad.path}/nginx');
+      Process.runSync('chmod', ['777', bad.path]);
+      final clean = Directory('${dir.path}/clean')..createSync();
+      Process.runSync('chmod', ['755', clean.path]);
+      final link = Link('${clean.path}/nginx')..createSync(target.path);
+      final (rc, out) = await check([link.path]);
+      expect(rc, isNot(0));
+      expect(untrusted(out), link.path);
+    }, skip: !Platform.isLinux);
+
+    test('a missing binary fails', () async {
+      final (rc, out) = await check(['${dir.path}/nope']);
+      expect(rc, isNot(0));
+      expect(untrusted(out), '${dir.path}/nope');
+    }, skip: !Platform.isLinux);
+
+    test('binaries are carried encoded, never raw', () {
+      final sh = webBinaryTrustShell(['/usr/sbin/nginx']);
+      expect(sh, contains(base64Encode(utf8.encode('/usr/sbin/nginx'))));
+      expect(sh, isNot(contains('/usr/sbin/nginx')));
     });
   });
 

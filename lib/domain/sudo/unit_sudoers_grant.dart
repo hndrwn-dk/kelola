@@ -88,12 +88,15 @@ String buildUnitGrantScript(UnitSudoersGrant grant) {
 /// [okMarker].
 ///
 /// [lines] travel base64-encoded, never as shell text. [path], [header] and
-/// [okMarker] are app constants.
+/// [okMarker] are app constants. [preamble] (app-built shell, ending in a
+/// newline) runs after the password is read and before anything is read or
+/// written; empty for the unit grant, so its script is unchanged.
 String buildSudoersGrantScript({
   required String path,
   required String header,
   required List<String> lines,
   required String okMarker,
+  String preamble = '',
 }) {
   final quoted = shellSingleQuote(path);
   final mode = shellSingleQuote(kelolaSudoersMode);
@@ -120,7 +123,7 @@ set -eu
 IFS= read -r SUDO_PASS || true
 TMP=\$(mktemp)
 trap 'rm -f "\$TMP"' EXIT
-$decode'''
+$preamble$decode'''
       '''
 if printf '%s\\n' "\$SUDO_PASS" | sudo -S -p '' test -f $quoted; then
   printf '%s\\n' "\$SUDO_PASS" | sudo -S -p '' cat $quoted > "\$TMP"
