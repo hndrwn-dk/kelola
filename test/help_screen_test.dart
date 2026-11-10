@@ -32,4 +32,13 @@ void main() {
       expect(find.text(item.answer), findsOneWidget);
     }
   });
+
+  test('Service lenses topic explains the grant without a sudo group', () {
+    final matches =
+        kSupportFaq.where((item) => item.question == 'Service lenses');
+    expect(matches, hasLength(1));
+    final answer = matches.single.answer;
+    expect(answer, contains('kelola-web'));
+    expect(answer, isNot(contains('sudo group')));
+  });
 }
