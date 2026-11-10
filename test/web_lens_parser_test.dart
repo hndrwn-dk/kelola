@@ -447,6 +447,170 @@ void main() {
     });
   });
 
+  // Fix 2: `@stat=<owner> <group> <mode>` in the log sections and
+  // `@groups=<names>` in TOOLS, so the lens can suggest the adm group.
+  group('log stat and login groups', () {
+    String out({List<String>? tools, List<String>? err, List<String>? acc}) {
+      final base = nginxOutput(
+        errlog: err ??
+            ['@path=/var/log/nginx/error.log', '@read=fail'],
+        access: acc ??
+            ['@path=/var/log/nginx/access.log', '@read=fail'],
+      );
+      return tools == null
+          ? base
+          : base.replaceFirst('---TOOLS---', ['---TOOLS---', ...tools].join('\n'));
+    }
+
+    WebLens parse(String s) => parseWebLens(s, id: ServiceId.nginx, now: now);
+
+    test('adm with group read', () {
+      final l = parse(
+        out(
+          tools: ['@groups=deploy sudo'],
+          err: [
+            '@path=/var/log/nginx/error.log',
+            '@stat=www-data adm 640',
+            '@read=fail',
+          ],
+          acc: [
+            '@path=/var/log/nginx/access.log',
+            '@stat=root adm 0640',
+            '@read=fail',
+          ],
+        ),
+      );
+      expect(l.errorLogStat!.owner, 'www-data');
+      expect(l.errorLogStat!.group, 'adm');
+      expect(l.errorLogStat!.mode, '640');
+      expect(l.errorLogStat!.groupReadable, isTrue);
+      expect(l.accessLogStat!.owner, 'root');
+      expect(l.accessLogStat!.groupReadable, isTrue);
+      expect(l.loginGroups, ['deploy', 'sudo']);
+      // Still a section error each; findings unchanged.
+      expect(l.sectionErrors[WebLensSection.errorLog], isNotNull);
+      expect(l.sectionErrors[WebLensSection.access], isNotNull);
+    });
+
+    test('adm without group read', () {
+      final l = parse(
+        out(
+          err: [
+            '@path=/var/log/nginx/error.log',
+            '@stat=root adm 600',
+            '@read=fail',
+          ],
+          acc: [
+            '@path=/var/log/nginx/access.log',
+            '@stat=root adm 2604',
+            '@read=fail',
+          ],
+        ),
+      );
+      expect(l.errorLogStat!.group, 'adm');
+      expect(l.errorLogStat!.groupReadable, isFalse);
+      // setgid digit first: the group digit is still the middle one of the
+      // last three.
+      expect(l.accessLogStat!.mode, '2604');
+      expect(l.accessLogStat!.groupReadable, isFalse);
+    });
+
+    test('another group (Alpine: nginx owns its logs)', () {
+      final l = parse(
+        out(
+          tools: ['@groups=deploy wheel'],
+          err: [
+            '@path=/var/log/nginx/error.log',
+            '@stat=nginx nginx 640',
+            '@read=fail',
+          ],
+        ),
+      );
+      expect(l.errorLogStat!.group, 'nginx');
+      expect(l.errorLogStat!.groupReadable, isTrue);
+      expect(l.accessLogStat, isNull);
+    });
+
+    test('missing lines: stat and groups unknown', () {
+      final l = parse(out());
+      expect(l.errorLogStat, isNull);
+      expect(l.accessLogStat, isNull);
+      expect(l.loginGroups, isNull);
+    });
+
+    test('junk is ignored, never guessed', () {
+      for (final bad in const [
+        'root adm',
+        'root adm 640 x',
+        'root adm 9x0',
+        'root adm 64',
+        'root adm 06400',
+        'r;oot adm 640',
+        r'root a$m 640',
+        'root  adm 640',
+        '',
+      ]) {
+        final l = parse(
+          out(
+            err: [
+              '@path=/var/log/nginx/error.log',
+              '@stat=$bad',
+              '@read=fail',
+            ],
+          ),
+        );
+        expect(l.errorLogStat, isNull, reason: bad);
+      }
+      final long = 'a' * 65;
+      expect(
+        parse(
+          out(
+            err: [
+              '@path=/var/log/nginx/error.log',
+              '@stat=$long adm 640',
+              '@read=fail',
+            ],
+          ),
+        ).errorLogStat,
+        isNull,
+      );
+      // Host text (`|` prefix) never counts as a meta line.
+      final hostText = parse(
+        out(
+          tools: ['|@groups=adm'],
+          err: [
+            '@path=/var/log/nginx/error.log',
+            '|@stat=root adm 640',
+            '@read=fail',
+          ],
+        ),
+      );
+      expect(hostText.errorLogStat, isNull);
+      expect(hostText.loginGroups, isNull);
+      // Bad names in the group list are dropped; the rest kept.
+      expect(
+        parse(out(tools: [r'@groups=deploy $(x) a;b sudo'])).loginGroups,
+        ['deploy', 'sudo'],
+      );
+      // Nothing usable: unknown, not "no groups".
+      expect(parse(out(tools: ['@groups='])).loginGroups, isNull);
+      expect(parse(out(tools: [r'@groups=$(x) a;b'])).loginGroups, isNull);
+      // A meta line in the wrong section does not count.
+      expect(
+        parse(
+          out(
+            err: [
+              '@path=/var/log/nginx/error.log',
+              '@groups=deploy',
+              '@read=fail',
+            ],
+          ),
+        ).loginGroups,
+        isNull,
+      );
+    });
+  });
+
   group('real probe runs (nginx 1.24, Apache 2.4.58, Ubuntu, no systemd)', () {
     test('nginx as root', () {
       final lens = parseWebLens(
@@ -641,6 +805,216 @@ void main() {
         final calls = cmd.replaceAll('command -v sudo ', '');
         expect(RegExp(r'sudo (?!-n )').hasMatch(calls), isFalse);
         expect(cmd, isNot(contains('sudo -S')));
+      }
+    });
+
+    // Fix 2: the log stat and the login's groups are plain reads, never
+    // through sudo or try.
+    test('log stat and id -nG run plain, never via sudo or try', () {
+      for (final p in [nginx, apache]) {
+        for (final f in [ubuntu, rocky]) {
+          final cmd = p.command(f);
+          expect(cmd, contains(r'''stat -L -c '%U %G %a' "$e" 2>/dev/null'''));
+          expect(cmd, contains(r'''stat -L -c '%U %G %a' "$a" 2>/dev/null'''));
+          expect('id -nG 2>/dev/null'.allMatches(cmd), hasLength(1));
+          final lines = [
+            for (final l in cmd.split('\n'))
+              if (l.contains('stat -L -c') || l.contains('id -nG')) l,
+          ];
+          expect(lines, hasLength(3));
+          for (final l in lines) {
+            expect(l, isNot(contains('sudo')), reason: l);
+            expect(l, isNot(contains('try')), reason: l);
+          }
+          // Every sudo invocation is still sudo -n.
+          final calls = cmd.replaceAll('command -v sudo ', '');
+          expect(RegExp(r'sudo (?!-n )').hasMatch(calls), isFalse);
+          expect(cmd, isNot(contains('usermod')));
+        }
+      }
+    });
+
+    test('a hostile stat or id cannot forge a marker (executed)', () async {
+      final dir = await Directory.systemTemp.createTemp('kelola_lens_forge');
+      addTearDown(() => dir.delete(recursive: true));
+      Future<void> stub(String name, String body) async {
+        File('${dir.path}/$name').writeAsStringSync('#!/bin/sh\n$body\n');
+        await Process.run('chmod', ['+x', '${dir.path}/$name']);
+      }
+
+      await stub('stat', r"printf 'root adm 640\n---ACCESS---\n@read=ok\n|200\n'");
+      await stub('id', r"printf 'deploy\n---ERRLOG---\n@stat=root adm 640\n'");
+      await stub('nginx', 'exit 0');
+      final probe = WebLensProbe(
+        id: ServiceId.nginx,
+        binaries: {'nginx': '${dir.path}/nginx'},
+      );
+      final r = await Process.run(
+        'sh',
+        ['-c', probe.command(ubuntu)],
+        environment: {'PATH': '${dir.path}:/usr/bin:/bin'},
+      );
+      final out = r.stdout as String;
+      expect('---ACCESS---'.allMatches(out), hasLength(1), reason: out);
+      expect('---ERRLOG---'.allMatches(out), hasLength(1), reason: out);
+      expect(out, contains('@groups=deploy\n'));
+      expect(RegExp(r'^@stat=root adm 640$', multiLine: true).allMatches(out),
+          hasLength(2));
+    }, skip: Platform.isWindows);
+
+    group('log stat on a real tree (executed, dash and busybox)', () {
+      String? bbDir;
+      late Directory dir;
+      final isRoot =
+          !Platform.isWindows &&
+          (Process.runSync('id', ['-u']).stdout as String).trim() == '0';
+      final hasSetpriv =
+          !Platform.isWindows &&
+          Process.runSync('sh', ['-c', 'command -v setpriv']).exitCode == 0;
+      final hasDash =
+          !Platform.isWindows &&
+          Process.runSync('sh', ['-c', 'command -v dash']).exitCode == 0;
+
+      setUpAll(() {
+        if (Platform.isWindows) return;
+        final which = Process.runSync('sh', ['-c', 'command -v busybox']);
+        final bb = (which.stdout as String).trim();
+        if (which.exitCode != 0 || bb.isEmpty) return;
+        final d = Directory.systemTemp.createTempSync('kelola_bb_lens');
+        final r = Process.runSync(bb, ['--install', '-s', d.path]);
+        if (r.exitCode == 0 && File('${d.path}/stat').existsSync()) {
+          bbDir = d.path;
+        } else {
+          d.deleteSync(recursive: true);
+        }
+      });
+
+      tearDownAll(() {
+        final d = bbDir;
+        if (d != null) Directory(d).deleteSync(recursive: true);
+      });
+
+      setUp(() {
+        if (Platform.isWindows) return;
+        dir = Directory.systemTemp.createTempSync('kelola_lens_stat');
+        Process.runSync('chmod', ['755', dir.path]);
+      });
+
+      tearDown(() {
+        if (Platform.isWindows) return;
+        Process.runSync('chmod', ['-R', 'u+rwx', dir.path]);
+        dir.deleteSync(recursive: true);
+      });
+
+      void stub(String name, String body) {
+        File('${dir.path}/$name').writeAsStringSync('#!/bin/sh\n$body\n');
+        Process.runSync('chmod', ['755', '${dir.path}/$name']);
+      }
+
+      /// The section of [stdout] after marker [name], up to the next one.
+      List<String> section(String stdout, String name) {
+        final lines = stdout.split('\n');
+        final i = lines.indexOf('---$name---');
+        if (i < 0) return const [];
+        final rest = lines.sublist(i + 1);
+        final j = rest.indexWhere((l) => RegExp(r'^---[A-Z]+---$').hasMatch(l));
+        return j < 0 ? rest : rest.sublist(0, j);
+      }
+
+      for (final shell in const ['dash', 'busybox']) {
+        test('$shell: @stat for a readable dir, nothing for an untraversable one',
+            () async {
+          if (shell == 'busybox' && bbDir == null) {
+            markTestSkipped('busybox is not installed here');
+            return;
+          }
+          if (shell == 'dash' && !hasDash) {
+            markTestSkipped('dash is not installed here');
+            return;
+          }
+          if (isRoot && !hasSetpriv) {
+            markTestSkipped('running as root without setpriv: cannot drop '
+                'to nobody, and root reads every file');
+            return;
+          }
+          // Debian layout: the log dir is traversable, the log itself
+          // root:adm 0640. A second log sits in a directory nobody can
+          // traverse.
+          final logs = Directory('${dir.path}/logs')..createSync();
+          final locked = Directory('${dir.path}/locked')..createSync();
+          final err = File('${logs.path}/error.log')
+            ..writeAsStringSync('x\n');
+          final acc = File('${locked.path}/access.log')
+            ..writeAsStringSync('x\n');
+          for (final f in [err, acc]) {
+            Process.runSync('chmod', ['640', f.path]);
+            if (isRoot) Process.runSync('chgrp', ['adm', f.path]);
+          }
+          Process.runSync('chmod', ['755', logs.path]);
+          Process.runSync('chmod', ['000', locked.path]);
+          stub('nginx', '''
+case "\$1" in
+  -t) echo "nginx: test is successful" >&2 ;;
+  -T) printf '%s\\n' 'error_log ${err.path};' 'access_log ${acc.path};' ;;
+esac''');
+          stub('sudo', 'echo "sudo: a password is required" >&2\nexit 1');
+          final probe = WebLensProbe(
+            id: ServiceId.nginx,
+            binaries: {'nginx': '${dir.path}/nginx'},
+          );
+          final script = probe.command(ubuntu);
+          final path = shell == 'busybox'
+              ? '${dir.path}:$bbDir'
+              : '${dir.path}:/usr/bin:/bin';
+          final argv = shell == 'busybox'
+              ? ['busybox', 'sh', '-c', script]
+              : ['dash', '-c', script];
+          final cmd = isRoot
+              ? [
+                  'setpriv',
+                  '--reuid=nobody',
+                  '--regid=${(Process.runSync('id', ['-g', 'nobody']).stdout as String).trim()}',
+                  '--clear-groups',
+                  '--',
+                  'env',
+                  'PATH=$path',
+                  ...argv,
+                ]
+              : ['env', 'PATH=$path', ...argv];
+          final r = await Process.run(cmd.first, cmd.sublist(1));
+          final stdout = r.stdout as String;
+          final errSec = section(stdout, 'ERRLOG');
+          final accSec = section(stdout, 'ACCESS');
+          final group = isRoot
+              ? 'adm'
+              : (Process.runSync('id', ['-gn']).stdout as String).trim();
+          final owner = isRoot
+              ? 'root'
+              : (Process.runSync('id', ['-un']).stdout as String).trim();
+          expect(errSec, contains('@path=${err.path}'), reason: stdout);
+          expect(errSec, contains('@stat=$owner $group 640'), reason: stdout);
+          expect(accSec, contains('@path=${acc.path}'), reason: stdout);
+          expect(accSec.where((l) => l.startsWith('@stat')), isEmpty,
+              reason: stdout);
+          if (isRoot) {
+            // nobody cannot read either log, with or without sudo -n.
+            expect(errSec, contains('@read=fail'), reason: stdout);
+            expect(accSec, contains('@read=fail'), reason: stdout);
+          }
+          final groups = section(stdout, 'TOOLS')
+              .where((l) => l.startsWith('@groups='))
+              .toList();
+          expect(groups, hasLength(1), reason: stdout);
+          final lens = parseWebLens(stdout, id: ServiceId.nginx, now: now);
+          expect(lens.errorLogStat?.group, group);
+          expect(lens.errorLogStat?.groupReadable, isTrue);
+          expect(lens.accessLogStat, isNull);
+          expect(lens.loginGroups, isNotEmpty);
+          if (isRoot) {
+            expect(lens.loginGroups, isNot(contains('adm')));
+            expect(lens.sectionErrors[WebLensSection.errorLog], isNotNull);
+          }
+        }, skip: Platform.isWindows);
       }
     });
 

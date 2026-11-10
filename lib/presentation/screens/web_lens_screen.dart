@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
@@ -390,6 +391,50 @@ const _grantDirsCopy = '/usr/bin, /usr/sbin, /bin or /sbin';
   return (grant: helps ? grant : null, gaps: gaps);
 }
 
+/// Whether [user] can go in a sudoers rule: the same rule the lens grants
+/// use (fix 2 shows the adm hint only for such a name).
+bool webGrantSafeUser(String user) => webGrantLines(
+  user: user,
+  id: ServiceId.nginx,
+  binaries: const {'nginx': '/usr/sbin/nginx'},
+).isNotEmpty;
+
+/// Fix 2: copy above the adm command.
+const webAdmHintCopy =
+    'Add your login to the adm group to read web server logs without sudo:';
+
+/// Fix 2: note under the adm command.
+const webAdmHintNote = 'Takes effect on the next connection.';
+
+/// Fix 2: the command the user runs themselves; Kelola never runs it.
+String webAdmUsermodCommand(String user) => 'sudo usermod -aG adm $user';
+
+/// Fix 2: the log section that shows the adm hint, or null for none.
+///
+/// Debian / Ubuntu logs are `www-data:adm 0640` (or `root:adm`), so a login
+/// in `adm` reads them without sudo. A section qualifies only when it failed,
+/// its log is known to be group `adm` with group read, the login's groups are
+/// known and lack `adm`, and [user] is a safe name. Error log first: when
+/// both qualify, the hint shows once.
+WebLensSection? webAdmHintSection({
+  required String user,
+  required WebLens lens,
+}) {
+  final groups = lens.loginGroups;
+  if (groups == null || groups.contains('adm')) return null;
+  if (!webGrantSafeUser(user)) return null;
+  for (final (section, stat) in [
+    (WebLensSection.errorLog, lens.errorLogStat),
+    (WebLensSection.access, lens.accessLogStat),
+  ]) {
+    if (!lens.sectionErrors.containsKey(section)) continue;
+    if (stat != null && stat.group == 'adm' && stat.groupReadable) {
+      return section;
+    }
+  }
+  return null;
+}
+
 /// M52 §5d: the web lens (nginx / Apache httpd). One [WebLensProbe] read;
 /// pull to refresh re-reads.
 class WebLensScreen extends ConsumerStatefulWidget {
@@ -713,6 +758,74 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
       setState(() => _configRefusal = refused);
     }
     if (ok && mounted) await _load();
+  }
+
+  /// Fix 2: group changes apply to new logins, so drop the pooled client
+  /// for this host and read the lens again on a fresh connection.
+  Future<void> _reconnect() async {
+    final host = _host;
+    if (host == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(sessionPoolProvider).disconnect(host.id);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (mounted) await _load();
+  }
+
+  /// Fix 2: the adm hint under the log section [section], when it is the
+  /// one [webAdmHintSection] picks; else nothing.
+  List<Widget> _admHint(
+    BuildContext context,
+    WebLens l,
+    WebLensSection section,
+  ) {
+    final host = _host;
+    if (host == null ||
+        webAdmHintSection(user: host.username, lens: l) != section) {
+      return const [];
+    }
+    final c = context.kc;
+    final command = webAdmUsermodCommand(host.username);
+    return [
+      const SizedBox(height: 8),
+      Text(webAdmHintCopy, style: KelolaType.body(color: c.muted, size: 12)),
+      const SizedBox(height: 4),
+      Row(
+        children: [
+          Expanded(
+            child: SelectableText(
+              command,
+              style: KelolaType.mono(color: c.text, size: 11),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Copy',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.copy, size: 16, color: c.muted),
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: command));
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('Copied')));
+            },
+          ),
+        ],
+      ),
+      Text(webAdmHintNote, style: KelolaType.body(color: c.dim, size: 11)),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton(
+          onPressed: _busy ? null : _reconnect,
+          child: Text(
+            'Reconnect',
+            style: KelolaType.display(color: c.amber, size: 13),
+          ),
+        ),
+      ),
+    ];
   }
 
   List<Widget> _lensBody(BuildContext context, WebLens l, DateTime now) {
@@ -1097,9 +1210,10 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
             ),
         ],
       ),
-      if (err != null)
-        _sectionError(c, err)
-      else if (tail.isEmpty) ...[
+      if (err != null) ...[
+        _sectionError(c, err),
+        ..._admHint(context, l, WebLensSection.errorLog),
+      ] else if (tail.isEmpty) ...[
         const SizedBox(height: 6),
         Text(
           'Error log is empty.',
@@ -1188,9 +1302,10 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     double frac(int b) => total == 0 ? 0 : buckets[b]! / total;
     return [
       Text('STATUS CODES', style: _slabStyle(c)),
-      if (err != null)
-        _sectionError(c, err)
-      else if (total == 0) ...[
+      if (err != null) ...[
+        _sectionError(c, err),
+        ..._admHint(context, l, WebLensSection.access),
+      ] else if (total == 0) ...[
         const SizedBox(height: 6),
         Text(
           'No requests in the access log sample.',

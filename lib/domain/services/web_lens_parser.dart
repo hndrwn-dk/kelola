@@ -40,6 +40,10 @@ final _safeToolPath = RegExp(r'^/[A-Za-z0-9._/+-]+$');
 bool isSafeWebPath(String p) =>
     p.length <= 4096 && _safePath.hasMatch(p) && !p.contains('..');
 
+/// Owner / group / login group names from `stat` and `id -nG`.
+final _safeName = RegExp(r'^[A-Za-z0-9_.-]{1,64}$');
+final _safeMode = RegExp(r'^[0-7]{3,4}$');
+
 const _maxLines = 60;
 const _maxConfigErrors = 50;
 const _maxLineLength = 2000;
@@ -108,6 +112,8 @@ WebLens parseWebLens(
       toolPaths[parts[0]] = parts[1];
     }
   }
+
+  final loginGroups = _groups(sections[_Sec.tools]?.metaValue('groups'));
 
   // ACTIVE
   final activeState = _activeState(sections[_Sec.active]?.data);
@@ -230,7 +236,33 @@ WebLens parseWebLens(
     errorLogPath: el.path,
     accessLogPath: ac.path,
     configFiles: configFiles,
+    errorLogStat: _stat(sections[_Sec.errlog]?.metaValue('stat')),
+    accessLogStat: _stat(sections[_Sec.access]?.metaValue('stat')),
+    loginGroups: loginGroups,
   );
+}
+
+/// `@stat=<owner> <group> <mode>`; null unless all three are valid.
+WebLogStat? _stat(String? v) {
+  if (v == null) return null;
+  final p = v.split(' ');
+  if (p.length != 3) return null;
+  if (!_safeName.hasMatch(p[0]) ||
+      !_safeName.hasMatch(p[1]) ||
+      !_safeMode.hasMatch(p[2])) {
+    return null;
+  }
+  return WebLogStat(owner: p[0], group: p[1], mode: p[2]);
+}
+
+/// `@groups=<names>`: valid names only; null (unknown) when none is valid.
+List<String>? _groups(String? v) {
+  if (v == null) return null;
+  final names = [
+    for (final g in v.split(' '))
+      if (_safeName.hasMatch(g)) g,
+  ];
+  return names.isEmpty ? null : List.unmodifiable(names);
 }
 
 /// The files `-S` names for vhosts (`path:line`, line dropped), once each.

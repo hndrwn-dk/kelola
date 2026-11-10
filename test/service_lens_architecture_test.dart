@@ -241,6 +241,34 @@ void main() {
       // Guards the scan itself: it must actually have seen invocations.
       expect(seen, greaterThan(10));
     });
+
+    // Fix 2: the adm hint is display text the user runs themselves. No probe
+    // may carry `usermod`, and the lens reads its log stat and groups plain.
+    test('usermod appears in no probe; log stat and id -nG never use sudo', () {
+      final probeFiles = _dartFilesUnder('lib/domain/probes');
+      expect(probeFiles, isNotEmpty);
+      for (final f in probeFiles) {
+        expect(f.readAsStringSync(), isNot(contains('usermod')), reason: f.path);
+      }
+      for (final p in _webLensProbes()) {
+        for (final facts in _allInits) {
+          final cmd = p.command(facts);
+          expect(cmd, isNot(contains('usermod')));
+          final plain = [
+            for (final l in cmd.split('\n'))
+              if (l.contains('stat -L -c') || l.contains('id -nG')) l,
+          ];
+          expect(plain, hasLength(3), reason: '${p.id.name} ${facts.init.name}');
+          for (final l in plain) {
+            expect(l, isNot(contains('sudo')), reason: l);
+            expect(l, isNot(contains('try ')), reason: l);
+          }
+        }
+      }
+      // The screen shows it; it never reaches a probe or the pool.
+      final screen = _read('lib/presentation/screens/web_lens_screen.dart');
+      expect(screen, contains("'sudo usermod -aG adm \$user'"));
+    });
   });
 
   group('sudo grants', () {

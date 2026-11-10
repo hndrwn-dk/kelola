@@ -170,6 +170,9 @@ class WebLensProbe extends Probe<WebLens> {
       'echo ---TOOLS---',
       r'''case "$O" in /*) printf '|openssl %s\n' "$O" ;; esac''',
       r'''case "$T" in /*) printf '|tail %s\n' "$T" ;; esac''',
+      // Fix 2: the login's groups, plain (never sudo). One script-authored
+      // meta line; the parser validates each name.
+      r"id -nG 2>/dev/null | head -n 1 | sed 's/^/@groups=/'",
       'echo ---ACTIVE---',
       ..._activeLines(facts),
       'echo ---CONFTEST---',
@@ -217,6 +220,7 @@ class WebLensProbe extends Probe<WebLens> {
         r'''e=$(printf '%s\n' "$d" | pick error_log 1)''',
       '[ -n "\$e" ] || e=${shellSingleQuote(logs.error)}',
       r'echo "@path=$e"',
+      _logStatLine('e'),
       r'if o=$(try "$T" -n 60 "$e" </dev/null); then echo @read=ok; out "$o"; else echo @read=fail; fi',
       'echo ---ACCESS---',
       if (_apache)
@@ -226,12 +230,23 @@ class WebLensProbe extends Probe<WebLens> {
         '[ -n "\$a" ] || a=${shellSingleQuote(logs.access)}',
       ],
       r'echo "@path=$a"',
+      _logStatLine('a'),
       r'if o=$(try "$T" -n 2000 "$a" </dev/null); then echo @read=ok;',
       r'''  [ -z "$o" ] || out "$(printf '%s\n' "$o" | awk '{print $9}' | sort | uniq -c)"''',
       r'else echo @read=fail; fi',
       'true',
     ].join('\n');
   }
+
+  /// Fix 2: owner, group and mode of the log in shell variable [v], as one
+  /// `@stat=` line, only when its directory can be traversed; plain, never
+  /// through sudo or `try`. `-L`: the mode tail would meet, not a symlink's
+  /// 777. Prints nothing on failure; the parser validates the fields.
+  static String _logStatLine(String v) =>
+      'ld=\${$v%/*}; [ -n "\$ld" ] || ld=/; '
+      'if [ -x "\$ld" ]; then '
+      "stat -L -c '%U %G %a' \"\$$v\" 2>/dev/null | head -n 1 | sed 's/^/@stat=/'; "
+      'fi';
 
   @override
   WebLens parse(String stdout, String stderr, int exitCode) =>
