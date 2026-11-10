@@ -1,0 +1,26 @@
+---UNITS---
+accounts-daemon.service loaded active running
+cron.service loaded active running
+nginx.service active running
+php8.3-fpm.service active running
+postgresql.service active exited
+postgresql@16-main.service active running
+ssh.service active running
+systemd-resolved.service active running
+---BIN---
+nginx /usr/sbin/nginx
+postgres /usr/lib/postgresql/16/bin/postgres
+psql /usr/bin/psql
+pg_ctl /usr/lib/postgresql/16/bin/pg_ctl
+---VERSION---
+nginx nginx version: nginx/1.24.0 (Ubuntu)
+postgres psql (PostgreSQL) 16.2 (Ubuntu 16.2-1ubuntu4)
+---PORTS---
+0.0.0.0:22
+127.0.0.53%lo:53
+0.0.0.0:80
+[::]:22
+[::]:80
+*:443
+[::]:443
+127.0.0.1:5432
