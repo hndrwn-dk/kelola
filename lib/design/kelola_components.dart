@@ -1658,6 +1658,12 @@ class ActionableError extends StatelessWidget {
   final VoidCallback? onDismiss;
   final VoidCallback? onEnableSudo;
 
+  /// Label of the [onEnableSudo] button.
+  final String enableSudoLabel;
+
+  /// One line under the body, e.g. why no action is offered.
+  final String? note;
+
   const ActionableError({
     super.key,
     required this.title,
@@ -1665,6 +1671,8 @@ class ActionableError extends StatelessWidget {
     required this.snippet,
     this.onDismiss,
     this.onEnableSudo,
+    this.enableSudoLabel = 'Enable Kelola sudo…',
+    this.note,
   });
 
   factory ActionableError.sudo({
@@ -1674,6 +1682,8 @@ class ActionableError extends StatelessWidget {
     String? message,
     VoidCallback? onDismiss,
     VoidCallback? onEnableSudo,
+    String enableSudoLabel = 'Enable Kelola sudo…',
+    String? note,
   }) {
     final ctx = message == null ? context : SudoHintContext.tryParse(message);
     final hint = kelolaSudoHint(user: user, context: ctx);
@@ -1684,6 +1694,8 @@ class ActionableError extends StatelessWidget {
       snippet: hint.snippet,
       onDismiss: onDismiss,
       onEnableSudo: onEnableSudo,
+      enableSudoLabel: enableSudoLabel,
+      note: note,
     );
   }
 
@@ -1719,6 +1731,10 @@ class ActionableError extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(body, style: KelolaType.body(color: c.muted, size: 13)),
+          if (note != null) ...[
+            const SizedBox(height: 6),
+            Text(note!, style: KelolaType.body(color: c.muted, size: 12)),
+          ],
           if (onEnableSudo != null) ...[
             const SizedBox(height: 10),
             SizedBox(
@@ -1727,7 +1743,7 @@ class ActionableError extends StatelessWidget {
                 onPressed: onEnableSudo,
                 style: FilledButton.styleFrom(backgroundColor: c.amber),
                 child: Text(
-                  'Enable Kelola sudo…',
+                  enableSudoLabel,
                   style: KelolaType.body(color: c.ink, size: 13),
                 ),
               ),
@@ -1780,6 +1796,8 @@ class KelolaError extends StatelessWidget {
   final String? sudoUser;
   final VoidCallback? onDismiss;
   final VoidCallback? onEnableSudo;
+  final String enableSudoLabel;
+  final String? sudoNote;
 
   const KelolaError({
     super.key,
@@ -1787,6 +1805,8 @@ class KelolaError extends StatelessWidget {
     this.sudoUser,
     this.onDismiss,
     this.onEnableSudo,
+    this.enableSudoLabel = 'Enable Kelola sudo…',
+    this.sudoNote,
   });
 
   @override
@@ -1797,6 +1817,8 @@ class KelolaError extends StatelessWidget {
         message: message,
         onDismiss: onDismiss,
         onEnableSudo: onEnableSudo,
+        enableSudoLabel: enableSudoLabel,
+        note: sudoNote,
       );
     }
     return Text(

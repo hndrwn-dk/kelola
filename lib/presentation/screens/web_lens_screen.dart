@@ -9,12 +9,17 @@ import 'package:kelola/domain/probes/config_tested_reload_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/web_lens_probe.dart';
+import 'package:kelola/domain/services/apache_vhosts_parser.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/service_detection.dart';
 import 'package:kelola/domain/services/web_lens.dart';
+import 'package:kelola/domain/services/web_lens_parser.dart';
+import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
+import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/widgets/confirm_unit_action.dart';
+import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
 
@@ -241,6 +246,63 @@ String webReloadFailedCopy(ReloadResult r) {
   return r.reloadOutput.isEmpty ? head : '$head\n${r.reloadOutput}';
 }
 
+/// Label of the lens read grant action (spec §7b).
+const webReadGrantLabel = 'Grant read access for this lens';
+
+/// The `kelola-web` grant for [service] (spec §7b), or null when no line can
+/// be granted. Before the lens has loaded ([lens] null) only the server
+/// binary's lines are known; cert and log lines need a lens read for the tool
+/// paths, so they come with a second grant.
+WebSudoersGrant? webReadGrantFor({
+  required Host host,
+  required DetectedService service,
+  HostFacts? facts,
+  WebLens? lens,
+}) {
+  final defaults = service.id == ServiceId.apache
+      ? (facts == null ? null : apacheDefaultLogs(facts))
+      : (
+          error: '/var/log/nginx/error.log',
+          access: '/var/log/nginx/access.log',
+        );
+  return WebSudoersGrant.tryCreate(
+    user: host.username,
+    id: service.id,
+    binaries: service.binaries,
+    toolPaths: lens?.toolPaths ?? const {},
+    // Certificate directives only: never a key path.
+    certPaths: lens?.certsByPath.keys.toList() ?? const [],
+    errorLog: lens?.errorLogPath ?? defaults?.error,
+    accessLog: lens?.accessLogPath ?? defaults?.access,
+  );
+}
+
+/// One line saying why [webReadGrantFor] offers nothing.
+String webReadGrantBlockedCopy(Host host, DetectedService service) {
+  if (webGrantLines(
+    user: host.username,
+    id: service.id,
+    binaries: const {
+      'nginx': '/usr/sbin/nginx',
+      'apachectl': '/usr/sbin/apachectl',
+    },
+  ).isEmpty) {
+    return 'No grant offered: the login name cannot go in a sudoers rule.';
+  }
+  final label = descriptorFor(service.id).label;
+  return 'No grant offered: the $label binary is not in /usr/sbin, /usr/bin '
+      'or another system directory.';
+}
+
+/// True when a loaded lens has a section that a read grant could fix: the
+/// config test refused by sudo, or certificates or logs that could not be
+/// read.
+bool webLensNeedsReadGrant(WebLens l) =>
+    l.sectionErrors[WebLensSection.configTest] == webConfigTestNoSudo ||
+    l.sectionErrors.containsKey(WebLensSection.certs) ||
+    l.sectionErrors.containsKey(WebLensSection.errorLog) ||
+    l.sectionErrors.containsKey(WebLensSection.access);
+
 /// M52 §5d: the web lens (nginx / Apache httpd). One [WebLensProbe] read;
 /// pull to refresh re-reads.
 class WebLensScreen extends ConsumerStatefulWidget {
@@ -293,6 +355,9 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
         probe: const HostFactsProbe(),
       );
       if (!mounted) return;
+      // Kept even if the read fails: the sudo hint's grant needs both.
+      _host = host;
+      _facts = facts;
       final lens = await runHostProbe(
         ref: ref,
         context: context,
@@ -401,13 +466,81 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     );
   }
 
-  /// Sudo failures render as the actionable hint. Task 10 attaches the
-  /// "Grant read access" action here.
+  /// Sudo failures render as the actionable hint, with the grant that fits
+  /// the failure (spec §7):
+  /// - a lens read or the reload's config test: the `kelola-web` read grant
+  ///   (never Enable Kelola sudo);
+  /// - the reload leg on systemd: the PR #17 per-unit grant, through the same
+  ///   flow as service detail;
+  /// - the reload leg on OpenRC: nothing.
   Widget _errorView() {
+    final message = _error!;
+    final host = _host;
+    VoidCallback? action;
+    var label = 'Enable Kelola sudo…';
+    String? note;
+    if (host != null && !host.readOnly && looksLikeSudoRequired(message)) {
+      final hint = SudoHintContext.tryParse(message);
+      switch (hint.kind) {
+        case SudoHintKind.systemd:
+          action = () => _grantUnit(hint);
+        case SudoHintKind.webServices
+            when hint.binary != webOpenRcReloadBinary:
+          final grant = webReadGrantFor(
+            host: host,
+            service: widget.service,
+            facts: _facts,
+            lens: _lens,
+          );
+          if (grant == null) {
+            note = webReadGrantBlockedCopy(host, widget.service);
+          } else {
+            label = webReadGrantLabel;
+            action = () => _grantRead(grant);
+          }
+        default:
+          break;
+      }
+    }
     return KelolaError(
-      message: _error!,
-      sudoUser: _host?.username,
+      message: message,
+      sudoUser: host?.username,
+      onEnableSudo: action,
+      enableSudoLabel: label,
+      sudoNote: note,
     );
+  }
+
+  /// PR #17: the reload leg was refused on systemd. The flow offers the one
+  /// `systemctl reload <unit>` rule (or Enable on regex-tier hosts, whose
+  /// services rule already covers it); then Reload can be tried again.
+  Future<void> _grantUnit(SudoHintContext hint) async {
+    final host = _host;
+    if (host == null || _busy) return;
+    final ok = await runEnableKelolaSudoFlow(
+      context: context,
+      ref: ref,
+      host: host,
+      facts: _facts,
+      hint: hint,
+    );
+    if (ok && mounted) setState(() => _error = null);
+  }
+
+  /// Spec §7b: shows [grant]'s exact lines, installs them, then re-reads.
+  Future<void> _grantRead(WebSudoersGrant grant) async {
+    final host = _host;
+    final facts = _facts;
+    if (host == null || facts == null || _busy) return;
+    final ok = await runWebGrantFlow(
+      context: context,
+      ref: ref,
+      host: host,
+      facts: facts,
+      grant: grant,
+      certsLater: _lens == null,
+    );
+    if (ok && mounted) await _load();
   }
 
   List<Widget> _lensBody(BuildContext context, WebLens l, DateTime now) {
@@ -481,10 +614,31 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     );
     final label = descriptorFor(widget.service.id).label;
     final failed = _testFailedOutput;
+    final offerGrant = !host.readOnly && webLensNeedsReadGrant(l);
+    final grant = offerGrant
+        ? webReadGrantFor(
+            host: host,
+            service: widget.service,
+            facts: _facts,
+            lens: l,
+          )
+        : null;
     return [
       const SizedBox(height: 14),
       Text('ACTIONS', style: _slabStyle(c)),
       const SizedBox(height: 8),
+      if (offerGrant) ...[
+        ServiceRow(
+          risk: RiskLevel.mutate,
+          name: webReadGrantLabel,
+          meta: kelolaWebSudoersPath,
+          detail: grant == null
+              ? webReadGrantBlockedCopy(host, widget.service)
+              : 'Exact read-only sudo rules for the sections that failed.',
+          onTap: grant != null && !_busy ? () => _grantRead(grant) : null,
+        ),
+        const SizedBox(height: 6),
+      ],
       ServiceRow(
         risk: RiskLevel.mutate,
         name: 'Reload $label',

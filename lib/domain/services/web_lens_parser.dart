@@ -27,6 +27,10 @@ const _markers = {
 
 enum _Sec { tools, active, conftest, dump, certs, errlog, access }
 
+/// [WebLens.sectionErrors] for the config test when `sudo -n` was refused.
+const webConfigTestNoSudo =
+    'Config test needs sudo -n; not granted for this lens';
+
 /// Matches the shell-side whitelist for cert and log paths (spec §7b).
 final _safePath = RegExp(r'^/[A-Za-z0-9._/+@-]+$');
 
@@ -121,8 +125,7 @@ WebLens parseWebLens(
     configOk = true;
   } else if (rc == 'nosudo') {
     noSudo = true;
-    errors[WebLensSection.configTest] =
-        'Config test needs sudo -n; not granted for this lens';
+    errors[WebLensSection.configTest] = webConfigTestNoSudo;
   } else if (rc != null && _isInt(rc)) {
     configOk = false;
     configErrors = [

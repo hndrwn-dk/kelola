@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -21,10 +22,15 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/config_tested_reload_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
+import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
+import 'package:kelola/domain/probes/sudoers_install_probe.dart';
 import 'package:kelola/domain/probes/web_lens_probe.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/service_detection.dart';
 import 'package:kelola/domain/services/web_lens.dart';
+import 'package:kelola/domain/sudo/sudo_flavor.dart';
+import 'package:kelola/domain/sudo/unit_sudoers_grant.dart';
+import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/screens/web_lens_screen.dart';
 import 'package:kelola/providers.dart';
@@ -890,6 +896,237 @@ void main() {
       expect(find.byType(ActionableError), findsOneWidget);
       await dispose(tester);
     });
+
+    group('lens sudo grants', () {
+      Finder grantButton() => find.widgetWithText(
+            FilledButton,
+            'Grant read access for this lens',
+          );
+
+      Future<void> enterPassword(WidgetTester tester) async {
+        await tester.enterText(find.byType(TextField), 's3cret');
+        await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+        await frames(tester, 20);
+      }
+
+      testWidgets('dump sudo hint offers Grant read access with exact lines',
+          (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        await pumpLens(tester);
+        expect(grantButton(), findsOneWidget);
+        // Never Enable Kelola sudo for lens reads.
+        expect(find.text('Enable Kelola sudo…'), findsNothing);
+
+        await tester.tap(grantButton());
+        await frames(tester, 8);
+        expect(find.text('Grant read access for this lens?'), findsOneWidget);
+        const first = 'hendra ALL=(root) NOPASSWD: /usr/sbin/nginx -t';
+        const second = 'hendra ALL=(root) NOPASSWD: /usr/sbin/nginx -T';
+        final shown = find.text('$kelolaWebSudoersPath\n$first\n$second');
+        expect(shown, findsOneWidget);
+        final mono = KelolaType.mono(color: Colors.black).fontFamily;
+        final selectable = tester.widget<SelectableText>(
+          find.ancestor(of: shown, matching: find.byType(SelectableText)),
+        );
+        expect(selectable.style?.fontFamily, mono);
+        expect(find.textContaining('second grant'), findsOneWidget);
+        expect(find.textContaining('remove stale'), findsOneWidget);
+
+        pool.error = null;
+        pool.lens = _healthyLens();
+        await tester.tap(find.widgetWithText(FilledButton, 'Add rules'));
+        await frames(tester, 8);
+        await enterPassword(tester);
+
+        final probe = pool.probes.whereType<WebSudoersGrantProbe>().single;
+        expect(probe.grant.lines, [first, second]);
+        expect(pool.stdin, utf8.encode('s3cret\n'));
+        // Re-read after the grant.
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(2));
+        expect(find.byType(StatCard), findsWidgets);
+        await dispose(tester);
+      });
+
+      testWidgets('loaded lens with unreadable certs offers one line per safe cert',
+          (tester) async {
+        final at = DateTime.now().toUtc();
+        pool.lens = WebLens(
+          id: ServiceId.nginx,
+          readAt: at,
+          activeState: 'active',
+          configOk: true,
+          vhosts: const [_shop],
+          certsByPath: const {
+            '/etc/ssl/certs/shop.crt': WebCert(path: '/etc/ssl/certs/shop.crt'),
+            '/etc/ssl/certs/a b.pem': WebCert(path: '/etc/ssl/certs/a b.pem'),
+          },
+          sectionErrors: const {
+            WebLensSection.certs: 'Could not read 2 of 2 certificates',
+          },
+          toolPaths: const {
+            'openssl': '/usr/bin/openssl',
+            'tail': '/usr/bin/tail',
+          },
+          errorLogPath: '/var/log/nginx/error.log',
+          accessLogPath: '/var/log/nginx/access.log',
+        );
+        await pumpLens(tester);
+        final row = find.widgetWithText(
+          ServiceRow,
+          'Grant read access for this lens',
+        );
+        await tester.ensureVisible(row);
+        await tester.tap(row);
+        await frames(tester, 8);
+        const p = 'hendra ALL=(root) NOPASSWD: ';
+        expect(
+          find.text([
+            kelolaWebSudoersPath,
+            '$p/usr/sbin/nginx -t',
+            '$p/usr/sbin/nginx -T',
+            '$p/usr/bin/openssl x509 -noout -enddate -subject -ext '
+                'subjectAltName -in /etc/ssl/certs/shop.crt',
+            '$p/usr/bin/tail -n 60 /var/log/nginx/error.log',
+            '$p/usr/bin/tail -n 2000 /var/log/nginx/access.log',
+          ].join('\n')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('second grant'), findsNothing);
+        await dispose(tester);
+      });
+
+      testWidgets('no grant offered when the binary is outside system dirs',
+          (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        await pumpLens(
+          tester,
+          service: const DetectedService(
+            id: ServiceId.nginx,
+            state: ServiceState.running,
+            unit: 'nginx.service',
+            binaries: {'nginx': '/opt/nginx/sbin/nginx'},
+          ),
+        );
+        expect(find.byType(ActionableError), findsOneWidget);
+        expect(grantButton(), findsNothing);
+        expect(find.text('Enable Kelola sudo…'), findsNothing);
+        expect(find.textContaining('No grant offered'), findsOneWidget);
+        await dispose(tester);
+      });
+
+      testWidgets(
+          'reload SudoRequired on reload leg offers UnitSudoersGrant.tryCreate(verb: reload) on systemd',
+          (tester) async {
+        pool.lens = _healthyLens();
+        pool.reloadStdout = '@init=systemd\n---TEST---\n@rc=0\n'
+            '---RELOAD---\n@rc=nosudo\n---VERIFY---\n|ActiveState=active\n';
+        pool.reloadExit = 1;
+        await pumpLens(tester);
+        await tapReloadAndConfirm(tester);
+        expect(find.byType(ActionableError), findsOneWidget);
+        expect(grantButton(), findsNothing);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Enable Kelola sudo…'));
+        await frames(tester, 12);
+        final grant = UnitSudoersGrant.tryCreate(
+          user: 'hendra',
+          verb: 'reload',
+          unit: 'nginx.service',
+        )!;
+        expect(find.text('Allow reload nginx.service?'), findsOneWidget);
+        expect(
+          find.text('$kelolaUnitSudoersPath\n${grant.line}'),
+          findsOneWidget,
+        );
+        await tester.tap(find.widgetWithText(FilledButton, 'Add rule'));
+        await frames(tester, 8);
+        await enterPassword(tester);
+        final probe = pool.probes.whereType<UnitSudoersGrantProbe>().single;
+        expect(probe.grant.line, grant.line);
+        expect(pool.probes.whereType<WebSudoersGrantProbe>(), isEmpty);
+        // The error is gone; Reload can be tried again.
+        expect(find.byType(ActionableError), findsNothing);
+        expect(reloadWidget(tester).onTap, isNotNull);
+        await dispose(tester);
+      });
+
+      testWidgets('OpenRC reload failure shows the sudo hint with no grant offer',
+          (tester) async {
+        await repo.saveFacts(
+          host.id,
+          const HostFacts(
+            osId: 'alpine',
+            osVersionId: '3.20',
+            init: InitSystem.openrc,
+            systemdVersion: null,
+            pkg: PackageManager.apk,
+            fw: FirewallBackend.none,
+            hasJournald: false,
+            journalReadable: false,
+            arch: 'x86_64',
+          ),
+        );
+        pool.lens = _healthyLens();
+        pool.reloadStdout = '@init=openrc\n---TEST---\n@rc=0\n'
+            '---RELOAD---\n@rc=nosudo\n---VERIFY---\n| * status: started\n';
+        pool.reloadExit = 1;
+        await pumpLens(
+          tester,
+          service: const DetectedService(
+            id: ServiceId.nginx,
+            state: ServiceState.running,
+            unit: 'nginx',
+            binaries: {'nginx': '/usr/sbin/nginx'},
+          ),
+        );
+        await tapReloadAndConfirm(tester);
+        final err = find.byType(ActionableError);
+        expect(err, findsOneWidget);
+        expect(
+          find.descendant(of: err, matching: find.byType(FilledButton)),
+          findsNothing,
+        );
+        expect(
+          find.descendant(of: err, matching: find.textContaining('rc-service')),
+          findsWidgets,
+        );
+        expect(find.textContaining('Grant read access'), findsNothing);
+        await dispose(tester);
+      });
+
+      testWidgets('reload test leg sudo refusal offers Grant read access',
+          (tester) async {
+        pool.lens = _healthyLens();
+        pool.reloadStdout = '@init=systemd\n---TEST---\n@rc=nosudo\n';
+        pool.reloadExit = 4;
+        await pumpLens(tester);
+        await tapReloadAndConfirm(tester);
+        expect(find.byType(ActionableError), findsOneWidget);
+        expect(find.text('Enable Kelola sudo…'), findsNothing);
+        await tester.tap(grantButton());
+        await frames(tester, 8);
+        expect(
+          find.textContaining('hendra ALL=(root) NOPASSWD: /usr/sbin/nginx -t'),
+          findsOneWidget,
+        );
+        await dispose(tester);
+      });
+
+      testWidgets('read-only host is offered no grant', (tester) async {
+        await repo.setReadOnly(host.id, true);
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        await pumpLens(tester);
+        expect(find.byType(ActionableError), findsOneWidget);
+        expect(grantButton(), findsNothing);
+        await dispose(tester);
+      });
+    });
   });
 
   test('source has no AlertDialog, Card, ListTile', () {
@@ -919,6 +1156,7 @@ class _Pool extends SshSessionPool {
   Object? error;
   String? reloadStdout;
   int reloadExit = 0;
+  List<int>? stdin;
 
   @override
   Future<T> execute<T>(
@@ -945,6 +1183,16 @@ class _Pool extends SshSessionPool {
     }
     if (probe is ConfigTestedReloadProbe) {
       return probe.parse(reloadStdout!, '', reloadExit);
+    }
+    if (probe is SudoersFileExistsProbe) {
+      return false as T;
+    }
+    if (probe is SudoFlavorProbe) {
+      return const SudoRs('0.2.13') as T;
+    }
+    if (probe is WebSudoersGrantProbe || probe is UnitSudoersGrantProbe) {
+      stdin = stdinBytes;
+      return null as T;
     }
     throw StateError('unexpected probe ${probe.runtimeType}');
   }

@@ -226,7 +226,10 @@ class ConfigTestedReloadProbe extends Probe<ReloadResult> {
       throw SudoRequiredException(
         global.meta['init'] == 'systemd'
             ? SudoHintContext.systemd(unit: unit, verb: 'reload')
-            : SudoHintContext.webServices(service: _service),
+            : SudoHintContext.webServices(
+                service: _service,
+                binary: webOpenRcReloadBinary,
+              ),
       );
     }
     final reloadOutput = _text(reload?.data);
