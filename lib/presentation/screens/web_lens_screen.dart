@@ -5,12 +5,16 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/probes/config_tested_reload_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/web_lens_probe.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/service_detection.dart';
 import 'package:kelola/domain/services/web_lens.dart';
+import 'package:kelola/domain/units/service_unit.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/widgets/confirm_unit_action.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 import 'package:kelola/providers.dart';
 
@@ -184,6 +188,44 @@ HealthStatus? _certStatus(int? days) {
   return null;
 }
 
+/// Why Reload is disabled, or null when it may run (spec §6). A lens whose
+/// config test could not run (`configOk == null`) may still reload: the probe
+/// tests again first.
+String? webReloadDisabledReason({
+  required Host host,
+  required DetectedService service,
+  required WebLens lens,
+}) {
+  if (host.readOnly) return 'Host is read-only.';
+  if (webReloadProbeFor(service) == null) return 'Service unit unknown.';
+  if (lens.configOk == false) return 'Config test failed.';
+  return null;
+}
+
+/// The reload probe for [service], or null when its unit or config-test
+/// binary is missing or unsafe.
+ConfigTestedReloadProbe? webReloadProbeFor(DetectedService service) {
+  final unit = service.unit;
+  final testBin = safeWebBinary(
+    service.binaries,
+    webConfigTestBinaryNames(service.id),
+  );
+  if (!isSafeReloadTarget(id: service.id, unit: unit, testBin: testBin)) {
+    return null;
+  }
+  return ConfigTestedReloadProbe(
+    id: service.id,
+    unit: unit!,
+    testBin: testBin!,
+  );
+}
+
+/// Error copy for a [ReloadOutcome.failed] result.
+String webReloadFailedCopy(ReloadResult r) {
+  final head = 'Reload failed. ${r.reason ?? ''}'.trim();
+  return r.reloadOutput.isEmpty ? head : '$head\n${r.reloadOutput}';
+}
+
 /// M52 §5d: the web lens (nginx / Apache httpd). One [WebLensProbe] read;
 /// pull to refresh re-reads.
 class WebLensScreen extends ConsumerStatefulWidget {
@@ -203,6 +245,9 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
   String? _error;
   bool _busy = true;
   VhostFilter _filter = VhostFilter.all;
+
+  /// Output of the last config test that stopped a reload.
+  String? _testFailedOutput;
 
   @override
   void initState() {
@@ -257,6 +302,51 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _reload(ConfigTestedReloadProbe probe) async {
+    final host = _host;
+    if (host == null || _busy) return;
+    final allowed = await confirmUnitAction(
+      context,
+      hostAlias: host.alias,
+      unit: probe.unit,
+      verb: UnitVerb.reload,
+    );
+    if (!allowed || !mounted) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _testFailedOutput = null;
+    });
+    var reread = false;
+    try {
+      final result = await runHostProbe(
+        ref: ref,
+        context: context,
+        host: host,
+        probe: probe,
+        facts: _facts,
+      );
+      if (!mounted) return;
+      switch (result.outcome) {
+        case ReloadOutcome.reloaded:
+          reread = true;
+        case ReloadOutcome.testFailed:
+          setState(() => _testFailedOutput = result.testOutput);
+        case ReloadOutcome.failed:
+          setState(() => _error = webReloadFailedCopy(result));
+      }
+    } on ReadOnlyViolation {
+      if (mounted) setState(() => _error = 'Host is read-only.');
+    } catch (e) {
+      // SudoRequiredException keeps its hint context (systemd unit grant on
+      // the reload leg, web-services on the test leg); KelolaError renders it.
+      if (mounted) setState(() => _error = describeSshError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (reread && mounted) await _load();
   }
 
   String get _title {
@@ -362,13 +452,57 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
       ..._errorLogSection(context, l),
       const SizedBox(height: 14),
       ..._statusSection(c, l, findings),
-      // Task 9 appends the Reload row here.
       ..._bottomRows(context, l),
     ];
   }
 
-  /// Rows at the end of the lens (Task 9: config-tested Reload).
-  List<Widget> _bottomRows(BuildContext context, WebLens l) => const [];
+  /// Rows at the end of the lens: config-tested Reload (spec §6).
+  List<Widget> _bottomRows(BuildContext context, WebLens l) {
+    final c = context.kc;
+    final host = _host;
+    if (host == null) return const [];
+    final probe = webReloadProbeFor(widget.service);
+    final reason = webReloadDisabledReason(
+      host: host,
+      service: widget.service,
+      lens: l,
+    );
+    final label = descriptorFor(widget.service.id).label;
+    final failed = _testFailedOutput;
+    return [
+      const SizedBox(height: 14),
+      Text('ACTIONS', style: _slabStyle(c)),
+      const SizedBox(height: 8),
+      ServiceRow(
+        risk: RiskLevel.mutate,
+        name: 'Reload $label',
+        meta: probe?.unit ?? widget.service.unit ?? 'unit unknown',
+        detail: reason ?? 'Tests the config first.',
+        onTap: reason == null && probe != null && !_busy
+            ? () => _reload(probe)
+            : null,
+      ),
+      if (failed != null) ...[
+        const SizedBox(height: 8),
+        RiskBand.forHealth(
+          status: HealthStatus.failed,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Config test failed. Nothing was reloaded.',
+                style: KelolaType.display(color: c.text, size: 14),
+              ),
+              const SizedBox(height: 4),
+              for (final line in failed.split('\n'))
+                Text(line, style: KelolaType.mono(color: c.muted, size: 10.5)),
+            ],
+          ),
+        ),
+      ],
+    ];
+  }
 
   Widget _band(
     KelolaColors c,

@@ -18,6 +18,7 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/probes/config_tested_reload_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/domain/probes/web_lens_probe.dart';
@@ -203,7 +204,10 @@ void main() {
       }
     }
 
-    Future<void> pumpLens(WidgetTester tester) async {
+    Future<void> pumpLens(
+      WidgetTester tester, {
+      DetectedService service = _nginx,
+    }) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -218,7 +222,7 @@ void main() {
             enrollmentProvider.overrideWith(_ReadyEnrollment.new),
           ],
           child: KelolaApp(
-            home: WebLensScreen(hostId: host.id, service: _nginx),
+            home: WebLensScreen(hostId: host.id, service: service),
           ),
         ),
       );
@@ -528,6 +532,201 @@ void main() {
       expect(pool.probes, hasLength(2));
       await dispose(tester);
     });
+
+    Finder reloadRow() => find.widgetWithText(ServiceRow, 'Reload nginx');
+
+    ServiceRow reloadWidget(WidgetTester tester) =>
+        tester.widget<ServiceRow>(reloadRow());
+
+    const reloadOk = '@init=systemd\n---TEST---\n'
+        '|nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\n'
+        '@rc=0\n---RELOAD---\n@rc=0\n---VERIFY---\n|ActiveState=active\n';
+
+    Future<void> tapReloadAndConfirm(WidgetTester tester) async {
+      await tester.ensureVisible(reloadRow());
+      await tester.tap(reloadRow());
+      await frames(tester, 6);
+      expect(find.byType(MutateConfirmDialog), findsOneWidget);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(MutateConfirmDialog),
+          matching: find.text('reload'),
+        ),
+      );
+      await frames(tester, 12);
+    }
+
+    testWidgets('reload disabled with "Host is read-only." on read-only host',
+        (tester) async {
+      await repo.setReadOnly(host.id, true);
+      pool.lens = _healthyLens();
+      await pumpLens(tester);
+      final row = reloadWidget(tester);
+      expect(row.risk, RiskLevel.mutate);
+      expect(row.onTap, isNull);
+      expect(row.detail, 'Host is read-only.');
+      await tester.ensureVisible(reloadRow());
+      await tester.tap(reloadRow());
+      await frames(tester, 6);
+      expect(find.byType(MutateConfirmDialog), findsNothing);
+      expect(pool.probes.whereType<ConfigTestedReloadProbe>(), isEmpty);
+      await dispose(tester);
+    });
+
+    test('read-only host: the real pool refuses the reload probe', () async {
+      await repo.setReadOnly(host.id, true);
+      final ro = (await repo.get(host.id))!;
+      final real = SshSessionPool(
+        repository: repo,
+        signer: _BoomSigner(),
+        hostKeys: HostKeyPolicy(repo),
+        publicBlob: () => Uint8List(0),
+      );
+      const probe = ConfigTestedReloadProbe(
+        id: ServiceId.nginx,
+        unit: 'nginx.service',
+        testBin: '/usr/sbin/nginx',
+      );
+      await expectLater(
+        real.execute(ro, probe, facts: _facts()),
+        throwsA(isA<ReadOnlyViolation>()),
+      );
+    });
+
+    testWidgets('disabled when configOk == false', (tester) async {
+      pool.lens = _healthyLens(configOk: false);
+      await pumpLens(tester);
+      final row = reloadWidget(tester);
+      expect(row.onTap, isNull);
+      expect(row.detail, 'Config test failed.');
+      await dispose(tester);
+
+      // Not tested yet: enabled; the probe tests again.
+      pool.lens = _healthyLens(configOk: null);
+      await pumpLens(tester);
+      expect(reloadWidget(tester).onTap, isNotNull);
+      await dispose(tester);
+    });
+
+    testWidgets('reload disabled when the unit or test binary is unknown',
+        (tester) async {
+      pool.lens = _healthyLens();
+      await pumpLens(
+        tester,
+        service: const DetectedService(
+          id: ServiceId.nginx,
+          state: ServiceState.running,
+          unit: 'nginx.service',
+          binaries: {'nginx': '/bin/sh'},
+        ),
+      );
+      expect(reloadWidget(tester).onTap, isNull);
+      expect(reloadWidget(tester).detail, 'Service unit unknown.');
+      await dispose(tester);
+
+      await pumpLens(
+        tester,
+        service: const DetectedService(
+          id: ServiceId.nginx,
+          state: ServiceState.running,
+          binaries: {'nginx': '/usr/sbin/nginx'},
+        ),
+      );
+      expect(reloadWidget(tester).detail, 'Service unit unknown.');
+      expect(reloadWidget(tester).onTap, isNull);
+      await dispose(tester);
+    });
+
+    testWidgets('confirm uses confirmUnitAction(verb: reload)', (tester) async {
+      pool.lens = _healthyLens();
+      pool.reloadStdout = reloadOk;
+      await pumpLens(tester);
+      await tester.ensureVisible(reloadRow());
+      await tester.tap(reloadRow());
+      await frames(tester, 6);
+      final dialog = find.byType(MutateConfirmDialog);
+      expect(dialog, findsOneWidget);
+      expect(
+        find.descendant(of: dialog, matching: find.text('Reload nginx.service?')),
+        findsOneWidget,
+      );
+      // Cancel: nothing runs.
+      await tester.tap(
+        find.descendant(of: dialog, matching: find.text('Cancel')),
+      );
+      await frames(tester, 6);
+      expect(pool.probes.whereType<ConfigTestedReloadProbe>(), isEmpty);
+
+      await tapReloadAndConfirm(tester);
+      final p = pool.probes.whereType<ConfigTestedReloadProbe>().single;
+      expect(p.unit, 'nginx.service');
+      expect(p.testBin, '/usr/sbin/nginx');
+      expect(p.id, ServiceId.nginx);
+      await dispose(tester);
+
+      final src = File('lib/presentation/screens/web_lens_screen.dart')
+          .readAsStringSync();
+      expect(src, contains('confirmUnitAction('));
+      expect(src, contains('verb: UnitVerb.reload'));
+      expect(src, isNot(contains('DestructiveConfirmSheet')));
+    });
+
+    testWidgets('success re-reads lens', (tester) async {
+      pool.lens = _healthyLens();
+      pool.reloadStdout = reloadOk;
+      await pumpLens(tester);
+      await tapReloadAndConfirm(tester);
+      expect(pool.probes.map((p) => p.runtimeType).toList(), [
+        WebLensProbe,
+        ConfigTestedReloadProbe,
+        WebLensProbe,
+      ]);
+      await dispose(tester);
+    });
+
+    testWidgets('testFailed shows mono test output', (tester) async {
+      pool.lens = _healthyLens();
+      pool.reloadStdout = '@init=systemd\n---TEST---\n'
+          '|nginx: [emerg] unknown directive "servr" in /etc/nginx/conf.d/a.conf:3\n'
+          '|nginx: configuration file /etc/nginx/nginx.conf test failed\n'
+          '@rc=1\n';
+      pool.reloadExit = 3;
+      await pumpLens(tester);
+      await tapReloadAndConfirm(tester);
+      expect(find.text('Config test failed. Nothing was reloaded.'), findsOneWidget);
+      final mono = KelolaType.mono(color: Colors.black).fontFamily;
+      for (final line in [
+        'nginx: [emerg] unknown directive "servr" in /etc/nginx/conf.d/a.conf:3',
+        'nginx: configuration file /etc/nginx/nginx.conf test failed',
+      ]) {
+        final f = find.text(line);
+        expect(f, findsOneWidget, reason: line);
+        expect(tester.widget<Text>(f).style?.fontFamily, mono);
+      }
+      // Lens not re-read, nothing reloaded.
+      expect(pool.probes.whereType<WebLensProbe>(), hasLength(1));
+      await dispose(tester);
+    });
+
+    testWidgets('reload failure and sudo refusal use the error path',
+        (tester) async {
+      pool.lens = _healthyLens();
+      pool.reloadStdout = '@init=systemd\n---TEST---\n@rc=0\n---RELOAD---\n'
+          '|Job for nginx.service failed.\n@rc=1\n---VERIFY---\n|ActiveState=failed\n';
+      pool.reloadExit = 1;
+      await pumpLens(tester);
+      await tapReloadAndConfirm(tester);
+      expect(find.textContaining('Reload failed'), findsOneWidget);
+      expect(find.textContaining('Job for nginx.service failed.'), findsOneWidget);
+      await dispose(tester);
+
+      pool.reloadStdout = '@init=systemd\n---TEST---\n@rc=nosudo\n';
+      pool.reloadExit = 4;
+      await pumpLens(tester);
+      await tapReloadAndConfirm(tester);
+      expect(find.byType(ActionableError), findsOneWidget);
+      await dispose(tester);
+    });
   });
 
   test('source has no AlertDialog, Card, ListTile', () {
@@ -555,6 +754,8 @@ class _Pool extends SshSessionPool {
   WebLens? lens;
   String? stdout;
   Object? error;
+  String? reloadStdout;
+  int reloadExit = 0;
 
   @override
   Future<T> execute<T>(
@@ -578,6 +779,9 @@ class _Pool extends SshSessionPool {
         return probe.parse(out, '', 0);
       }
       return lens! as T;
+    }
+    if (probe is ConfigTestedReloadProbe) {
+      return probe.parse(reloadStdout!, '', reloadExit);
     }
     throw StateError('unexpected probe ${probe.runtimeType}');
   }

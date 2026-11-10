@@ -9,6 +9,62 @@ import 'package:kelola/domain/services/web_lens_parser.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
+/// apachectl / apache2ctl set up the environment `apache2 -S` needs on
+/// Debian; httpd runs directly on the RHEL family.
+const _apacheCtls = ['apachectl', 'apache2ctl', 'httpd'];
+
+final _safeBin = RegExp(r'^/[A-Za-z0-9._/+-]+$');
+
+/// Binary names whose `-t` tests the config of [id] (nginx / Apache ctl), in
+/// preference order.
+List<String> webConfigTestBinaryNames(ServiceId id) =>
+    id == ServiceId.apache ? _apacheCtls : const ['nginx'];
+
+/// Whether host-reported [path] is a safe absolute path that really names
+/// binary [name] (last segment), so it may be single-quoted into a command.
+bool isSafeWebBinaryPath(String path, String name) =>
+    path.length <= 4096 &&
+    _safeBin.hasMatch(path) &&
+    !path.contains('..') &&
+    path.endsWith('/$name');
+
+/// The first detected binary among [names] whose path is safe, else null.
+String? safeWebBinary(Map<String, String> binaries, List<String> names) {
+  for (final n in names) {
+    final p = binaries[n];
+    if (p != null && isSafeWebBinaryPath(p, n)) return p;
+  }
+  return null;
+}
+
+/// Host-reported unit (`nginx.service`) or OpenRC service (`nginx`), if it
+/// is one name the sudoers rules would accept; else null.
+String? safeWebUnit(String? unit) {
+  if (unit == null || unit.isEmpty || unit.length > 256) return null;
+  return isSudoersSafeUnitName(unit) ? unit : null;
+}
+
+/// Shell: prints `$1` with a `|` prefix per line, so host output can never
+/// look like a marker or an `@key=value` line.
+const webOutShellFn =
+    r"""out() { [ -z "$1" ] || printf '%s\n' "$1" | sed 's/^/|/'; }""";
+
+/// Shell condition: true when `sudo -n` was refused (no sudo, a password or
+/// terminal needed, or the command not granted) rather than the command
+/// itself failing. [rcVar] / [outVar] name the shell variables holding the
+/// exit status and the combined output of the sudo call.
+///
+/// Only sudo's own lines count: they start with `sudo:` / `sudo-rs:`,
+/// `Sorry, user …` or `<user> is not in the sudoers file`. A config error
+/// that merely mentions sudo (`nginx: … "/etc/sudo password" …`) stays a
+/// config error.
+String webSudoRefusedCondition(String rcVar, String outVar) =>
+    '[ "\$$rcVar" != 0 ] && { ! command -v sudo >/dev/null 2>&1 || '
+    "printf '%s\\n' \"\$$outVar\" | grep -qiE "
+    "'^sudo(-rs)?: .*(password|interactive authentication|no tty|askpass|a terminal is required|can.t do that)"
+    "|^sorry, user .* (is not allowed to execute|may not run sudo)"
+    "|^[^ ]+ is not in the sudoers'; }";
+
 /// M52 §5a: one read-only exec behind the nginx / Apache lens.
 ///
 /// The host is untrusted. [binaries] and [unit] came from its output, so each
@@ -40,12 +96,6 @@ class WebLensProbe extends Probe<WebLens> {
 
   bool get _apache => id == ServiceId.apache;
 
-  /// apachectl / apache2ctl set up the environment `apache2 -S` needs on
-  /// Debian; httpd runs directly on the RHEL family.
-  static const _apacheCtls = ['apachectl', 'apache2ctl', 'httpd'];
-
-  static final _safeBin = RegExp(r'^/[A-Za-z0-9._/+-]+$');
-
   /// Max certificates probed per read.
   static const maxCerts = 50;
 
@@ -63,25 +113,9 @@ class WebLensProbe extends Probe<WebLens> {
 
   /// The first detected binary whose path is safe and really names that
   /// binary; else the bare catalog name (a constant).
-  String _bin(List<String> names) {
-    for (final n in names) {
-      final p = binaries[n];
-      if (p != null &&
-          p.length <= 4096 &&
-          _safeBin.hasMatch(p) &&
-          !p.contains('..') &&
-          p.endsWith('/$n')) {
-        return p;
-      }
-    }
-    return names.first;
-  }
+  String _bin(List<String> names) => safeWebBinary(binaries, names) ?? names.first;
 
-  String? get _safeUnit {
-    final u = unit;
-    if (u == null || u.isEmpty || u.length > 256) return null;
-    return isSudoersSafeUnitName(u) ? u : null;
-  }
+  String? get _safeUnit => safeWebUnit(unit);
 
   List<String> _activeLines(HostFacts facts) {
     final u = _safeUnit;
@@ -101,7 +135,7 @@ class WebLensProbe extends Probe<WebLens> {
 
   @override
   String command(HostFacts facts) {
-    final bin = _bin(_apache ? _apacheCtls : const ['nginx']);
+    final bin = _bin(webConfigTestBinaryNames(id));
     final logs = _apache
         ? apacheDefaultLogs(facts)
         : (
@@ -122,7 +156,7 @@ class WebLensProbe extends Probe<WebLens> {
       "  }'",
       '}',
       // Host output gets a `|` prefix so it can never look like a marker.
-      r'''out() { [ -z "$1" ] || printf '%s\n' "$1" | sed 's/^/|/'; }''',
+      webOutShellFn,
       'B=${shellSingleQuote(bin)}',
       r'O=$(command -v openssl 2>/dev/null); case "$O" in /*) ;; *) O=openssl ;; esac',
       r'T=$(command -v tail 2>/dev/null); case "$T" in /*) ;; *) T=tail ;; esac',
@@ -136,7 +170,7 @@ class WebLensProbe extends Probe<WebLens> {
       // rc are reported. sudo refusing (not a config error) prints nosudo.
       r'if o=$("$B" -t 2>&1); then r=0; else',
       r'  o=$(sudo -n "$B" -t 2>&1); r=$?',
-      r'''  if [ "$r" != 0 ] && { ! command -v sudo >/dev/null 2>&1 || printf '%s\n' "$o" | grep -qiE 'sudo.*(password|interactive authentication|no tty|askpass|a terminal is required|not allowed to execute|not in the sudoers)'; }; then r=nosudo; o=; fi''',
+      "  if ${webSudoRefusedCondition('r', 'o')}; then r=nosudo; o=; fi",
       'fi',
       r'out "$o"',
       r'echo "@rc=$r"',
