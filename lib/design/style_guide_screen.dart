@@ -249,6 +249,22 @@ class StyleGuideScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
+            'STACKEDSTATMETER',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          // Web lens status codes: 2xx / 3xx / 4xx / 5xx; the error tone only
+          // when the 5xx finding fires.
+          const StackedStatMeter(
+            segments: [
+              StatMeterSegment(fraction: 0.82, tone: StatMeterTone.used),
+              StatMeterSegment(fraction: 0.06, tone: StatMeterTone.cached),
+              StatMeterSegment(fraction: 0.05, tone: StatMeterTone.accent),
+              StatMeterSegment(fraction: 0.07, tone: StatMeterTone.error),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
             'SPARKLINE',
             style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
           ),

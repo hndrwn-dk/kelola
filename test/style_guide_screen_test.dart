@@ -40,6 +40,11 @@ void main() {
     expect(find.byType(MutateConfirmDialog), findsOneWidget);
     expect(find.byType(JournalLogLine), findsNWidgets(3));
     expect(find.byType(Sparkline), findsOneWidget);
+    final meter = tester.widget<StackedStatMeter>(find.byType(StackedStatMeter));
+    expect(
+      meter.segments.map((s) => s.tone),
+      contains(StatMeterTone.error),
+    );
     expect(find.byType(DestructiveConfirmSheet), findsOneWidget);
     expect(find.byType(KickerLine), findsNWidgets(2));
     expect(find.byType(ActionableError), findsOneWidget);

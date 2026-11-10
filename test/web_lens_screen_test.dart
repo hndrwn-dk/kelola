@@ -175,6 +175,83 @@ void main() {
     });
   });
 
+  group('band', () {
+    test('headline is the first failed finding even when a warning is first',
+        () {
+      const warn = WebFinding(
+        kind: WebFindingKind.certExpiring,
+        level: WebFindingLevel.warning,
+        message: 'Certificate expires in 12 days',
+        subject: 'a.example.com',
+      );
+      const fact = WebFinding(
+        kind: WebFindingKind.defaultVhostOnly,
+        level: WebFindingLevel.fact,
+        message: 'Default vhost only',
+      );
+      const failed = WebFinding(
+        kind: WebFindingKind.certExpired,
+        level: WebFindingLevel.failed,
+        message: 'Certificate expired',
+        subject: 'b.example.com',
+      );
+      expect(bandFindings(const [warn, fact, failed]), [failed, warn]);
+      expect(bandFindings(const [fact, warn]), [warn]);
+      expect(bandFindings(const [fact]), isEmpty);
+    });
+
+    test('web5xxFires uses the finding kind', () {
+      const fires = WebFinding(
+        kind: WebFindingKind.http5xx,
+        level: WebFindingLevel.warning,
+        message: 'anything',
+      );
+      const other = WebFinding(
+        kind: WebFindingKind.certExpiring,
+        level: WebFindingLevel.warning,
+        message: '5xx lookalike copy',
+      );
+      expect(web5xxFires(const [fires]), isTrue);
+      expect(web5xxFires(const [other]), isFalse);
+    });
+  });
+
+  group('webErrorLogLine', () {
+    test('nginx line', () {
+      final p = webErrorLogLine(
+        '2026/11/10 01:31:42 [warn] 3176#3176: *2 buffered',
+      );
+      expect(p.timestamp, '2026/11/10 01:31:42');
+      expect(p.kind, JournalLineKind.warning);
+      expect(p.message, '3176#3176: *2 buffered');
+    });
+
+    test('apache line', () {
+      final p = webErrorLogLine(
+        '[Tue Nov 10 01:31:42.123456 2026] [core:error] [pid 1234] '
+        'AH00037: Symbolic link not allowed',
+      );
+      expect(p.timestamp, 'Tue Nov 10 01:31:42.123456 2026');
+      expect(p.kind, JournalLineKind.error);
+      expect(p.message, '[pid 1234] AH00037: Symbolic link not allowed');
+      expect(
+        webErrorLogLine('[Tue Nov 10 01:31:42 2026] [ssl:warn] [pid 9] x').kind,
+        JournalLineKind.warning,
+      );
+      expect(
+        webErrorLogLine('[Tue Nov 10 01:31:42 2026] [mpm_event:notice] x').kind,
+        JournalLineKind.info,
+      );
+    });
+
+    test('unknown shape is the whole line as info', () {
+      final p = webErrorLogLine('junk without a timestamp');
+      expect(p.timestamp, '');
+      expect(p.message, 'junk without a timestamp');
+      expect(p.kind, JournalLineKind.info);
+    });
+  });
+
   group('screen', () {
     late KelolaDatabase db;
     late HostRepository repo;
@@ -515,6 +592,92 @@ void main() {
         findsWidgets,
       );
       expect(find.byType(JournalLogLine), findsNWidgets(4));
+      await dispose(tester);
+    });
+
+    List<StatMeterTone> meterTones(WidgetTester tester) => tester
+        .widget<StackedStatMeter>(find.byType(StackedStatMeter))
+        .segments
+        .map((s) => s.tone)
+        .toList();
+
+    testWidgets('5xx segment uses the error tone when the 5xx finding fires',
+        (tester) async {
+      // 10 of 100 requests: >= 5% with the 100-request minimum.
+      pool.lens = _lens(statusCounts: const {200: 85, 404: 5, 502: 10});
+      await pumpLens(tester);
+      expect(meterTones(tester).last, StatMeterTone.error);
+      await dispose(tester);
+    });
+
+    testWidgets('5xx segment stays muted below the threshold', (tester) async {
+      // 1% of 1000.
+      pool.lens = _lens(statusCounts: const {200: 990, 502: 10});
+      await pumpLens(tester);
+      expect(meterTones(tester).last, StatMeterTone.cached);
+      await dispose(tester);
+
+      // 10% but only 99 requests: no finding, still muted.
+      pool.lens = _lens(statusCounts: const {200: 89, 502: 10});
+      await pumpLens(tester);
+      expect(meterTones(tester).last, StatMeterTone.cached);
+      await dispose(tester);
+    });
+
+    testWidgets('certs unknown when the certs section failed, even if expiring',
+        (tester) async {
+      pool.lens = _lens(
+        sectionErrors: const {
+          WebLensSection.certs: 'Could not read 1 of 4 certificates',
+        },
+      );
+      await pumpLens(tester);
+      expect(card(tester, 'Certs').value, 'unknown');
+      // The expiring cert still shows through its finding.
+      expect(find.text('Certificate expires in 10 days'), findsOneWidget);
+      await dispose(tester);
+    });
+
+    testWidgets('fact findings render as plain rows, not alarms',
+        (tester) async {
+      final c = KelolaColors.dark;
+      pool.lens = _lens(vhosts: const [_plain], certs: const {});
+      await pumpLens(tester);
+      // Facts never take the band headline.
+      expect(
+        find.text('Config OK · 1 vhosts · certs fine'),
+        findsOneWidget,
+      );
+      final fact = find.text('Default vhost only');
+      expect(fact, findsOneWidget);
+      expect(tester.widget<Text>(fact).style?.color, c.muted);
+      expect(
+        find.ancestor(of: fact, matching: find.byType(RiskBand)),
+        findsNothing,
+      );
+      final band = tester.widget<RiskBand>(find.byType(RiskBand).first);
+      expect(band.status, HealthStatus.healthy);
+      await dispose(tester);
+    });
+
+    testWidgets('age label turns warning only past 15 minutes',
+        (tester) async {
+      final c = KelolaColors.dark;
+      pool.lens = _lens(
+        readAt: DateTime.now().toUtc().subtract(const Duration(minutes: 14)),
+      );
+      await pumpLens(tester);
+      expect(tester.widget<Text>(find.text('read 14m ago')).style?.color, c.dim);
+      await dispose(tester);
+
+      pool.lens = _lens(
+        readAt: DateTime.now().toUtc().subtract(const Duration(minutes: 16)),
+      );
+      await pumpLens(tester);
+      expect(
+        tester.widget<Text>(find.text('read 16m ago')).style?.color,
+        c.forHealth(HealthStatus.warning),
+      );
       await dispose(tester);
     });
 

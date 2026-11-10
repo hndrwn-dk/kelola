@@ -77,8 +77,9 @@ String webVhostsValue(WebLens l) {
   return '${l.vhosts.length}';
 }
 
-/// Certs stat: `<k> expiring`, `ok`, or `unknown` when the certs section
-/// failed or TLS vhosts have no readable certificate.
+/// Certs stat: `unknown` when the certs section failed (even if a readable
+/// cert is expiring; its finding still shows in the band) or TLS vhosts have
+/// no readable certificate; else `<k> expiring` or `ok`.
 String webCertsValue(WebLens l, DateTime now) {
   var expiring = 0;
   var readable = 0;
@@ -88,8 +89,8 @@ String webCertsValue(WebLens l, DateTime now) {
     readable++;
     if (d <= webCertExpiringDays) expiring++;
   }
-  if (expiring > 0) return '$expiring expiring';
   if (l.sectionErrors.containsKey(WebLensSection.certs)) return 'unknown';
+  if (expiring > 0) return '$expiring expiring';
   if (readable == 0 && l.vhosts.any((v) => v.tls)) return 'unknown';
   return 'ok';
 }
@@ -107,13 +108,27 @@ String web5xxValue(WebLens l) {
   return '${(errors * 100 / total).toStringAsFixed(1)}%';
 }
 
+/// Failed and warning findings, failed first, each group in domain order.
+/// The band headline is the first; never relies on [WebLens.findings] order.
+List<WebFinding> bandFindings(List<WebFinding> findings) => [
+  for (final f in findings)
+    if (f.level == WebFindingLevel.failed) f,
+  for (final f in findings)
+    if (f.level == WebFindingLevel.warning) f,
+];
+
+/// True when the §5c 5xx finding fires.
+bool web5xxFires(List<WebFinding> findings) => findings.any(
+  (f) => f.kind == WebFindingKind.http5xx && f.level != WebFindingLevel.fact,
+);
+
 /// Band copy when nothing failed or warns.
 String webOkSummary(WebLens l, DateTime now) {
   final config = l.configOk == null ? 'Config not tested' : 'Config OK';
   final vhosts = webVhostsValue(l);
   final vhostsText = vhosts == 'unknown'
       ? 'vhosts unknown'
-      : (l.vhosts.length == 1 ? '1 vhost' : '$vhosts vhosts');
+      : '$vhosts vhosts';
   final certs = webCertsValue(l, now) == 'unknown'
       ? 'certs unknown'
       : 'certs fine';
@@ -398,10 +413,7 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
   List<Widget> _lensBody(BuildContext context, WebLens l, DateTime now) {
     final c = context.kc;
     final findings = l.findings;
-    final alarms = [
-      for (final f in findings)
-        if (f.level != WebFindingLevel.fact) f,
-    ];
+    final alarms = bandFindings(findings);
     final facts = [
       for (final f in findings)
         if (f.level == WebFindingLevel.fact) f,
@@ -838,9 +850,7 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     });
     final total = buckets.values.fold<int>(0, (a, b) => a + b);
     // Red only when the 5xx finding fires (§5c); otherwise muted.
-    final fivexxFires = findings.any(
-      (f) => f.level != WebFindingLevel.fact && f.message.startsWith('5xx '),
-    );
+    final fivexxFires = web5xxFires(findings);
     double frac(int b) => total == 0 ? 0 : buckets[b]! / total;
     return [
       Text('STATUS CODES', style: _slabStyle(c)),

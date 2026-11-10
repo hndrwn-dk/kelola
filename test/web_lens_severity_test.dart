@@ -67,6 +67,7 @@ void main() {
     final l = lens(configOk: false);
     expect(levels(l), [WebFindingLevel.failed]);
     expect(l.findings.single.message, contains('Config test failed'));
+    expect(l.findings.single.kind, WebFindingKind.configTestFailed);
     expect(l.overall, HealthStatus.failed);
     // Could not run (no sudo) is not a finding.
     expect(lens(configOk: null).findings, isEmpty);
@@ -76,6 +77,7 @@ void main() {
     for (final s in ['inactive', 'failed', 'stopped', 'crashed']) {
       final l = lens(activeState: s);
       expect(levels(l), [WebFindingLevel.failed], reason: s);
+      expect(l.findings.single.kind, WebFindingKind.serviceNotActive);
       expect(l.overall, HealthStatus.failed);
     }
     for (final s in ['active', 'started', 'reloading']) {
@@ -88,6 +90,7 @@ void main() {
     final l = withCertExpiring(const Duration(hours: -1));
     expect(levels(l), [WebFindingLevel.failed]);
     expect(l.findings.single.message, contains('expired'));
+    expect(l.findings.single.kind, WebFindingKind.certExpired);
     expect(l.findings.single.subject, 'example.com');
     expect(l.overall, HealthStatus.failed);
   });
@@ -96,6 +99,7 @@ void main() {
     final l = withCertExpiring(const Duration(days: 5, hours: 1));
     expect(levels(l), [WebFindingLevel.failed]);
     expect(l.findings.single.message, contains('5 days'));
+    expect(l.findings.single.kind, WebFindingKind.certExpiring);
   });
 
   test('cert expires in 7 days → failed', () {
@@ -106,6 +110,7 @@ void main() {
   test('cert expires in 8 days → warning', () {
     final l = withCertExpiring(const Duration(days: 8, hours: 1));
     expect(levels(l), [WebFindingLevel.warning]);
+    expect(l.findings.single.kind, WebFindingKind.certExpiring);
     expect(l.overall, HealthStatus.warning);
   });
 
@@ -128,6 +133,7 @@ void main() {
     final l = lens(statusCounts: {200: 90, 404: 5, 502: 3, 503: 2});
     expect(levels(l), [WebFindingLevel.warning]);
     expect(l.findings.single.message, contains('5.0%'));
+    expect(l.findings.single.kind, WebFindingKind.http5xx);
     expect(l.overall, HealthStatus.warning);
   });
 
@@ -149,6 +155,7 @@ void main() {
       );
       expect(levels(l), [WebFindingLevel.warning], reason: listen);
       expect(l.findings.single.subject, 'nocert.lab');
+      expect(l.findings.single.kind, WebFindingKind.listens443WithoutCert);
     }
     // 4430 and 8443 are not 443.
     expect(
@@ -200,10 +207,12 @@ void main() {
     );
     expect(levels(l), [WebFindingLevel.fact]);
     expect(l.findings.single.message, contains('unreadable'));
+    expect(l.findings.single.kind, WebFindingKind.certUnreadable);
     expect(l.overall, HealthStatus.healthy);
     // A referenced cert that was never read (path refused) is unreadable too.
     final missing = lens(vhosts: const [_tlsVhost]);
     expect(levels(missing), [WebFindingLevel.fact]);
+    expect(missing.findings.single.kind, WebFindingKind.certUnreadable);
   });
 
   test('default vhost only is a fact', () {
@@ -214,6 +223,7 @@ void main() {
     );
     expect(levels(l), [WebFindingLevel.fact]);
     expect(l.findings.single.message, contains('Default vhost only'));
+    expect(l.findings.single.kind, WebFindingKind.defaultVhostOnly);
     expect(l.overall, HealthStatus.healthy);
     final apache = lens(
       id: ServiceId.apache,

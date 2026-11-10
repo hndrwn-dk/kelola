@@ -67,9 +67,27 @@ class WebCert {
 
 enum WebFindingLevel { failed, warning, fact }
 
-class WebFinding {
-  const WebFinding({required this.level, required this.message, this.subject});
+/// Which §5c row produced a finding; screens branch on this, never on copy.
+enum WebFindingKind {
+  configTestFailed,
+  serviceNotActive,
+  certExpired,
+  certExpiring,
+  certUnreadable,
+  http5xx,
+  listens443WithoutCert,
+  defaultVhostOnly,
+}
 
+class WebFinding {
+  const WebFinding({
+    required this.kind,
+    required this.level,
+    required this.message,
+    this.subject,
+  });
+
+  final WebFindingKind kind;
   final WebFindingLevel level;
   final String message;
   final String? subject;
@@ -140,6 +158,7 @@ class WebLens {
     if (configOk == false) {
       failed.add(
         WebFinding(
+          kind: WebFindingKind.configTestFailed,
           level: WebFindingLevel.failed,
           message: 'Config test failed',
           subject: configErrors.isEmpty ? null : configErrors.first,
@@ -151,6 +170,7 @@ class WebLens {
     if (state != null && !_runningStates.contains(state)) {
       failed.add(
         WebFinding(
+          kind: WebFindingKind.serviceNotActive,
           level: WebFindingLevel.failed,
           message: 'Service not active',
           subject: state,
@@ -165,6 +185,7 @@ class WebLens {
       if (days == null) {
         facts.add(
           WebFinding(
+            kind: WebFindingKind.certUnreadable,
             level: WebFindingLevel.fact,
             message: 'Certificate unreadable',
             subject: cert.path,
@@ -176,7 +197,8 @@ class WebLens {
       if (days < 0) {
         failed.add(
           WebFinding(
-            level: WebFindingLevel.failed,
+            kind: WebFindingKind.certExpired,
+          level: WebFindingLevel.failed,
             message: 'Certificate expired',
             subject: subject,
           ),
@@ -184,7 +206,8 @@ class WebLens {
       } else if (days <= 7) {
         failed.add(
           WebFinding(
-            level: WebFindingLevel.failed,
+            kind: WebFindingKind.certExpiring,
+          level: WebFindingLevel.failed,
             message: 'Certificate expires in ${_days(days)}',
             subject: subject,
           ),
@@ -192,6 +215,7 @@ class WebLens {
       } else if (days <= 21) {
         warning.add(
           WebFinding(
+            kind: WebFindingKind.certExpiring,
             level: WebFindingLevel.warning,
             message: 'Certificate expires in ${_days(days)}',
             subject: subject,
@@ -208,7 +232,8 @@ class WebLens {
     for (final p in missing) {
       facts.add(
         WebFinding(
-          level: WebFindingLevel.fact,
+          kind: WebFindingKind.certUnreadable,
+            level: WebFindingLevel.fact,
           message: 'Certificate unreadable',
           subject: p,
         ),
@@ -224,7 +249,8 @@ class WebLens {
       final pct = (errors5xx * 100 / total).toStringAsFixed(1);
       warning.add(
         WebFinding(
-          level: WebFindingLevel.warning,
+          kind: WebFindingKind.http5xx,
+            level: WebFindingLevel.warning,
           message: '5xx at $pct% of the last $total requests',
         ),
       );
@@ -240,6 +266,7 @@ class WebLens {
       if (noCert) {
         warning.add(
           WebFinding(
+            kind: WebFindingKind.listens443WithoutCert,
             level: WebFindingLevel.warning,
             message: 'Listens on 443 without a certificate',
             subject: v.serverNames.isEmpty ? v.sourceFile : v.serverNames.first,
@@ -252,7 +279,8 @@ class WebLens {
         vhosts.every((v) => v.serverNames.every(_isDefaultName))) {
       facts.add(
         const WebFinding(
-          level: WebFindingLevel.fact,
+          kind: WebFindingKind.defaultVhostOnly,
+            level: WebFindingLevel.fact,
           message: 'Default vhost only',
         ),
       );
