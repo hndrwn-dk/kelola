@@ -299,21 +299,34 @@ class ToolTile extends StatelessWidget {
   final String meta;
   final VoidCallback onTap;
 
+  /// M52: machine state of what the tile opens (e.g. a failed service).
+  /// Null renders the plain tool tile.
+  final HealthStatus? status;
+
   const ToolTile({
     super.key,
     required this.label,
     required this.meta,
     required this.onTap,
+    this.status,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
+    final health = status == null ? null : c.forHealth(status!);
+    final metaText = Text(
+      meta,
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: KelolaType.mono(color: health ?? c.muted, size: 9.5),
+    );
     return Material(
       color: c.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(KelolaRadii.sm),
-        side: BorderSide(color: c.line),
+        side: BorderSide(color: health ?? c.line),
       ),
       child: InkWell(
         onTap: onTap,
@@ -331,13 +344,24 @@ class ToolTile extends StatelessWidget {
                 style: KelolaType.display(color: c.text, size: 12),
               ),
               const SizedBox(height: 2),
-              Text(
-                meta,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: KelolaType.mono(color: c.muted, size: 9.5),
-              ),
+              if (health == null)
+                metaText
+              else
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: health,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Flexible(child: metaText),
+                  ],
+                ),
             ],
           ),
         ),

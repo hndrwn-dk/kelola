@@ -34,7 +34,7 @@ void main() {
     expect(find.byType(HelpTopic), findsOneWidget);
     expect(find.byType(SectionSlab), findsNWidgets(6));
     expect(find.byType(OsIcon), findsNWidgets(11));
-    expect(find.byType(ToolTile), findsNWidgets(2));
+    expect(find.byType(ToolTile), findsNWidgets(3));
     expect(find.byType(FilterPill), findsNWidgets(5));
     expect(find.byType(KelolaInput), findsNWidgets(2));
     expect(find.byType(MutateConfirmDialog), findsOneWidget);

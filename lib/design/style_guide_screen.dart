@@ -147,6 +147,21 @@ class StyleGuideScreen extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 7),
+          Row(
+            children: [
+              Expanded(
+                child: ToolTile(
+                  label: 'nginx',
+                  meta: '1.24.0 · failed',
+                  status: HealthStatus.failed,
+                  onTap: () {},
+                ),
+              ),
+              const SizedBox(width: 7),
+              const Expanded(child: SizedBox.shrink()),
+            ],
+          ),
           const SizedBox(height: 18),
           Text(
             'FILTERPILL',

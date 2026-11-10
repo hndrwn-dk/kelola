@@ -38,6 +38,7 @@ final hostScopedScreenFiles = [
   'lib/presentation/screens/tunnels_screen.dart',
   'lib/presentation/screens/unit_detail_screen.dart',
   'lib/presentation/screens/units_screen.dart',
+  'lib/presentation/screens/web_lens_screen.dart',
   'lib/presentation/screens/workload_detail_screen.dart',
   'lib/presentation/screens/workload_exec_sheet.dart',
   'lib/presentation/screens/workload_yaml_screen.dart',
