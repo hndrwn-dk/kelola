@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/domain/services/nginx_dump_parser.dart';
+import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/web_lens.dart';
 
 String fixture(String name) =>
@@ -93,6 +94,153 @@ server { server_name y; }
 ''');
     expect(r.truncated, isTrue);
     expect(r.vhosts.map((v) => v.serverNames.single), ['y']);
+  });
+
+  group('include from inside a server block (real section layout)', () {
+    test('snippet cert, listen and root reach every vhost that includes it', () {
+      // Real `nginx -T` (1.24, this layout: the snippet is printed once,
+      // right after the first file that includes it).
+      final r = parseNginxDump(fixture('nginx_T_snakeoil.txt'));
+      expect(r.truncated, isFalse);
+      expect(r.vhosts, hasLength(2));
+      final def = r.vhosts[0];
+      expect(def.serverNames, ['_']);
+      expect(def.sourceFile, '/etc/nginx/sites-enabled/default');
+      expect(def.certPaths, ['/etc/ssl/certs/ssl-cert-snakeoil.pem']);
+      expect(def.certPath, '/etc/ssl/certs/ssl-cert-snakeoil.pem');
+      expect(def.tls, isTrue);
+      // Included after the snippet was printed: still attributed.
+      final shop = r.vhosts[1];
+      expect(shop.serverNames, ['shop.lab']);
+      expect(shop.certPaths, ['/etc/ssl/certs/ssl-cert-snakeoil.pem']);
+      expect(r.toString(), isNot(contains('.key')));
+      expect(r.toString(), isNot(contains('snakeoil.key')));
+
+      final lens = WebLens(
+        id: ServiceId.nginx,
+        readAt: DateTime.utc(2026, 11, 10),
+        vhosts: r.vhosts,
+      );
+      expect(
+        lens.findings.where(
+          (f) => f.kind == WebFindingKind.listens443WithoutCert,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('snippet directives: listen, root, server_name; a nested include too', () {
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http { include /etc/nginx/sites/*; }
+# configuration file /etc/nginx/sites/a:
+server {
+  include /etc/nginx/snip/tls.conf;
+  location / { include /etc/nginx/snip/loc.conf; }
+}
+# configuration file /etc/nginx/snip/tls.conf:
+listen 443 ssl;
+server_name a.example;
+root /srv/a;
+include /etc/nginx/snip/cert.conf;
+# configuration file /etc/nginx/snip/cert.conf:
+ssl_certificate /etc/ssl/a.pem;
+ssl_certificate_key /etc/ssl/a.key;
+# configuration file /etc/nginx/snip/loc.conf:
+root /srv/not-the-vhost-root;
+ssl_certificate /etc/ssl/location-level.pem;
+''');
+      final v = r.vhosts.single;
+      expect(v.listen, ['443 ssl']);
+      expect(v.tls, isTrue);
+      expect(v.serverNames, ['a.example']);
+      expect(v.root, '/srv/a');
+      // Only directives at the server's own level count.
+      expect(v.certPaths, ['/etc/ssl/a.pem']);
+      expect(r.toString(), isNot(contains('.key')));
+    });
+
+    test('a file included at http level never adds to a vhost', () {
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http { include /etc/nginx/conf.d/*.conf; server { server_name a; } }
+# configuration file /etc/nginx/conf.d/x.conf:
+ssl_certificate /etc/ssl/http-level.pem;
+server { server_name b; }
+''');
+      expect(r.vhosts.map((v) => v.serverNames.single), ['a', 'b']);
+      expect(r.vhosts.every((v) => v.certPaths.isEmpty), isTrue);
+    });
+  });
+
+  group('hostile input is bounded', () {
+    test('200k nested blocks with includes: fast, truncated, no throw', () {
+      final sw = Stopwatch()..start();
+      final r = parseNginxDump('a{include b;' * 200000);
+      expect(sw.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(r.truncated, isTrue);
+      expect(r.vhosts, isEmpty);
+    });
+
+    test('nesting past 64 levels is ignored safely and marks truncated', () {
+      final deep = '${'x{' * 70}server { server_name deep; }${'}' * 70}';
+      final r = parseNginxDump('http { server { server_name ok; } $deep '
+          'server { server_name after; } }');
+      expect(r.truncated, isTrue);
+      expect(r.vhosts.map((v) => v.serverNames.single), ['ok', 'after']);
+      // 64 levels exactly is fine.
+      final ok = parseNginxDump('${'x{' * 63}${'}' * 63}');
+      expect(ok.truncated, isFalse);
+    });
+
+    test('50k includes and many sections: fast, capped, no throw', () {
+      final b = StringBuffer('# configuration file /etc/nginx/nginx.conf:\n'
+          'http {\n');
+      for (var i = 0; i < 50000; i++) {
+        b.write('include /etc/nginx/i$i/*.conf;\n');
+      }
+      b.write('}\n');
+      for (var i = 0; i < 5000; i++) {
+        b.write('# configuration file /etc/nginx/s$i/x.conf:\n'
+            'server { server_name s$i; }\n');
+      }
+      final sw = Stopwatch()..start();
+      final r = parseNginxDump(b.toString());
+      expect(sw.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(r.truncated, isTrue);
+      expect(r.vhosts, isNotEmpty);
+    });
+
+    test('includes inside included files cannot blow up the vhost links', () {
+      final b = StringBuffer('# configuration file /etc/nginx/nginx.conf:\n'
+          'http { include /s/*; }\n');
+      for (var i = 0; i < 1000; i++) {
+        b.write('# configuration file /s/a$i:\nserver { include /s/*; }\n');
+      }
+      for (var i = 0; i < 1000; i++) {
+        b.write('# configuration file /s/b$i:\ninclude /s/*;\nlisten 443 ssl;\n');
+      }
+      final sw = Stopwatch()..start();
+      final r = parseNginxDump(b.toString());
+      expect(sw.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(r.truncated, isTrue);
+      for (final v in r.vhosts) {
+        expect(v.listen.length, lessThanOrEqualTo(256));
+      }
+    });
+
+    test('nested includes in server blocks stay bounded', () {
+      final b = StringBuffer('# configuration file /etc/nginx/nginx.conf:\n'
+          'http { include /s/*; }\n');
+      for (var i = 0; i < 3000; i++) {
+        b.write('# configuration file /s/$i:\n'
+            'server { include /s/*; include /s/*; }\n');
+      }
+      final sw = Stopwatch()..start();
+      final r = parseNginxDump(b.toString());
+      expect(sw.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(r.vhosts, isNotEmpty);
+    });
   });
 
   test('multiple ssl_certificate kept in certPaths', () {
