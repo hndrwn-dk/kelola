@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:kelola/domain/probes/web_lens_probe.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/sudo/unit_sudoers_grant.dart';
@@ -19,8 +20,8 @@ const webGrantUntrustedMarker = 'KELOLA_WEB_GRANT_UNTRUSTED';
 /// replace would be a root shell, and binary paths come from the host's own
 /// output, so only these directories are ever granted (not `/usr/local`,
 /// which is often group-writable). The grant script also checks on the host
-/// that each binary, every directory above it and the directory it was
-/// found in are root-owned and not group- or other-writable
+/// that every hop to each binary (each directory, each symlink, the final
+/// file) is root-owned and not group- or other-writable
 /// ([webBinaryTrustShell]).
 const webGrantSystemDirs = {'/usr/bin', '/usr/sbin', '/bin', '/sbin'};
 
@@ -184,41 +185,92 @@ String buildWebGrantScript(WebSudoersGrant g) {
   );
 }
 
+/// Max symlinks followed per binary (Linux's own limit); more fails.
+const webTrustMaxHops = 40;
+
+final _ownerName = RegExp(r'^[a-z_][a-z0-9_-]{0,31}$');
+
 /// Shell (for `set -eu`) that stops the grant unless every one of
-/// [binaries] is trusted on the host: the resolved file (`readlink -f`),
-/// every directory above it, and the resolved directory it was named in,
-/// are each owned by root and neither group- nor other-writable. On the
-/// first failure it prints [webGrantUntrustedMarker] and the path (base64)
-/// and exits 5, before the sudoers file is read or written.
+/// [binaries] is trusted on the host. Each path is walked one component at
+/// a time, following each symlink by hand (plain `readlink`, at most
+/// [webTrustMaxHops]; a relative target resolves against the link's
+/// directory), and:
+/// - `/`, every directory passed through and the final file must be owned by
+///   root and neither group- nor other-writable;
+/// - every symlink passed through must be owned by root (a link's own mode
+///   is always 0777, so only its owner counts; its directory is checked as
+///   above, so nobody else can replace it).
+///
+/// So no hop of the chain sudo re-resolves on every run can be repointed by
+/// anyone but root. Fail-closed: a missing tool, empty output, a missing
+/// path or too many hops all count as untrusted. On the first failure it
+/// prints [webGrantUntrustedMarker] and the path (base64) and exits 5, before
+/// the sudoers file is read or written.
 ///
 /// Plain `find`, no sudo: system binaries are readable. Only POSIX `find`
 /// options that busybox also has (`-maxdepth`, `-user`, `-perm -mode`; not
 /// `-perm /mode`). Binaries travel base64-encoded, never as shell text.
-String webBinaryTrustShell(List<String> binaries) {
+///
+/// [owners] exists for tests only (so the permission checks run without
+/// root); [buildWebGrantScript] always uses root.
+String webBinaryTrustShell(
+  List<String> binaries, {
+  @visibleForTesting List<String> owners = const ['root'],
+}) {
+  if (owners.isEmpty || !owners.every(_ownerName.hasMatch)) {
+    throw ArgumentError.value(owners, 'owners');
+  }
+  String finds(String extra) => owners
+      .map(
+        (o) =>
+            '[ -n "\$(find "\$1" -maxdepth 0 -user \'$o\'$extra '
+            '2>/dev/null)" ]',
+      )
+      .join(' || ');
   final b = StringBuffer()
-    ..writeln('kelola_owned() {')
-    ..writeln(
-      r'  [ -n "$(find "$1" -maxdepth 0 -user root ! -perm -020 ! -perm -002 '
-      r'2>/dev/null)" ]',
-    )
-    ..writeln('}')
-    // Every component of a resolved (symlink-free) absolute path.
-    ..writeln('kelola_chain() {')
+    // A directory or the final file.
+    ..writeln('kelola_ok() { ${finds(' ! -perm -020 ! -perm -002')}; }')
+    // A symlink: owner only.
+    ..writeln('kelola_link_ok() { ${finds('')}; }')
+    ..writeln('kelola_walk() {')
     ..writeln(r'  case "$1" in /*) ;; *) return 1 ;; esac')
-    ..writeln(r'  p=$1')
-    ..writeln('  while :; do')
-    ..writeln(r'    kelola_owned "$p" || return 1')
-    ..writeln(r'    [ "$p" != / ] || return 0')
-    ..writeln(r'    p=${p%/*}')
-    ..writeln(r'    [ -n "$p" ] || p=/')
+    ..writeln('  kelola_ok / || return 1')
+    // cur: resolved, symlink-free prefix ('' = /). rest: still to walk.
+    ..writeln('  cur=')
+    ..writeln(r'  rest=${1#/}')
+    ..writeln('  hops=0')
+    ..writeln('  last=')
+    ..writeln(r'  while [ -n "$rest" ]; do')
+    ..writeln(r'    case "$rest" in')
+    ..writeln(r'      */*) c=${rest%%/*}; rest=${rest#*/} ;;')
+    ..writeln(r'      *) c=$rest; rest= ;;')
+    ..writeln('    esac')
+    ..writeln(r'    case "$c" in')
+    ..writeln("      ''|.) continue ;;")
+    ..writeln(r'      ..) cur=${cur%/*}; last=dir; continue ;;')
+    ..writeln('    esac')
+    ..writeln(r'    cand=$cur/$c')
+    ..writeln(r'    if [ -L "$cand" ]; then')
+    ..writeln(r'      kelola_link_ok "$cand" || return 1')
+    ..writeln(r'      hops=$((hops + 1))')
+    ..writeln('      [ "\$hops" -le $webTrustMaxHops ] || return 1')
+    ..writeln(r'      t=$(readlink "$cand" 2>/dev/null) || return 1')
+    ..writeln(r'      [ -n "$t" ] || return 1')
+    ..writeln(r'      case "$t" in /*) cur=; t=${t#/} ;; esac')
+    ..writeln(r'      if [ -n "$rest" ]; then rest=$t/$rest; else rest=$t; fi')
+    ..writeln(r'    elif [ -e "$cand" ]; then')
+    ..writeln(r'      kelola_ok "$cand" || return 1')
+    ..writeln(r'      cur=$cand')
+    ..writeln('      last=file')
+    ..writeln('    else')
+    ..writeln('      return 1')
+    ..writeln('    fi')
     ..writeln('  done')
+    // Ends on a checked path, never on `/` or a `..`.
+    ..writeln(r'  [ -n "$cur" ] && [ "$last" = file ]')
     ..writeln('}')
     ..writeln('kelola_trust() {')
-    ..writeln(r'  f=$(readlink -f "$1" 2>/dev/null || true)')
-    ..writeln(r'  d=${1%/*}')
-    ..writeln(r'  [ -n "$d" ] || d=/')
-    ..writeln(r'  d=$(readlink -f "$d" 2>/dev/null || true)')
-    ..writeln(r'  if kelola_chain "$f" && kelola_chain "$d"; then return 0; fi')
+    ..writeln(r'  if kelola_walk "$1"; then return 0; fi')
     ..writeln(
       "  printf '%s %s\\n' '$webGrantUntrustedMarker' "
       r'''"$(printf '%s' "$1" | base64 | tr -d '\n')"''',

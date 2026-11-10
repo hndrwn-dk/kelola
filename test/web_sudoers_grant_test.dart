@@ -1041,29 +1041,25 @@ cp "\$src" "\$dst"''');
   });
 
   group('binary trust check (real files)', () {
-    final isRoot =
-        Platform.isLinux &&
-        (Process.runSync('id', ['-u']).stdout as String).trim() == '0';
-    late Directory dir;
+    final me = Platform.isWindows
+        ? ''
+        : (Process.runSync('id', ['-un']).stdout as String).trim();
+    final isRoot = me == 'root';
 
-    setUp(() {
-      // Not under /tmp: the check walks every parent, and /tmp is world
-      // writable. The repo's .dart_tool is root-owned 0755 in this container.
-      dir = Directory('${Directory.current.path}/.dart_tool')
-          .createTempSync('kelola_trust');
-      Process.runSync('chmod', ['755', dir.path]);
-    });
-
-    tearDown(() {
-      Process.runSync('chmod', ['-R', 'u+rwx', dir.path]);
-      dir.deleteSync(recursive: true);
-    });
+    /// Trusted owners for the temp-file cases: root (for `/` and the system
+    /// directories above the temp dir) plus the runner, so the permission
+    /// branches run on any machine, not only as root.
+    final owners = {'root', me}.toList();
 
     /// Runs the trust snippet under `sh -eu`; returns (exit, stdout).
-    Future<(int, String)> check(List<String> binaries) async {
+    Future<(int, String)> check(
+      List<String> binaries, {
+      List<String> owners = const ['root'],
+    }) async {
       final r = await Process.run('sh', [
         '-c',
-        'set -eu\n${webBinaryTrustShell(binaries)}echo CHECK_PASSED',
+        'set -eu\n${webBinaryTrustShell(binaries, owners: owners)}'
+            'echo CHECK_PASSED',
       ]);
       return (r.exitCode, r.stdout as String);
     }
@@ -1076,11 +1072,96 @@ cp "\$src" "\$dst"''');
       return m == null ? null : utf8.decode(base64Decode(m.group(1)!));
     }
 
-    File exe(String path) {
+    late Directory dir;
+    var baseClean = false;
+
+    setUpAll(() async {
+      // A base whose whole chain is clean for [owners]; /tmp never is (it
+      // is world-writable). Try the repo's .dart_tool, then $HOME.
+      for (final base in [
+        '${Directory.current.path}/.dart_tool',
+        Platform.environment['HOME'] ?? '',
+      ]) {
+        if (base.isEmpty || !Directory(base).existsSync()) continue;
+        final probe = Directory(base).createTempSync('kelola_trust_base');
+        Process.runSync('chmod', ['755', probe.path]);
+        final f = File('${probe.path}/x')..writeAsStringSync('');
+        Process.runSync('chmod', ['755', f.path]);
+        final (rc, _) = await check([f.path], owners: owners);
+        probe.deleteSync(recursive: true);
+        if (rc == 0) {
+          baseClean = true;
+          dir = Directory(base);
+          return;
+        }
+      }
+    });
+
+    late Directory root;
+
+    setUp(() {
+      if (!baseClean) return;
+      root = dir.createTempSync('kelola_trust');
+      Process.runSync('chmod', ['755', root.path]);
+    });
+
+    tearDown(() {
+      if (!baseClean) return;
+      Process.runSync('chmod', ['-R', 'u+rwx', root.path]);
+      root.deleteSync(recursive: true);
+    });
+
+    /// A 0755 directory under the test root.
+    Directory sub(String name, {String mode = '755'}) {
+      final d = Directory('${root.path}/$name')..createSync(recursive: true);
+      Process.runSync('chmod', [mode, d.path]);
+      return d;
+    }
+
+    File exe(String path, {String mode = '755'}) {
       final f = File(path)..writeAsStringSync('#!/bin/sh\n');
-      Process.runSync('chmod', ['755', f.path]);
+      Process.runSync('chmod', [mode, f.path]);
       return f;
     }
+
+    /// Skips unless a clean base was found (see [setUpAll]).
+    bool ready() {
+      if (Platform.isWindows) return false;
+      if (!baseClean) {
+        markTestSkipped('no directory with a clean owner chain here');
+        return false;
+      }
+      return true;
+    }
+
+    test('production checks root ownership and nothing else', () {
+      final grant = WebSudoersGrant.tryCreate(
+        user: 'hendr',
+        id: ServiceId.nginx,
+        binaries: _nginxBins,
+        toolPaths: _tools,
+      )!;
+      for (final sh in [
+        buildWebGrantScript(grant),
+        webBinaryTrustShell(['/usr/sbin/nginx']),
+      ]) {
+        final users = RegExp(r"-user '([^']*)'").allMatches(sh).toList();
+        expect(users, isNotEmpty);
+        expect(users.map((m) => m.group(1)).toSet(), {'root'});
+        expect(RegExp(r'-user\b').allMatches(sh).length, users.length);
+        // No `readlink -f`: every hop is checked, one at a time.
+        expect(sh, isNot(contains('readlink -f')));
+        expect(sh, isNot(contains('-perm /')));
+      }
+      expect(
+        () => webBinaryTrustShell(['/x'], owners: ["root' -o -user 'x"]),
+        throwsArgumentError,
+      );
+      expect(
+        () => webBinaryTrustShell(['/x'], owners: []),
+        throwsArgumentError,
+      );
+    });
 
     test('a root-owned system binary passes', () async {
       final (rc, out) = await check(['/usr/bin/tail']);
@@ -1088,69 +1169,148 @@ cp "\$src" "\$dst"''');
       expect(out, contains('CHECK_PASSED'));
     }, skip: !Platform.isLinux);
 
-    test('a clean root-owned file passes', () async {
-      if (!isRoot) {
-        markTestSkipped('needs root to own the temp file');
-        return;
-      }
-      final f = exe('${dir.path}/nginx');
-      final (rc, out) = await check([f.path, '/usr/bin/tail']);
+    test('a clean file passes', () async {
+      if (!ready()) return;
+      final f = exe('${sub('sbin').path}/nginx');
+      final (rc, out) = await check([f.path, '/usr/bin/tail'], owners: owners);
       expect(rc, 0, reason: out);
       expect(out, contains('CHECK_PASSED'));
     });
 
     test('a group-writable file fails', () async {
-      final f = exe('${dir.path}/nginx');
-      Process.runSync('chmod', ['775', f.path]);
-      final (rc, out) = await check(['/usr/bin/tail', f.path]);
+      if (!ready()) return;
+      final f = exe('${sub('sbin').path}/nginx', mode: '775');
+      final (rc, out) = await check(['/usr/bin/tail', f.path], owners: owners);
       expect(rc, isNot(0));
       expect(out, isNot(contains('CHECK_PASSED')));
       expect(untrusted(out), f.path);
-    }, skip: !Platform.isLinux);
+    });
 
     test('an other-writable file fails', () async {
-      final f = exe('${dir.path}/nginx');
-      Process.runSync('chmod', ['757', f.path]);
-      final (rc, out) = await check([f.path]);
+      if (!ready()) return;
+      final f = exe('${sub('sbin').path}/nginx', mode: '757');
+      final (rc, out) = await check([f.path], owners: owners);
       expect(rc, isNot(0));
       expect(untrusted(out), f.path);
-    }, skip: !Platform.isLinux);
+    });
 
     test('an other-writable directory fails', () async {
-      final sub = Directory('${dir.path}/sbin')..createSync();
-      final f = exe('${sub.path}/nginx');
-      Process.runSync('chmod', ['777', sub.path]);
-      final (rc, out) = await check([f.path]);
+      if (!ready()) return;
+      final f = exe('${sub('sbin', mode: '777').path}/nginx');
+      final (rc, out) = await check([f.path], owners: owners);
       expect(rc, isNot(0));
       expect(untrusted(out), f.path);
-    }, skip: !Platform.isLinux);
+    });
 
     test('a writable parent further up fails', () async {
-      final sub = Directory('${dir.path}/a/b')..createSync(recursive: true);
-      final f = exe('${sub.path}/nginx');
-      Process.runSync('chmod', ['775', '${dir.path}/a']);
-      final (rc, out) = await check([f.path]);
+      if (!ready()) return;
+      sub('a', mode: '775');
+      final f = exe('${sub('a/b').path}/nginx');
+      final (rc, out) = await check([f.path], owners: owners);
       expect(rc, isNot(0));
       expect(untrusted(out), f.path);
-    }, skip: !Platform.isLinux);
+    });
 
     test('a symlink to a writable target fails', () async {
-      final bad = Directory('${dir.path}/bad')..createSync();
-      final target = exe('${bad.path}/nginx');
-      Process.runSync('chmod', ['777', bad.path]);
-      final clean = Directory('${dir.path}/clean')..createSync();
-      Process.runSync('chmod', ['755', clean.path]);
-      final link = Link('${clean.path}/nginx')..createSync(target.path);
-      final (rc, out) = await check([link.path]);
+      if (!ready()) return;
+      final target = exe('${sub('bad', mode: '777').path}/nginx');
+      final link = Link('${sub('sbin').path}/nginx')..createSync(target.path);
+      final (rc, out) = await check([link.path], owners: owners);
       expect(rc, isNot(0));
       expect(untrusted(out), link.path);
-    }, skip: !Platform.isLinux);
+    });
+
+    test('a writable directory holding an intermediate hop fails', () async {
+      if (!ready()) return;
+      // sbin/nginx -> w/hop -> lib/nginx: the final file and its directory
+      // are clean, but whoever can write w/ can repoint hop.
+      final real = exe('${sub('lib').path}/nginx');
+      final hop = Link('${sub('w', mode: '777').path}/hop')
+        ..createSync(real.path);
+      final link = Link('${sub('sbin').path}/nginx')..createSync(hop.path);
+      final (rc, out) = await check([link.path], owners: owners);
+      expect(rc, isNot(0), reason: out);
+      expect(untrusted(out), link.path);
+    });
+
+    test('a clean chain of hops passes', () async {
+      if (!ready()) return;
+      final real = exe('${sub('lib/x').path}/nginx');
+      final hop2 = Link('${sub('b').path}/hop2')..createSync(real.path);
+      final hop1 = Link('${sub('a').path}/hop1')..createSync(hop2.path);
+      final link = Link('${sub('sbin').path}/nginx')..createSync(hop1.path);
+      final (rc, out) = await check([link.path], owners: owners);
+      expect(rc, 0, reason: out);
+      expect(out, contains('CHECK_PASSED'));
+    });
+
+    test('a relative hop resolves against the link directory', () async {
+      if (!ready()) return;
+      exe('${sub('lib').path}/nginx');
+      final good = Link('${sub('sbin').path}/nginx')
+        ..createSync('../lib/nginx');
+      var (rc, out) = await check([good.path], owners: owners);
+      expect(rc, 0, reason: out);
+
+      // Relative to the link's directory, not the shell's: `bad` holds a
+      // writable directory only reachable that way.
+      exe('${sub('bad', mode: '777').path}/nginx');
+      final bad = Link('${sub('sbin2').path}/nginx')
+        ..createSync('../bad/./nginx');
+      (rc, out) = await check([bad.path], owners: owners);
+      expect(rc, isNot(0));
+      expect(untrusted(out), bad.path);
+    });
+
+    test('a symlink loop fails by the hop bound', () async {
+      if (!ready()) return;
+      final d = sub('sbin');
+      Link('${d.path}/a').createSync('${d.path}/b');
+      Link('${d.path}/b').createSync('${d.path}/a');
+      final (rc, out) = await check(['${d.path}/a'], owners: owners);
+      expect(rc, isNot(0));
+      expect(untrusted(out), '${d.path}/a');
+      // A long but finite chain under the bound still passes.
+      final real = exe('${d.path}/real');
+      var prev = real.path;
+      for (var i = 0; i < 30; i++) {
+        Link('${d.path}/l$i').createSync(prev);
+        prev = '${d.path}/l$i';
+      }
+      final (ok, okOut) = await check([prev], owners: owners);
+      expect(ok, 0, reason: okOut);
+      // Past the bound fails.
+      for (var i = 30; i < 45; i++) {
+        Link('${d.path}/l$i').createSync(prev);
+        prev = '${d.path}/l$i';
+      }
+      final (long, _) = await check([prev], owners: owners);
+      expect(long, isNot(0));
+    });
+
+    test(
+      'a root-owned file reached through a user-owned symlink fails',
+      () async {
+        if (!isRoot) {
+          markTestSkipped('needs root to own the link as another user');
+          return;
+        }
+        if (!ready()) return;
+        final link = Link('${sub('sbin').path}/tail')
+          ..createSync('/usr/bin/tail');
+        Process.runSync('chown', ['-h', 'nobody', link.path]);
+        final (rc, out) = await check([link.path]);
+        expect(rc, isNot(0));
+        expect(untrusted(out), link.path);
+      },
+    );
 
     test('a missing binary fails', () async {
-      final (rc, out) = await check(['${dir.path}/nope']);
+      if (!ready()) return;
+      final (rc, out) = await check(['${root.path}/nope'], owners: owners);
       expect(rc, isNot(0));
-      expect(untrusted(out), '${dir.path}/nope');
-    }, skip: !Platform.isLinux);
+      expect(untrusted(out), '${root.path}/nope');
+    });
 
     test('binaries are carried encoded, never raw', () {
       final sh = webBinaryTrustShell(['/usr/sbin/nginx']);
