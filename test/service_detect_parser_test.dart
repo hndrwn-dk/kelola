@@ -85,6 +85,37 @@ void main() {
     expect(pg.unit, 'postgresql');
   });
 
+  test('openrc: supervised line with uptime in the bracket still parses', () {
+    final d = parseServiceDetection(
+      '---UNITS---\n nginx                      [  started 00:01:23 (0) ]\n',
+      now: _now,
+    );
+    expect(_find(d, ServiceId.nginx)!.state, ServiceState.running);
+    expect(_find(d, ServiceId.nginx)!.unit, 'nginx');
+  });
+
+  test('openrc: crashed maps to failed; starting/stopping map to stopped', () {
+    final d = parseServiceDetection(
+      '---UNITS---\n nginx [  crashed  ]\n apache2 [  starting  ]\n'
+      ' postgresql [  stopping  ]\n',
+      now: _now,
+    );
+    expect(_find(d, ServiceId.nginx)!.state, ServiceState.failed);
+    expect(_find(d, ServiceId.apache)!.state, ServiceState.stopped);
+    expect(_find(d, ServiceId.postgres)!.state, ServiceState.stopped);
+  });
+
+  test('openrc: mysql service on a MariaDB host → single mariadb entry', () {
+    final d = parseServiceDetection(
+      '---UNITS---\n mysql [  started  ]\n'
+      '---VERSION---\nmariadb mariadb from 11.4.2-MariaDB, client 15.2\n',
+      now: _now,
+    );
+    expect(d.services.map((s) => s.id), [ServiceId.mariadb]);
+    expect(d.services.single.state, ServiceState.running);
+    expect(d.services.single.unit, 'mysql');
+  });
+
   test('unknown init: binary only → installed', () {
     final d = parseServiceDetection(
       '---UNITS---\n---BIN---\napache2 /usr/sbin/apache2\n'

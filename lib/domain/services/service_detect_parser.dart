@@ -96,9 +96,14 @@ ServiceId? _idForUnit(String unit, {required bool isMaria}) {
   if (candidates.isEmpty) {
     return null;
   }
+  // mysql / mysqld units (systemd) and the `mysql` OpenRC service belong to
+  // MariaDB when the version says so; never both, never a binary-less mysql.
+  if (isMaria && candidates.contains(ServiceId.mysql)) {
+    return ServiceId.mariadb;
+  }
   if (candidates.contains(ServiceId.mariadb) &&
       candidates.contains(ServiceId.mysql)) {
-    return isMaria ? ServiceId.mariadb : ServiceId.mysql;
+    return ServiceId.mysql;
   }
   return candidates.first;
 }
@@ -106,7 +111,9 @@ ServiceId? _idForUnit(String unit, {required bool isMaria}) {
 bool _matchesUnit(ServiceDescriptor d, String unit) =>
     d.matchesSystemdUnit(unit) || d.openrcServices.contains(unit);
 
-final _openrcLine = RegExp(r'^\s*([A-Za-z0-9_.@+-]+)\s+\[\s*([A-Za-z]+)\s*\]');
+final _openrcLine = RegExp(
+  r'^\s*([A-Za-z0-9_.@+-]+)\s+\[\s*([A-Za-z]+)\b[^\]]*\]',
+);
 
 List<_Unit> _parseUnits(String text) {
   final out = <_Unit>[];
@@ -147,6 +154,9 @@ ServiceState _openrcState(String s) {
       return ServiceState.running;
     case 'crashed':
       return ServiceState.failed;
+    case 'starting':
+    case 'stopping':
+    case 'stopped':
     default:
       return ServiceState.stopped;
   }
