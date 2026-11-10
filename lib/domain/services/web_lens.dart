@@ -13,6 +13,7 @@ class WebVhost {
     this.tls = false,
     this.root,
     this.certPath,
+    this.certPaths = const [],
     this.sourceFile = '',
   });
 
@@ -25,6 +26,10 @@ class WebVhost {
   final bool tls;
   final String? root;
   final String? certPath;
+
+  /// Every `ssl_certificate` (RSA + ECDSA pairs), in order; [certPath] is the
+  /// first.
+  final List<String> certPaths;
   final String sourceFile;
 
   @override

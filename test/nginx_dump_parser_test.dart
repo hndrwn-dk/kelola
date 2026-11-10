@@ -10,20 +10,111 @@ String fixture(String name) =>
 void main() {
   test('two server blocks with multiple server_name', () {
     final r = parseNginxDump(fixture('nginx_T_ubuntu.txt'));
-    expect(r.vhosts, hasLength(2));
-    expect(r.vhosts[0].serverNames, ['_']);
-    expect(r.vhosts[0].root, '/var/www/html');
-    expect(r.vhosts[0].tls, isFalse);
-    expect(r.vhosts[1].serverNames, ['example.com', 'www.example.com']);
-    expect(r.vhosts[1].root, '/var/www/example');
+    expect(r.vhosts, hasLength(3));
+    final soon = r.vhosts[0];
+    expect(soon.serverNames, ['soon.lab', 'www.soon.lab']);
+    expect(soon.listen, ['443 ssl']);
+    expect(soon.tls, isTrue);
+    expect(soon.root, '/var/www/soon');
+    expect(soon.certPath, '/etc/ssl/certs/soon.crt');
+    expect(soon.sourceFile, '/etc/nginx/conf.d/soon.conf');
+    final nocert = r.vhosts[1];
+    expect(nocert.serverNames, ['nocert.lab']);
+    expect(nocert.listen, ['443']);
+    expect(nocert.tls, isFalse);
+    expect(nocert.certPath, isNull);
+    final def = r.vhosts[2];
+    expect(def.serverNames, ['_']);
+    expect(def.listen, ['80 default_server']);
+    expect(def.root, '/var/www/html');
+    expect(def.sourceFile, '/etc/nginx/sites-enabled/default');
     expect(r.truncated, isFalse);
   });
 
-  test('server in upstream/stream is ignored, http depth only', () {
+  test('server in a file included from stream is ignored', () {
     final r = parseNginxDump(fixture('nginx_T_alpine.txt'));
     expect(r.vhosts, hasLength(1));
     expect(r.vhosts.single.serverNames, ['app.local']);
     expect(r.vhosts.single.listen, ['80']);
+  });
+
+  test('server only counts directly under http', () {
+    expect(
+      parseNginxDump('http { server { server_name a; } }').vhosts,
+      hasLength(1),
+    );
+    expect(
+      parseNginxDump('events { http { server { server_name a; } } }').vhosts,
+      isEmpty,
+    );
+    expect(
+      parseNginxDump('http { upstream u { server { } } }').vhosts,
+      isEmpty,
+    );
+    expect(parseNginxDump('mail { server { } }').vhosts, isEmpty);
+  });
+
+  test('relative include resolves against the main config directory', () {
+    final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http { include conf.d/*.conf; }
+# configuration file /etc/nginx/conf.d/a.conf:
+server { server_name a; }
+''');
+    expect(r.vhosts.map((v) => v.serverNames.single), ['a']);
+    // Included from stream: relative pattern must not be mistaken for http.
+    final s = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+stream { include conf.d/*.conf; }
+# configuration file /etc/nginx/conf.d/a.conf:
+server { server_name a; }
+''');
+    expect(s.vhosts, isEmpty);
+  });
+
+  test('file matching no include falls back to http', () {
+    final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+events {}
+# configuration file /etc/other/x.conf:
+server { server_name x; }
+''');
+    expect(r.vhosts.single.serverNames, ['x']);
+  });
+
+  test('a section header while blocks are open marks truncated', () {
+    final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http { include /e/*.conf; }
+# configuration file /e/x.conf:
+server { server_name cut;
+# configuration file /e/y.conf:
+server { server_name y; }
+''');
+    expect(r.truncated, isTrue);
+    expect(r.vhosts.map((v) => v.serverNames.single), ['y']);
+  });
+
+  test('multiple ssl_certificate kept in certPaths', () {
+    final r = parseNginxDump('''http { server {
+      ssl_certificate /c/rsa.pem; ssl_certificate_key /k/rsa.key;
+      ssl_certificate /c/ec.pem; ssl_certificate_key /k/ec.key; } }''');
+    expect(r.vhosts.single.certPath, '/c/rsa.pem');
+    expect(r.vhosts.single.certPaths, ['/c/rsa.pem', '/c/ec.pem']);
+    expect(r.toString(), isNot(contains('.key')));
+  });
+
+  test(r'${ scan cannot hide structure; mid-token quote is literal', () {
+    final r = parseNginxDump(
+      r'http { server { set $a ${x; } server { server_name b; } }',
+    );
+    expect(r.vhosts.map((v) => v.serverNames), [
+      <String>[],
+      ['b'],
+    ]);
+    final q = parseNginxDump('http { server { root /x/a"b; } }');
+    expect(q.vhosts.single.root, '/x/a"b');
+    expect(q.truncated, isFalse);
   });
 
   test('missing server_name gives empty list', () {
@@ -32,9 +123,11 @@ void main() {
   });
 
   test('listen [::]:443 ssl http2 → tls true', () {
-    final r = parseNginxDump(fixture('nginx_T_ubuntu.txt'));
-    expect(r.vhosts[1].listen, ['443 ssl http2', '[::]:443 ssl http2']);
-    expect(r.vhosts[1].tls, isTrue);
+    final r = parseNginxDump(
+      'http { server { listen 443 ssl http2; listen [::]:443 ssl http2; } }',
+    );
+    expect(r.vhosts.single.listen, ['443 ssl http2', '[::]:443 ssl http2']);
+    expect(r.vhosts.single.tls, isTrue);
   });
 
   test('bare listen 443 without ssl is not tls', () {
@@ -44,13 +137,9 @@ void main() {
 
   test('ssl_certificate captured, ssl_certificate_key ignored', () {
     final r = parseNginxDump(fixture('nginx_T_ubuntu.txt'));
-    expect(
-      r.vhosts[1].certPath,
-      '/etc/letsencrypt/live/example.com/fullchain.pem',
-    );
-    expect(r.toString(), isNot(contains('privkey.pem')));
-    expect(r.vhosts.join(), isNot(contains('privkey.pem')));
-    // Key directive alone never becomes a cert.
+    expect(r.vhosts[0].certPath, '/etc/ssl/certs/soon.crt');
+    expect(r.toString(), isNot(contains('soon.key')));
+    expect(r.vhosts.join(), isNot(contains('soon.key')));
     final k = parseNginxDump(
       'http { server { ssl_certificate_key /k/priv.pem; } }',
     );
@@ -60,8 +149,8 @@ void main() {
 
   test('sourceFile from # configuration file header', () {
     final r = parseNginxDump(fixture('nginx_T_ubuntu.txt'));
-    expect(r.vhosts[0].sourceFile, '/etc/nginx/sites-enabled/default');
-    expect(r.vhosts[1].sourceFile, '/etc/nginx/sites-enabled/example.com');
+    expect(r.vhosts[0].sourceFile, '/etc/nginx/conf.d/soon.conf');
+    expect(r.vhosts[2].sourceFile, '/etc/nginx/sites-enabled/default');
   });
 
   test("comments and quoted braces don't break depth", () {

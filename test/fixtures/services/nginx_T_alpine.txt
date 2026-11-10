@@ -1,3 +1,5 @@
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
 # configuration file /etc/nginx/nginx.conf:
 user nginx;
 worker_processes auto;
@@ -9,16 +11,21 @@ http {
     upstream backend {
         server 10.0.0.5:8080;
     }
-    # configuration file /etc/nginx/http.d/default.conf:
-    server {
-        listen 80;
-        server_name app.local;
-        root /usr/share/nginx/html;
-    }
+    include /etc/nginx/http.d/*.conf;
 }
 stream {
-    server {
-        listen 5432;
-        proxy_pass backend;
-    }
+    include /etc/nginx/stream.d/*.conf;
+}
+
+# configuration file /etc/nginx/http.d/default.conf:
+server {
+    listen 80;
+    server_name app.local;
+    root /usr/share/nginx/html;
+}
+
+# configuration file /etc/nginx/stream.d/pg.conf:
+server {
+    listen 5432;
+    proxy_pass backend;
 }
