@@ -1,0 +1,45 @@
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+# configuration file /etc/nginx/nginx.conf:
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /var/log/nginx/error.log;
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+	worker_connections 768;
+}
+
+http {
+	sendfile on;
+	access_log /var/log/nginx/access.log;
+	gzip on;
+
+	# configuration file /etc/nginx/mime.types:
+	types {
+	    text/html                             html htm shtml;
+	}
+
+	# configuration file /etc/nginx/sites-enabled/default:
+	server {
+		listen 80 default_server;
+		listen [::]:80 default_server;
+		root /var/www/html;
+		server_name _;
+		location / {
+			root /srv/other;
+			try_files $uri $uri/ =404;
+		}
+	}
+
+	# configuration file /etc/nginx/sites-enabled/example.com:
+	server {
+		listen 443 ssl http2;
+		listen [::]:443 ssl http2;
+		server_name example.com www.example.com;
+		root /var/www/example;
+		ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
+		ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+	}
+}

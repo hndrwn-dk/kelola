@@ -1,0 +1,13 @@
+# configuration file /etc/nginx/nginx.conf:
+events {}
+http {
+    # configuration file /etc/nginx/conf.d/a.conf:
+    server {
+        listen 80;
+        server_name a.example.com;
+    }
+    # configuration file /etc/nginx/conf.d/b.conf:
+    server {
+        listen 443 ssl;
+        server_name b.example.com;
+        ssl_certificate /etc/ssl/b.pem;
