@@ -1,0 +1,614 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kelola/app.dart';
+import 'package:kelola/data/db/database.dart';
+import 'package:kelola/data/db/host_repository.dart';
+import 'package:kelola/data/keystore/hardware_signer.dart';
+import 'package:kelola/data/ssh/host_key_policy.dart';
+import 'package:kelola/data/ssh/session_pool.dart';
+import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/exceptions.dart';
+import 'package:kelola/domain/facts/enums.dart';
+import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/files/sftp_port.dart';
+import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/probes/probe_scope.dart';
+import 'package:kelola/domain/probes/web_lens_probe.dart';
+import 'package:kelola/domain/services/service_catalog.dart';
+import 'package:kelola/domain/services/service_detection.dart';
+import 'package:kelola/domain/services/web_lens.dart';
+import 'package:kelola/domain/sudo_hint.dart';
+import 'package:kelola/presentation/screens/web_lens_screen.dart';
+import 'package:kelola/providers.dart';
+
+const _nginx = DetectedService(
+  id: ServiceId.nginx,
+  state: ServiceState.running,
+  unit: 'nginx.service',
+  version: '1.24.0',
+  binaries: {'nginx': '/usr/sbin/nginx'},
+);
+
+HostFacts _facts() => const HostFacts(
+      osId: 'ubuntu',
+      osVersionId: '24.04',
+      prettyName: 'Ubuntu 24.04',
+      init: InitSystem.systemd,
+      systemdVersion: 255,
+      pkg: PackageManager.apt,
+      fw: FirewallBackend.none,
+      hasJournald: true,
+      journalReadable: true,
+      arch: 'x86_64',
+    );
+
+const _shop = WebVhost(
+  serverNames: ['shop.example.com', 'www.shop.example.com'],
+  listen: ['443 ssl', '[::]:443 ssl'],
+  tls: true,
+  root: '/var/www/shop',
+  certPath: '/etc/ssl/certs/shop.crt',
+  certPaths: ['/etc/ssl/certs/shop.crt'],
+  sourceFile: '/etc/nginx/conf.d/shop.conf',
+);
+const _api = WebVhost(
+  serverNames: ['api.example.com'],
+  listen: ['443 ssl'],
+  tls: true,
+  certPath: '/etc/ssl/certs/api.crt',
+  certPaths: ['/etc/ssl/certs/api.crt'],
+  sourceFile: '/etc/nginx/conf.d/api.conf',
+);
+const _blog = WebVhost(
+  serverNames: ['blog.example.com'],
+  listen: ['443 ssl'],
+  tls: true,
+  certPath: '/etc/ssl/certs/blog.crt',
+  certPaths: ['/etc/ssl/certs/blog.crt'],
+  sourceFile: '/etc/nginx/conf.d/blog.conf',
+);
+const _plain = WebVhost(
+  serverNames: ['_'],
+  listen: ['80 default_server'],
+  root: '/var/www/html',
+  sourceFile: '/etc/nginx/sites-enabled/default',
+);
+
+/// 4 vhosts: 3 TLS, one cert (shop) expiring in 10 days, 1 without TLS.
+WebLens _lens({
+  DateTime? readAt,
+  bool? configOk = true,
+  List<WebVhost> vhosts = const [_shop, _api, _blog, _plain],
+  Map<String, WebCert>? certs,
+  Map<int, int> statusCounts = const {200: 900, 301: 40, 404: 56, 502: 4},
+  Map<WebLensSection, String> sectionErrors = const {},
+  List<String> errorLogTail = const [
+    '2026/11/10 01:31:42 [error] 3159#3159: *1 connect() failed (111: Connection refused) while connecting to upstream',
+    '2026/11/10 01:31:48 [warn] 3176#3176: *2 an upstream response is buffered to a temporary file',
+    '2026/11/10 01:31:53 [notice] 3190#3190: signal process started',
+  ],
+}) {
+  final at = readAt ?? DateTime.now().toUtc();
+  return WebLens(
+    id: ServiceId.nginx,
+    readAt: at,
+    activeState: 'active',
+    configOk: configOk,
+    vhosts: vhosts,
+    certsByPath: certs ??
+        {
+          '/etc/ssl/certs/shop.crt': WebCert(
+            path: '/etc/ssl/certs/shop.crt',
+            notAfter: at.add(const Duration(days: 10, hours: 2)),
+            subjectCn: 'shop.example.com',
+            sans: const ['shop.example.com', 'www.shop.example.com'],
+          ),
+          '/etc/ssl/certs/api.crt': WebCert(
+            path: '/etc/ssl/certs/api.crt',
+            notAfter: at.add(const Duration(days: 80)),
+            subjectCn: 'api.example.com',
+            sans: const ['api.example.com'],
+          ),
+          '/etc/ssl/certs/blog.crt': WebCert(
+            path: '/etc/ssl/certs/blog.crt',
+            notAfter: at.add(const Duration(days: 60)),
+            subjectCn: 'blog.example.com',
+            sans: const ['blog.example.com'],
+          ),
+        },
+    errorLogTail: errorLogTail,
+    statusCounts: statusCounts,
+    sectionErrors: sectionErrors,
+  );
+}
+
+/// Same, but every cert is far from expiry.
+WebLens _healthyLens({bool? configOk = true}) {
+  final at = DateTime.now().toUtc();
+  return _lens(
+    readAt: at,
+    configOk: configOk,
+    certs: {
+      for (final p in [
+        '/etc/ssl/certs/shop.crt',
+        '/etc/ssl/certs/api.crt',
+        '/etc/ssl/certs/blog.crt',
+      ])
+        p: WebCert(path: p, notAfter: at.add(const Duration(days: 90))),
+    },
+  );
+}
+
+void main() {
+  group('filterVhosts', () {
+    test('all / tls / expiring / noTls', () {
+      final l = _lens();
+      final now = l.readAt;
+      expect(filterVhosts(l, VhostFilter.all, now), hasLength(4));
+      expect(filterVhosts(l, VhostFilter.tls, now), [_shop, _api, _blog]);
+      expect(filterVhosts(l, VhostFilter.expiring, now), [_shop]);
+      expect(filterVhosts(l, VhostFilter.noTls, now), [_plain]);
+    });
+
+    test('expired counts as expiring; unreadable does not', () {
+      final at = DateTime.now().toUtc();
+      final l = _lens(
+        readAt: at,
+        certs: {
+          '/etc/ssl/certs/shop.crt': WebCert(
+            path: '/etc/ssl/certs/shop.crt',
+            notAfter: at.subtract(const Duration(days: 3)),
+          ),
+          '/etc/ssl/certs/api.crt':
+              const WebCert(path: '/etc/ssl/certs/api.crt'),
+        },
+      );
+      expect(filterVhosts(l, VhostFilter.expiring, at), [_shop]);
+    });
+  });
+
+  group('screen', () {
+    late KelolaDatabase db;
+    late HostRepository repo;
+    late _Pool pool;
+    late Host host;
+
+    setUp(() async {
+      db = KelolaDatabase.memory();
+      repo = HostRepository(db);
+      pool = _Pool(repository: repo);
+      host = await repo.insert(
+        alias: 'web01',
+        address: '192.168.1.10',
+        port: 22,
+        username: 'hendra',
+      );
+      await repo.saveFacts(host.id, _facts());
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    Future<void> frames(WidgetTester tester, [int n = 12]) async {
+      for (var i = 0; i < n; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    Future<void> pumpLens(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            hostRepositoryProvider.overrideWithValue(repo),
+            sessionPoolProvider.overrideWithValue(pool),
+            hardwareSignerProvider.overrideWithValue(_BoomSigner()),
+            enrollmentProvider.overrideWith(_ReadyEnrollment.new),
+          ],
+          child: KelolaApp(
+            home: WebLensScreen(hostId: host.id, service: _nginx),
+          ),
+        ),
+      );
+      await frames(tester);
+    }
+
+    Future<void> dispose(WidgetTester tester) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    Finder vhostRow(String name) => find.widgetWithText(ServiceRow, name);
+
+    StatCard card(WidgetTester tester, String label) => tester
+        .widgetList<StatCard>(find.byType(StatCard))
+        .firstWhere((s) => s.label == label);
+
+    testWidgets('band summary copy', (tester) async {
+      pool.lens = _healthyLens();
+      await pumpLens(tester);
+      expect(pool.probes.single, isA<WebLensProbe>());
+      expect(find.text('web01'), findsOneWidget);
+      expect(find.text('nginx 1.24.0'), findsOneWidget);
+      expect(
+        find.text('Config OK · 4 vhosts · certs fine'),
+        findsOneWidget,
+      );
+      await dispose(tester);
+
+      pool.lens = _healthyLens(configOk: null);
+      await pumpLens(tester);
+      expect(
+        find.text('Config not tested · 4 vhosts · certs fine'),
+        findsOneWidget,
+      );
+      await dispose(tester);
+
+      // Worst finding wins.
+      pool.lens = _lens();
+      await pumpLens(tester);
+      expect(find.text('Certificate expires in 10 days'), findsOneWidget);
+      expect(find.textContaining('Config OK'), findsNothing);
+      final band = tester.widget<RiskBand>(
+        find
+            .ancestor(
+              of: find.text('Certificate expires in 10 days'),
+              matching: find.byType(RiskBand),
+            )
+            .first,
+      );
+      expect(band.status, HealthStatus.warning);
+      await dispose(tester);
+    });
+
+    testWidgets('three stat cards with values and unknown when section failed',
+        (tester) async {
+      pool.lens = _lens();
+      await pumpLens(tester);
+      expect(find.byType(StatCard), findsNWidgets(3));
+      expect(card(tester, 'Vhosts').value, '4');
+      expect(card(tester, 'Certs').value, '1 expiring');
+      // 4 of 1000.
+      expect(card(tester, '5xx').value, '0.4%');
+      await dispose(tester);
+
+      pool.lens = _healthyLens();
+      await pumpLens(tester);
+      expect(card(tester, 'Certs').value, 'ok');
+      await dispose(tester);
+
+      pool.lens = _lens(
+        statusCounts: const {},
+        certs: const {},
+        vhosts: const [],
+        sectionErrors: const {
+          WebLensSection.dump: 'Could not read the config dump',
+          WebLensSection.certs: 'Could not read certificates',
+          WebLensSection.access:
+              'Could not read access log: no access with or without sudo -n',
+        },
+      );
+      await pumpLens(tester);
+      expect(card(tester, 'Vhosts').value, 'unknown');
+      expect(card(tester, 'Certs').value, 'unknown');
+      expect(card(tester, '5xx').value, 'unknown');
+      // Each failed section says why, in mono.
+      for (final reason in [
+        'Could not read the config dump',
+        'Could not read certificates',
+        'Could not read access log: no access with or without sudo -n',
+      ]) {
+        final t = tester.widget<Text>(find.text(reason));
+        expect(t.style?.fontFamily, KelolaType.mono(color: Colors.black).fontFamily);
+      }
+      await dispose(tester);
+
+      // TLS vhosts but no readable cert: unknown, never "ok".
+      pool.lens = _lens(
+        certs: const {
+          '/etc/ssl/certs/shop.crt': WebCert(path: '/etc/ssl/certs/shop.crt'),
+        },
+      );
+      await pumpLens(tester);
+      expect(card(tester, 'Certs').value, 'unknown');
+      await dispose(tester);
+    });
+
+    testWidgets('pill labels include counts (ALL 4, TLS 3, EXPIRING 1, NO TLS 1)',
+        (tester) async {
+      pool.lens = _lens();
+      await pumpLens(tester);
+      for (final label in ['ALL 4', 'TLS 3', 'EXPIRING 1', 'NO TLS 1']) {
+        expect(find.text(label), findsOneWidget, reason: label);
+      }
+      // All is selected first: every vhost row.
+      expect(vhostRow('shop.example.com'), findsOneWidget);
+      expect(vhostRow('_'), findsOneWidget);
+
+      await tester.tap(find.text('EXPIRING 1'));
+      await frames(tester, 4);
+      expect(vhostRow('shop.example.com'), findsOneWidget);
+      expect(vhostRow('api.example.com'), findsNothing);
+
+      await tester.tap(find.text('NO TLS 1'));
+      await frames(tester, 4);
+      expect(vhostRow('_'), findsOneWidget);
+      expect(vhostRow('shop.example.com'), findsNothing);
+      await dispose(tester);
+    });
+
+    testWidgets('each pill empty state copy', (tester) async {
+      pool.lens = _lens(vhosts: const [], certs: const {});
+      await pumpLens(tester);
+      expect(find.text('No vhosts found.'), findsOneWidget);
+      await dispose(tester);
+
+      pool.lens = _lens(vhosts: const [_plain], certs: const {});
+      await pumpLens(tester);
+      await tester.tap(find.text('TLS 0'));
+      await frames(tester, 4);
+      expect(find.text('No TLS vhosts.'), findsOneWidget);
+      await tester.tap(find.text('EXPIRING 0'));
+      await frames(tester, 4);
+      expect(find.text('No vhosts expiring in 21 days.'), findsOneWidget);
+      await dispose(tester);
+
+      pool.lens = _lens(vhosts: const [_api]);
+      await pumpLens(tester);
+      await tester.tap(find.text('NO TLS 0'));
+      await frames(tester, 4);
+      expect(find.text('No vhosts without TLS.'), findsOneWidget);
+      await dispose(tester);
+    });
+
+    testWidgets('vhost row opens KelolaSheet with mono server strings',
+        (tester) async {
+      pool.lens = _lens(
+        certs: {
+          '/etc/ssl/certs/shop.crt': WebCert(
+            path: '/etc/ssl/certs/shop.crt',
+            notAfter: DateTime.utc(2026, 12, 1, 8, 30),
+            sans: const ['shop.example.com', 'www.shop.example.com'],
+          ),
+          '/etc/ssl/certs/api.crt':
+              const WebCert(path: '/etc/ssl/certs/api.crt'),
+        },
+      );
+      await pumpLens(tester);
+      await tester.tap(vhostRow('shop.example.com'));
+      await frames(tester, 10);
+      final sheet = find.byType(KelolaSheet);
+      expect(sheet, findsOneWidget);
+      final mono = KelolaType.mono(color: Colors.black).fontFamily;
+      for (final s in [
+        'shop.example.com www.shop.example.com',
+        '443 ssl · [::]:443 ssl',
+        '/var/www/shop',
+        '/etc/ssl/certs/shop.crt',
+        '2026-12-01 08:30 UTC',
+        'shop.example.com, www.shop.example.com',
+        '/etc/nginx/conf.d/shop.conf',
+      ]) {
+        final f = find.descendant(of: sheet, matching: find.text(s));
+        expect(f, findsOneWidget, reason: s);
+        expect(tester.widget<Text>(f).style?.fontFamily, mono, reason: s);
+      }
+      Navigator.of(tester.element(sheet)).pop();
+      await frames(tester, 10);
+
+      // Unreadable cert.
+      await tester.tap(vhostRow('api.example.com'));
+      await frames(tester, 10);
+      expect(
+        find.descendant(
+          of: find.byType(KelolaSheet),
+          matching: find.text('certificate unreadable'),
+        ),
+        findsOneWidget,
+      );
+      await dispose(tester);
+    });
+
+    testWidgets('error log section renders tail', (tester) async {
+      final tail = [
+        for (var i = 0; i < 20; i++)
+          '2026/11/10 01:31:${(10 + i).toString().padLeft(2, '0')} [error] 3159#3159: line $i',
+      ];
+      pool.lens = _lens(errorLogTail: tail);
+      await pumpLens(tester);
+      expect(find.text('ERROR LOG'), findsOneWidget);
+      final lines = tester
+          .widgetList<JournalLogLine>(find.byType(JournalLogLine))
+          .toList();
+      expect(lines, isNotEmpty);
+      expect(lines.last.message, contains('line 19'));
+      expect(lines.last.timestamp, '2026/11/10 01:31:29');
+      expect(lines.last.kind, JournalLineKind.error);
+      // Not every line inline; the sheet has the full tail.
+      expect(lines.length, lessThan(20));
+      await tester.tap(find.byType(JournalLogLine).first);
+      await frames(tester, 10);
+      final sheet = find.byType(KelolaSheet);
+      expect(sheet, findsOneWidget);
+      expect(
+        find.descendant(of: sheet, matching: find.byType(JournalLogLine)),
+        findsNWidgets(20),
+      );
+      Navigator.of(tester.element(sheet)).pop();
+      await frames(tester, 10);
+      await dispose(tester);
+
+      pool.lens = _lens(
+        errorLogTail: const [],
+        sectionErrors: const {
+          WebLensSection.errorLog:
+              'Could not read error log: no access with or without sudo -n',
+        },
+      );
+      await pumpLens(tester);
+      expect(find.byType(JournalLogLine), findsNothing);
+      expect(
+        find.text('Could not read error log: no access with or without sudo -n'),
+        findsOneWidget,
+      );
+      await dispose(tester);
+    });
+
+    testWidgets('age label', (tester) async {
+      final c = KelolaColors.dark;
+      pool.lens = _lens(
+        readAt: DateTime.now().toUtc().subtract(const Duration(minutes: 3)),
+      );
+      await pumpLens(tester);
+      final fresh = tester.widget<Text>(find.text('read 3m ago'));
+      expect(fresh.style?.color, c.dim);
+      await dispose(tester);
+
+      pool.lens = _lens(
+        readAt: DateTime.now().toUtc().subtract(const Duration(minutes: 22)),
+      );
+      await pumpLens(tester);
+      final stale = tester.widget<Text>(find.text('read 22m ago'));
+      expect(stale.style?.color, c.forHealth(HealthStatus.warning));
+      // Data stays visible.
+      expect(find.text('ALL 4'), findsOneWidget);
+      await dispose(tester);
+    });
+
+    testWidgets('sudo hint shown on SudoRequiredException', (tester) async {
+      pool.error = SudoRequiredException(
+        SudoHintContext.webServices(service: 'nginx'),
+      );
+      await pumpLens(tester);
+      expect(find.byType(ActionableError), findsOneWidget);
+      expect(find.textContaining('/etc/sudoers.d/kelola-web'), findsWidgets);
+      expect(find.byType(StatCard), findsNothing);
+      await dispose(tester);
+    });
+
+    testWidgets('real probe output renders through the parser', (tester) async {
+      pool.stdout = File(
+        'test/fixtures/services/web_lens_nginx_ubuntu.txt',
+      ).readAsStringSync();
+      await pumpLens(tester);
+      expect(card(tester, 'Vhosts').value, '3');
+      expect(vhostRow('soon.lab'), findsOneWidget);
+      expect(vhostRow('nocert.lab'), findsOneWidget);
+      expect(
+        find.text('Listens on 443 without a certificate'),
+        findsWidgets,
+      );
+      expect(find.byType(JournalLogLine), findsNWidgets(4));
+      await dispose(tester);
+    });
+
+    testWidgets('pull-to-refresh re-runs the probe', (tester) async {
+      pool.lens = _lens();
+      await pumpLens(tester);
+      expect(pool.probes, hasLength(1));
+      // Same callback the pull gesture fires.
+      unawaited(
+        tester
+            .state<RefreshIndicatorState>(find.byType(RefreshIndicator))
+            .show(),
+      );
+      await frames(tester, 30);
+      expect(pool.probes, hasLength(2));
+      await dispose(tester);
+    });
+  });
+
+  test('source has no AlertDialog, Card, ListTile', () {
+    final src =
+        File('lib/presentation/screens/web_lens_screen.dart').readAsStringSync();
+    expect(src, isNot(contains('AlertDialog')));
+    expect(RegExp(r'\bCard\(').hasMatch(src), isFalse);
+    expect(src, isNot(contains('ListTile')));
+    expect(src, isNot(contains('FloatingActionButton')));
+    expect(RegExp(r'Color\(0x').hasMatch(src), isFalse);
+    expect(src, contains('kelolaScrollPadding'));
+    expect(src, contains('KelolaSheet'));
+  });
+}
+
+class _Pool extends SshSessionPool {
+  _Pool({required super.repository})
+      : super(
+          signer: _BoomSigner(),
+          hostKeys: HostKeyPolicy(repository),
+          publicBlob: () => Uint8List(0),
+        );
+
+  final probes = <Probe<dynamic>>[];
+  WebLens? lens;
+  String? stdout;
+  Object? error;
+
+  @override
+  Future<T> execute<T>(
+    Host host,
+    Probe<T> probe, {
+    HostFacts? facts,
+    UnknownHostKeyHandler? onUnknownHostKey,
+    void Function(int done, int? total)? onProgress,
+    TransferCancel? cancel,
+    ProbeScope scope = ProbeScope.host,
+    List<int>? stdinBytes,
+  }) async {
+    probes.add(probe);
+    if (probe is WebLensProbe) {
+      final err = error;
+      if (err != null) {
+        throw err;
+      }
+      final out = stdout;
+      if (out != null) {
+        return probe.parse(out, '', 0);
+      }
+      return lens! as T;
+    }
+    throw StateError('unexpected probe ${probe.runtimeType}');
+  }
+}
+
+class _ReadyEnrollment extends EnrollmentController {
+  @override
+  EnrollmentState build() {
+    return EnrollmentState(publicBlob: Uint8List.fromList(List.filled(64, 1)));
+  }
+}
+
+class _BoomSigner implements HardwareSigner {
+  @override
+  Future<HardwareKey> generateKey(String alias) async {
+    throw StateError('no key');
+  }
+
+  @override
+  Future<Uint8List> sign(String alias, Uint8List data) async {
+    throw StateError('no key');
+  }
+
+  @override
+  Future<void> confirmPresence({
+    String reason = 'Confirm destructive action',
+  }) async {}
+
+  @override
+  Future<bool> keyExists(String alias) async => false;
+
+  @override
+  Future<void> deleteKey(String alias) async {}
+}

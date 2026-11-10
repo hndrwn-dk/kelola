@@ -123,8 +123,9 @@ void paintHazardStripe(Canvas canvas, Size size, Color bright, Color dark) {
 /// A 2-up stat tile — LOAD, MEMORY, DISK, FAILED. No gauges, no
 /// dials. A label in mono, a big display-weight number, and an
 /// optional thin meter bar underneath.
-/// Tone for a stacked [StatCard] meter segment.
-enum StatMeterTone { used, cached, free, accent }
+/// Tone for a stacked [StatCard] meter segment. [error] is the red token,
+/// for a segment that is an error finding (e.g. 5xx over threshold).
+enum StatMeterTone { used, cached, free, accent, error }
 
 class StatMeterSegment {
   const StatMeterSegment({required this.fraction, required this.tone});
@@ -148,6 +149,7 @@ class StackedStatMeter extends StatelessWidget {
         StatMeterTone.cached => c.muted,
         StatMeterTone.free => c.surface3,
         StatMeterTone.accent => c.amber,
+        StatMeterTone.error => c.red,
       };
     }
 
