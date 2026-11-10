@@ -10,8 +10,9 @@ import 'package:kelola/providers.dart';
 
 void main() {
   testWidgets('Help lists every FAQ question and answer', (tester) async {
-    // The list is lazy: a tall view builds every topic.
-    tester.view.physicalSize = const Size(1080, 12000);
+    // The list is lazy: a tall view builds every topic (taller since the
+    // Service lenses answer has paragraph breaks).
+    tester.view.physicalSize = const Size(1080, 16000);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
@@ -40,5 +41,13 @@ void main() {
     final answer = matches.single.answer;
     expect(answer, contains('kelola-web'));
     expect(answer, isNot(contains('sudo group')));
+    // Short paragraphs (HelpTopic is one Text, so a blank line separates).
+    final paragraphs = answer.split('\n\n');
+    expect(paragraphs.length, greaterThanOrEqualTo(4));
+    for (final p in paragraphs) {
+      expect(p.trim(), isNotEmpty);
+      expect(p.length, lessThan(500), reason: p);
+    }
+    expect(answer, contains('not root-owned, or that others can write'));
   });
 }

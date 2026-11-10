@@ -133,6 +133,8 @@ String webOkSummary(WebLens l, DateTime now) {
   final vhosts = webVhostsValue(l);
   final vhostsText = vhosts == 'unknown'
       ? 'vhosts unknown'
+      : vhosts == '1'
+      ? '1 vhost'
       : '$vhosts vhosts';
   final certs = webCertsValue(l, now) == 'unknown'
       ? 'certs unknown'
@@ -240,11 +242,19 @@ ConfigTestedReloadProbe? webReloadProbeFor(DetectedService service) {
   );
 }
 
-/// Error copy for a [ReloadOutcome.failed] result.
-String webReloadFailedCopy(ReloadResult r) {
-  final head = 'Reload failed. ${r.reason ?? ''}'.trim();
-  return r.reloadOutput.isEmpty ? head : '$head\n${r.reloadOutput}';
-}
+/// Error copy for a [ReloadOutcome.failed] result. The host's own output
+/// ([ReloadResult.reloadOutput]) is shown apart, in mono.
+String webReloadFailedCopy(ReloadResult r) =>
+    'Reload failed. ${r.reason ?? ''}'.trim();
+
+/// M7: the web-services sudo hint on a read-only host, where Kelola writes
+/// no sudo rules, so no grant is offered.
+String webReadOnlySudoBody(String label) =>
+    'This host\'s sudo asks for a password, so Kelola could not read the '
+    '$label configuration. Kelola never prompts for a sudo password. This '
+    'host is read-only in Kelola, so no grant is offered: grants are '
+    'unavailable while the host is read-only. Allow writes on the host to '
+    'grant read access, or add the exact lines yourself.';
 
 /// Label of the lens read grant action (spec §7b).
 const webReadGrantLabel = 'Grant read access for this lens';
@@ -400,6 +410,9 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
   /// Output of the last config test that stopped a reload.
   String? _testFailedOutput;
 
+  /// Host output of the last failed reload, shown in mono under [_error].
+  String _reloadOutput = '';
+
   @override
   void initState() {
     super.initState();
@@ -410,6 +423,7 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _reloadOutput = '';
     });
     try {
       final repo = ref.read(hostRepositoryProvider);
@@ -467,10 +481,12 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
       unit: probe.unit,
       verb: UnitVerb.reload,
     );
-    if (!allowed || !mounted) return;
+    // Something else (a read, a grant) may have started while it was open.
+    if (!allowed || !mounted || _busy) return;
     setState(() {
       _busy = true;
       _error = null;
+      _reloadOutput = '';
       _testFailedOutput = null;
     });
     var reread = false;
@@ -489,7 +505,10 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
         case ReloadOutcome.testFailed:
           setState(() => _testFailedOutput = result.testOutput);
         case ReloadOutcome.failed:
-          setState(() => _error = webReloadFailedCopy(result));
+          setState(() {
+            _error = webReloadFailedCopy(result);
+            _reloadOutput = result.reloadOutput;
+          });
       }
     } on ReadOnlyViolation {
       if (mounted) setState(() => _error = 'Host is read-only.');
@@ -528,6 +547,17 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
           children: [
             if (_error != null) ...[
               _errorView(),
+              if (_reloadOutput.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                for (final line in _reloadOutput.split('\n'))
+                  Text(
+                    line,
+                    style: KelolaType.mono(
+                      color: context.kc.muted,
+                      size: 10.5,
+                    ),
+                  ),
+              ],
               const SizedBox(height: 12),
             ],
             if (lens != null)
@@ -551,6 +581,21 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     final message = _error!;
     final host = _host;
     final hint = SudoHintContext.tryParse(message);
+    if (host != null &&
+        host.readOnly &&
+        looksLikeSudoRequired(message) &&
+        hint.kind == SudoHintKind.webServices) {
+      // No grant on a read-only host, so the hint must not point at one.
+      final stock = kelolaSudoHint(user: host.username, context: hint);
+      return ActionableError(
+        title: sudoRequiredTitle,
+        body: webReadOnlySudoBody(descriptorFor(widget.service.id).label),
+        snippet: [
+          for (final l in stock.snippet.split('\n'))
+            if (!l.contains('Grant read access')) l,
+        ].join('\n'),
+      );
+    }
     final sudo =
         host != null && !host.readOnly && looksLikeSudoRequired(message);
     // The stock button only for the per-unit grant (same path as service

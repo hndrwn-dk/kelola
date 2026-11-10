@@ -361,6 +361,25 @@ void main() {
       await dispose(tester);
     });
 
+    testWidgets('removing the host from the dashboard forgets its cached detection',
+        (tester) async {
+      await lenses().write(
+        host.id,
+        _detection(const [_nginx], at: DateTime.now().toUtc()),
+      );
+      await pumpDashboard(tester);
+      expect(find.text('nginx'), findsOneWidget);
+      await tester.tap(find.byTooltip('More'));
+      await frames(tester);
+      await tester.tap(find.text('Remove host'));
+      await frames(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+      await frames(tester, 20);
+      expect(await repo.get(host.id), isNull);
+      expect(await lenses().read(host.id), isNull);
+      await dispose(tester);
+    });
+
     testWidgets('fresh cache shows at once and skips detection',
         (tester) async {
       await lenses().write(

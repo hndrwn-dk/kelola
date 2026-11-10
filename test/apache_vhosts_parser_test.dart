@@ -63,6 +63,16 @@ void main() {
     );
   });
 
+  test('real Ubuntu apache2ctl -S: one default vhost', () {
+    // Captured from Apache 2.4.58 on Ubuntu 24.04 (AH00558 preamble kept).
+    final v = parseApacheVhosts(fixture('apache2_S_ubuntu.txt'));
+    expect(v, hasLength(1));
+    expect(v.single.listen, ['*:80']);
+    expect(v.single.serverNames, ['127.0.0.1']);
+    expect(v.single.sourceFile, '/etc/apache2/sites-enabled/000-default.conf:1');
+    expect(v.single.tls, isFalse);
+  });
+
   test('config dir by package manager', () {
     HostFacts f(PackageManager p) => HostFacts.undiscovered.copyWith(pkg: p);
     // Only the RHEL family is httpd.

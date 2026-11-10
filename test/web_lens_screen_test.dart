@@ -644,6 +644,18 @@ void main() {
       await dispose(tester);
     });
 
+    test('ok summary counts vhosts in words: 1 vhost, n vhosts', () {
+      final now = DateTime.now().toUtc();
+      WebLens l(List<WebVhost> v) =>
+          WebLens(id: ServiceId.nginx, readAt: now, configOk: true, vhosts: v);
+      expect(webOkSummary(l(const [_plain]), now), 'Config OK · 1 vhost · certs fine');
+      expect(
+        webOkSummary(l(const [_plain, _plain]), now),
+        'Config OK · 2 vhosts · certs fine',
+      );
+      expect(webOkSummary(l(const []), now), 'Config OK · 0 vhosts · certs fine');
+    });
+
     testWidgets('fact findings render as plain rows, not alarms',
         (tester) async {
       final c = KelolaColors.dark;
@@ -651,7 +663,7 @@ void main() {
       await pumpLens(tester);
       // Facts never take the band headline.
       expect(
-        find.text('Config OK · 1 vhosts · certs fine'),
+        find.text('Config OK · 1 vhost · certs fine'),
         findsOneWidget,
       );
       final fact = find.text('Default vhost only');
@@ -850,6 +862,60 @@ void main() {
         ConfigTestedReloadProbe,
         WebLensProbe,
       ]);
+      await dispose(tester);
+    });
+
+    testWidgets('a failed reload shows the host output in mono under the error',
+        (tester) async {
+      pool.lens = _healthyLens();
+      pool.reloadStdout = '@init=systemd\n---TEST---\n@rc=0\n---RELOAD---\n'
+          '|Job for nginx.service failed.\n'
+          '|See "systemctl status nginx.service" for details.\n'
+          '@rc=1\n---VERIFY---\n|ActiveState=failed\n';
+      pool.reloadExit = 1;
+      await pumpLens(tester);
+      await tapReloadAndConfirm(tester);
+      expect(find.text('Reload failed. The reload exited 1.'), findsOneWidget);
+      final mono = KelolaType.mono(color: Colors.black).fontFamily;
+      for (final line in [
+        'Job for nginx.service failed.',
+        'See "systemctl status nginx.service" for details.',
+      ]) {
+        final f = find.text(line);
+        expect(f, findsOneWidget, reason: line);
+        expect(tester.widget<Text>(f).style?.fontFamily, mono, reason: line);
+      }
+      await dispose(tester);
+    });
+
+    testWidgets('a reload confirmed while a read started meanwhile does not run',
+        (tester) async {
+      pool.lens = _healthyLens();
+      pool.reloadStdout = '@init=systemd\n---TEST---\n@rc=0\n---RELOAD---\n'
+          '@rc=0\n---VERIFY---\n|ActiveState=active\n';
+      await pumpLens(tester);
+      await tester.ensureVisible(reloadRow());
+      await tester.tap(reloadRow());
+      await frames(tester, 6);
+      expect(find.byType(MutateConfirmDialog), findsOneWidget);
+      // A pull-to-refresh starts while the confirm sheet is open.
+      pool.lensGate = Completer<void>();
+      unawaited(
+        tester
+            .state<RefreshIndicatorState>(find.byType(RefreshIndicator))
+            .show(),
+      );
+      await frames(tester, 6);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(MutateConfirmDialog),
+          matching: find.text('reload'),
+        ),
+      );
+      await frames(tester, 12);
+      expect(pool.probes.whereType<ConfigTestedReloadProbe>(), isEmpty);
+      pool.lensGate!.complete();
+      await frames(tester, 12);
       await dispose(tester);
     });
 
@@ -1264,6 +1330,25 @@ void main() {
         );
       });
 
+      testWidgets('read-only host: the hint says grants are unavailable, never to use one',
+          (tester) async {
+        await repo.setReadOnly(host.id, true);
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        await pumpLens(tester);
+        final err = find.byType(ActionableError);
+        expect(err, findsOneWidget);
+        final e = tester.widget<ActionableError>(err);
+        expect(e.body, contains('read-only'));
+        expect(e.body, contains('no grant'));
+        expect(e.body, isNot(contains('Grant read access')));
+        expect(e.snippet, isNot(contains('Grant read access')));
+        expect(find.textContaining('Grant read access'), findsNothing);
+        expect(e.onEnableSudo, isNull);
+        await dispose(tester);
+      });
+
       testWidgets('read-only host is offered no grant', (tester) async {
         await repo.setReadOnly(host.id, true);
         pool.error = SudoRequiredException(
@@ -1308,6 +1393,9 @@ class _Pool extends SshSessionPool {
   String? grantStdout;
   int grantExit = 5;
 
+  /// When set, lens reads wait for it.
+  Completer<void>? lensGate;
+
   @override
   Future<T> execute<T>(
     Host host,
@@ -1321,6 +1409,8 @@ class _Pool extends SshSessionPool {
   }) async {
     probes.add(probe);
     if (probe is WebLensProbe) {
+      final gate = lensGate;
+      if (gate != null) await gate.future;
       final err = error;
       if (err != null) {
         throw err;

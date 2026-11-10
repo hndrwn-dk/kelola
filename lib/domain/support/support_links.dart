@@ -68,7 +68,12 @@ const kSupportFaq = <SupportFaqItem>[
   SupportFaqItem(
     question: 'Service lenses',
     answer:
-        'When a host\'s dashboard opens (at most every 15 minutes, or on pull-to-refresh), Kelola detects nginx, Apache httpd, MariaDB, MySQL and PostgreSQL. Web servers appear in a STACK section; database lenses are not in this version. The web lens reads the config test, vhosts, certificate expiry, the error log tail and access-log status codes. It never reads private keys. Reads run as your login first, then sudo -n. If a section needs root, it shows as unreadable and you can tap Grant read access for this lens. Kelola shows the exact commands before you approve, writes them to /etc/sudoers.d/kelola-web and checks the file with visudo. Granting the config test lets this login run the web server config test as root, so grant it only where the server config is root-owned. Reload tests the config first and reloads only if the test passes. It is off on read-only hosts. On systemd hosts a missing reload permission can be granted per service. On OpenRC Kelola shows the sudoers hint and you add the rule yourself. Fleet shows a filter pill for each detected service, from hosts you have already opened.',
+        'When a host\'s dashboard opens (at most every 15 minutes, or on pull-to-refresh), Kelola detects nginx, Apache httpd, MariaDB, MySQL and PostgreSQL. Web servers appear in a STACK section; database lenses are not in this version.\n\n'
+        'The web lens reads the config test, vhosts, certificate expiry, the error log tail and access-log status codes. It never reads private keys. Reads run as your login first, then sudo -n.\n\n'
+        'If a section needs root, it shows as unreadable and you can tap Grant read access for this lens. Kelola shows the exact commands before you approve, writes them to /etc/sudoers.d/kelola-web and checks the file with visudo. A certificate or log in a directory that is not root-owned, or that others can write, is not granted.\n\n'
+        'Granting the config test lets this login run the web server config test as root, so grant it only where the server config is root-owned. No grant is offered on read-only hosts.\n\n'
+        'Reload tests the config first and reloads only if the test passes. It is off on read-only hosts. On systemd hosts a missing reload permission can be granted per service. On OpenRC Kelola shows the sudoers hint and you add the rule yourself.\n\n'
+        'Fleet shows a filter pill for each detected service, from hosts you have already opened.',
   ),
   SupportFaqItem(
     question: 'What does Kelola Pro add?',

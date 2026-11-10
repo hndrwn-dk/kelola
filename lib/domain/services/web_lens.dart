@@ -140,6 +140,8 @@ class WebLens {
     if (all.any((f) => f.level == WebFindingLevel.warning)) {
       return HealthStatus.warning;
     }
+    // Starting or reloading: not a failure, but not known healthy yet.
+    if (_transitionalStates.contains(activeState)) return HealthStatus.unknown;
     // An empty, error-free cert section alone (no TLS) is not a read.
     final readSomething =
         WebLensSection.values.any(
@@ -167,7 +169,9 @@ class WebLens {
     }
 
     final state = activeState;
-    if (state != null && !_runningStates.contains(state)) {
+    if (state != null &&
+        !_runningStates.contains(state) &&
+        !_transitionalStates.contains(state)) {
       failed.add(
         WebFinding(
           kind: WebFindingKind.serviceNotActive,
@@ -198,7 +202,7 @@ class WebLens {
         failed.add(
           WebFinding(
             kind: WebFindingKind.certExpired,
-          level: WebFindingLevel.failed,
+            level: WebFindingLevel.failed,
             message: 'Certificate expired',
             subject: subject,
           ),
@@ -207,7 +211,7 @@ class WebLens {
         failed.add(
           WebFinding(
             kind: WebFindingKind.certExpiring,
-          level: WebFindingLevel.failed,
+            level: WebFindingLevel.failed,
             message: 'Certificate expires in ${_days(days)}',
             subject: subject,
           ),
@@ -233,7 +237,7 @@ class WebLens {
       facts.add(
         WebFinding(
           kind: WebFindingKind.certUnreadable,
-            level: WebFindingLevel.fact,
+          level: WebFindingLevel.fact,
           message: 'Certificate unreadable',
           subject: p,
         ),
@@ -250,7 +254,7 @@ class WebLens {
       warning.add(
         WebFinding(
           kind: WebFindingKind.http5xx,
-            level: WebFindingLevel.warning,
+          level: WebFindingLevel.warning,
           message: '5xx at $pct% of the last $total requests',
         ),
       );
@@ -280,7 +284,7 @@ class WebLens {
       facts.add(
         const WebFinding(
           kind: WebFindingKind.defaultVhostOnly,
-            level: WebFindingLevel.fact,
+          level: WebFindingLevel.fact,
           message: 'Default vhost only',
         ),
       );
@@ -299,7 +303,10 @@ class WebLens {
   }
 }
 
-const _runningStates = {'active', 'reloading', 'refreshing', 'started'};
+const _runningStates = {'active', 'refreshing', 'started'};
+
+/// systemd on the way up or mid-reload: no finding either way.
+const _transitionalStates = {'activating', 'reloading'};
 
 String _days(int d) => d == 1 ? '1 day' : '$d days';
 

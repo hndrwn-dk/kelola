@@ -86,6 +86,20 @@ void main() {
     expect(lens(activeState: null).findings, isEmpty);
   });
 
+  test('activating or reloading: no finding, and not healthy either', () {
+    for (final s in ['activating', 'reloading']) {
+      final l = lens(activeState: s);
+      expect(l.findings, isEmpty, reason: s);
+      expect(l.overall, HealthStatus.unknown, reason: s);
+    }
+    // A real finding still wins.
+    expect(
+      lens(activeState: 'activating', configOk: false).overall,
+      HealthStatus.failed,
+    );
+    expect(lens(activeState: 'active').overall, HealthStatus.healthy);
+  });
+
   test('cert expired → failed', () {
     final l = withCertExpiring(const Duration(hours: -1));
     expect(levels(l), [WebFindingLevel.failed]);
