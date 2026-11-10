@@ -1,0 +1,4 @@
+notAfter=Nov 15 01:32:00 2026 GMT
+subject=CN = soon.lab
+X509v3 Subject Alternative Name: 
+    DNS:soon.lab, DNS:www.soon.lab

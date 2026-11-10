@@ -33,6 +33,10 @@ enum SudoHintKind {
   processSignal,
   packages,
   firewall,
+
+  /// M52 lens reads (config test, config dump, certificate and log reads).
+  /// Granted per lens in `/etc/sudoers.d/kelola-web`, never by Enable.
+  webServices,
 }
 
 class SudoHintContext {
@@ -70,6 +74,12 @@ class SudoHintContext {
       verb: verb,
       target: target,
     );
+  }
+
+  /// M52: a web lens read needs sudo. [service] is `nginx` or `apache`
+  /// ([ServiceId] name), carried in [target].
+  factory SudoHintContext.webServices({required String service}) {
+    return SudoHintContext(kind: SudoHintKind.webServices, target: service);
   }
 
   /// Starts the hint fields in a [SudoRequiredException] message. Error text
@@ -255,6 +265,8 @@ SudoHint kelolaSudoHint({
     case SudoHintKind.firewall:
       final spec = context.binary ?? '/usr/bin/firewall-cmd --list-all';
       return _binaryHint(user: user, spec: spec, bodyLead: spec);
+    case SudoHintKind.webServices:
+      return _webServicesHint(user: user, service: context.target);
     case SudoHintKind.generic:
       return SudoHint(
         body: sudoRequiredBody,
@@ -308,6 +320,37 @@ SudoHint _binaryHint({
         '$visudoKelolaCommand\n'
         '# then paste:\n'
         '$rule\n',
+  );
+}
+
+/// Per-lens read grant file. Written from the lens screen, never by Enable.
+const _webSudoersPath = '/etc/sudoers.d/kelola-web';
+
+SudoHint _webServicesHint({required String user, String? service}) {
+  // [service] travels through the exception text; only known names are shown.
+  final (label, bin, dump) = switch (service) {
+    'nginx' => ('nginx', '<nginx>', '-T'),
+    'apache' => ('Apache', '<apachectl>', '-S'),
+    _ => ('this web server', '<server>', '-T'),
+  };
+  return SudoHint(
+    body:
+        'This host\'s sudo asks for a password, so Kelola could not read the '
+        '$label configuration. Kelola never prompts for a sudo password. '
+        'Use Grant read access for this lens: it adds exact read-only lines '
+        '(config test, config dump, each certificate, the error and access '
+        'logs) to $_webSudoersPath. Enable Kelola sudo does not cover lens '
+        'reads.',
+    snippet:
+        '# path: $_webSudoersPath  mode: 0440\n'
+        '# Use "Grant read access for this lens" on the $label lens.\n'
+        '# It writes exact lines only, never a wildcard, for example:\n'
+        '# $user ALL=(root) NOPASSWD: $bin -t\n'
+        '# $user ALL=(root) NOPASSWD: $bin $dump\n'
+        '# $user ALL=(root) NOPASSWD: <openssl> x509 -noout -enddate '
+        '-subject -ext subjectAltName -in <one certificate path>\n'
+        '# $user ALL=(root) NOPASSWD: <tail> -n 60 <error log>\n'
+        '# $user ALL=(root) NOPASSWD: <tail> -n 2000 <access log>\n',
   );
 }
 

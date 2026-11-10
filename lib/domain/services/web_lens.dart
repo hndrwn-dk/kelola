@@ -1,7 +1,9 @@
+import 'package:kelola/design/kelola_theme.dart';
+
 import 'service_catalog.dart';
 
-/// M52: web lens data model (nginx and Apache httpd). Data only; severity
-/// (`overall`, `findings`) is added with the severity table in a later task.
+/// M52: web lens data model (nginx and Apache httpd), with the §5c severity
+/// table in [WebLens.findings].
 
 enum WebLensSection { active, configTest, dump, certs, errorLog, access }
 
@@ -109,4 +111,181 @@ class WebLens {
   final Map<String, String> toolPaths;
   final String? errorLogPath;
   final String? accessLogPath;
+
+  /// Worst finding (facts never count). [HealthStatus.unknown] only when no
+  /// section at all could be read.
+  HealthStatus get overall {
+    final all = findings;
+    if (all.any((f) => f.level == WebFindingLevel.failed)) {
+      return HealthStatus.failed;
+    }
+    if (all.any((f) => f.level == WebFindingLevel.warning)) {
+      return HealthStatus.warning;
+    }
+    // An empty, error-free cert section alone (no TLS) is not a read.
+    final readSomething =
+        WebLensSection.values.any(
+          (s) => s != WebLensSection.certs && !sectionErrors.containsKey(s),
+        ) ||
+        certsByPath.values.any((c) => c.notAfter != null);
+    return readSomething ? HealthStatus.healthy : HealthStatus.unknown;
+  }
+
+  /// Spec §5c, ordered failed, warning, fact.
+  List<WebFinding> get findings {
+    final failed = <WebFinding>[];
+    final warning = <WebFinding>[];
+    final facts = <WebFinding>[];
+
+    if (configOk == false) {
+      failed.add(
+        WebFinding(
+          level: WebFindingLevel.failed,
+          message: 'Config test failed',
+          subject: configErrors.isEmpty ? null : configErrors.first,
+        ),
+      );
+    }
+
+    final state = activeState;
+    if (state != null && !_runningStates.contains(state)) {
+      failed.add(
+        WebFinding(
+          level: WebFindingLevel.failed,
+          message: 'Service not active',
+          subject: state,
+        ),
+      );
+    }
+
+    // -S cannot tie Apache certs to vhosts; nginx certs not referenced by a
+    // vhost (http{} or stream level) are still served. Check every cert read.
+    for (final cert in certsByPath.values) {
+      final days = cert.daysLeft(readAt);
+      if (days == null) {
+        facts.add(
+          WebFinding(
+            level: WebFindingLevel.fact,
+            message: 'Certificate unreadable',
+            subject: cert.path,
+          ),
+        );
+        continue;
+      }
+      final subject = _certSubject(cert);
+      if (days < 0) {
+        failed.add(
+          WebFinding(
+            level: WebFindingLevel.failed,
+            message: 'Certificate expired',
+            subject: subject,
+          ),
+        );
+      } else if (days <= 7) {
+        failed.add(
+          WebFinding(
+            level: WebFindingLevel.failed,
+            message: 'Certificate expires in ${_days(days)}',
+            subject: subject,
+          ),
+        );
+      } else if (days <= 21) {
+        warning.add(
+          WebFinding(
+            level: WebFindingLevel.warning,
+            message: 'Certificate expires in ${_days(days)}',
+            subject: subject,
+          ),
+        );
+      }
+    }
+    // A vhost cert that was never read (path refused or capped).
+    final missing = <String>{
+      for (final v in vhosts)
+        for (final p in v.certPaths)
+          if (!certsByPath.containsKey(p)) p,
+    };
+    for (final p in missing) {
+      facts.add(
+        WebFinding(
+          level: WebFindingLevel.fact,
+          message: 'Certificate unreadable',
+          subject: p,
+        ),
+      );
+    }
+
+    final total = statusCounts.values.fold<int>(0, (a, b) => a + b);
+    var errors5xx = 0;
+    statusCounts.forEach((code, n) {
+      if (code >= 500 && code <= 599) errors5xx += n;
+    });
+    if (total >= 100 && errors5xx * 100 >= total * 5) {
+      final pct = (errors5xx * 100 / total).toStringAsFixed(1);
+      warning.add(
+        WebFinding(
+          level: WebFindingLevel.warning,
+          message: '5xx at $pct% of the last $total requests',
+        ),
+      );
+    }
+
+    for (final v in vhosts) {
+      if (!v.listen.any(_listensOn443)) continue;
+      final noCert = id == ServiceId.apache
+          // Apache: only when the config has no certificate at all.
+          ? certsByPath.isEmpty &&
+                !sectionErrors.containsKey(WebLensSection.certs)
+          : v.certPaths.isEmpty;
+      if (noCert) {
+        warning.add(
+          WebFinding(
+            level: WebFindingLevel.warning,
+            message: 'Listens on 443 without a certificate',
+            subject: v.serverNames.isEmpty ? v.sourceFile : v.serverNames.first,
+          ),
+        );
+      }
+    }
+
+    if (vhosts.isNotEmpty &&
+        vhosts.every((v) => v.serverNames.every(_isDefaultName))) {
+      facts.add(
+        const WebFinding(
+          level: WebFindingLevel.fact,
+          message: 'Default vhost only',
+        ),
+      );
+    }
+
+    return [...failed, ...warning, ...facts];
+  }
+
+  String _certSubject(WebCert cert) {
+    for (final v in vhosts) {
+      if (v.certPaths.contains(cert.path) && v.serverNames.isNotEmpty) {
+        return v.serverNames.first;
+      }
+    }
+    return cert.subjectCn ?? cert.path;
+  }
+}
+
+const _runningStates = {'active', 'reloading', 'refreshing', 'started'};
+
+String _days(int d) => d == 1 ? '1 day' : '$d days';
+
+/// `443`, `443 ssl`, `[::]:443 ssl http2`, `0.0.0.0:443`, `*:443`.
+bool _listensOn443(String listen) {
+  final first = listen.trim().split(RegExp(r'\s+')).first;
+  final i = first.lastIndexOf(':');
+  final port = i >= 0 ? first.substring(i + 1) : first;
+  return port == '443';
+}
+
+/// `_`, a bare IP or `localhost`: the catch-all, not a named site.
+bool _isDefaultName(String name) {
+  if (name.isEmpty || name == '_' || name == 'localhost') return true;
+  if (name.contains(':')) return true; // IPv6 literal
+  return RegExp(r'^[0-9.]+$').hasMatch(name);
 }
