@@ -321,6 +321,11 @@ Future<bool> runWebGrantFlow({
     confirmLabel: 'Add rules',
     probe: WebSudoersGrantProbe(grant),
     done: 'Read access granted · reading again',
+    // Cert or log paths the host refused (directory not root-owned or
+    // writable): their lines were left out, the rest installed.
+    doneDetail: (skipped) => (skipped as List<String>)
+        .map(webGrantSkippedCopy)
+        .join('\n'),
     failed: 'Could not add the sudo rules',
   );
 }
@@ -339,8 +344,9 @@ Future<bool> _runExactGrantFlow({
   required String path,
   required List<String> lines,
   required String confirmLabel,
-  required Probe<void> probe,
+  required Probe<Object?> probe,
   required String done,
+  String Function(Object? result)? doneDetail,
   required String failed,
 }) async {
   final confirmed = await showModalBottomSheet<bool>(
@@ -438,7 +444,7 @@ Future<bool> _runExactGrantFlow({
       return false;
     }
     try {
-      await runHostProbe(
+      final result = await runHostProbe(
         ref: ref,
         context: context,
         host: host,
@@ -446,9 +452,12 @@ Future<bool> _runExactGrantFlow({
         probe: probe,
         stdinBytes: utf8.encode('$pass\n'),
       );
+      final detail = doneDetail?.call(result) ?? '';
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(done)),
+          SnackBar(
+            content: Text(detail.isEmpty ? done : '$done\n$detail'),
+          ),
         );
       }
       return true;

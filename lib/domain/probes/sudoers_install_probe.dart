@@ -91,8 +91,10 @@ class UnitSudoersGrantProbe extends Probe<void> {
 }
 
 /// Adds a lens's exact read rules to [kelolaWebSudoersPath] (M52 §7b). The
-/// sudo password arrives on stdin only.
-class WebSudoersGrantProbe extends Probe<void> {
+/// sudo password arrives on stdin only. Returns the cert and log paths whose
+/// lines the host refused to install ([webGrantSkippedMarker]); the other
+/// lines were installed.
+class WebSudoersGrantProbe extends Probe<List<String>> {
   const WebSudoersGrantProbe(this.grant);
 
   final WebSudoersGrant grant;
@@ -110,13 +112,17 @@ class WebSudoersGrantProbe extends Probe<void> {
   String command(HostFacts facts) => buildWebGrantScript(grant);
 
   @override
-  void parse(String stdout, String stderr, int exitCode) {
+  List<String> parse(String stdout, String stderr, int exitCode) {
     final untrusted = webGrantUntrustedBinary(stdout);
     if (untrusted != null) {
       throw KelolaException(webGrantUntrustedCopy(untrusted));
     }
+    final skipped = webGrantSkippedPaths(stdout);
     if (exitCode == 0 && stdout.contains(webGrantOkMarker)) {
-      return;
+      return skipped;
+    }
+    if (exitCode == webGrantNothingExit && skipped.isNotEmpty) {
+      throw KelolaException(skipped.map(webGrantSkippedCopy).join('\n'));
     }
     final err = stderr.trim();
     throw KelolaException(err.isEmpty ? 'Could not add the sudo rules' : err);

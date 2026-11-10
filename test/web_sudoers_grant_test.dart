@@ -335,6 +335,40 @@ void main() {
       }
     });
 
+    test('each cert and log line names the one path it depends on', () {
+      final g = WebSudoersGrant.tryCreate(
+        user: 'hendr',
+        id: ServiceId.nginx,
+        binaries: _nginxBins,
+        toolPaths: _tools,
+        certPaths: const ['/etc/ssl/certs/a.pem', '/etc/ssl/a b.pem'],
+        errorLog: '/var/log/nginx/error.log',
+        accessLog: '/var/log/nginx/access.log',
+      )!;
+      expect(g.lines, hasLength(5));
+      expect(g.linePaths, [
+        null,
+        null,
+        '/etc/ssl/certs/a.pem',
+        '/var/log/nginx/error.log',
+        '/var/log/nginx/access.log',
+      ]);
+      for (var i = 0; i < g.lines.length; i++) {
+        final p = g.linePaths[i];
+        if (p != null) expect(g.lines[i], endsWith(' $p'));
+      }
+      // The same file as error and access log: two lines, one path.
+      final same = WebSudoersGrant.tryCreate(
+        user: 'hendr',
+        id: ServiceId.nginx,
+        binaries: const {},
+        toolPaths: _tools,
+        errorLog: '/var/log/nginx/all.log',
+        accessLog: '/var/log/nginx/all.log',
+      )!;
+      expect(same.linePaths, ['/var/log/nginx/all.log', '/var/log/nginx/all.log']);
+    });
+
     test('the grant is null without lines', () {
       expect(
         WebSudoersGrant.tryCreate(
@@ -557,6 +591,67 @@ echo "subject=CN = shop.example.com"''');
       }
     });
 
+    test('each cert and log path is walked before anything is read, and gates only its own line', () {
+      final g = grant();
+      final script = buildWebGrantScript(g);
+      final firstRead = script.indexOf('test -f');
+      final paths = [for (final p in g.linePaths) ?p];
+      expect(paths, hasLength(3));
+      for (var j = 0; j < paths.length; j++) {
+        final b64 = base64Encode(utf8.encode(paths[j]));
+        final walk = script.indexOf(
+          'if kelola_walk "\$(printf \'%s\' \'$b64\' | base64 -d)" path; '
+          'then KELOLA_P$j=1; else '
+          "printf '%s %s\\n' '$webGrantSkippedMarker' '$b64'; fi",
+        );
+        expect(walk, greaterThan(0), reason: paths[j]);
+        expect(walk, lessThan(firstRead), reason: paths[j]);
+        // Carried encoded only.
+        expect(script, isNot(contains(paths[j])));
+      }
+      for (var i = 0; i < g.lines.length; i++) {
+        final v = i == 0 ? 'LINE' : 'LINE$i';
+        final p = g.linePaths[i];
+        final merge = 'grep -qxF -- "\$$v" "\$TMP" || '
+            "printf '%s\\n' \"\$$v\" >> \"\$TMP\"";
+        if (p == null) {
+          expect(script, contains('\n$merge\n'), reason: v);
+        } else {
+          final j = paths.indexOf(p);
+          expect(
+            script,
+            contains('if [ "\$KELOLA_P$j" = 1 ]; then $merge; fi'),
+            reason: v,
+          );
+          expect(
+            script,
+            contains(
+              'if [ "\$KELOLA_P$j" = 1 ]; then printf \'%s\\n\' '
+              '"\$SUDO_PASS" | sudo -S -p \'\' grep -qxF -- "\$$v" ',
+            ),
+            reason: v,
+          );
+        }
+      }
+      // With binary lines present something is always installed; with only
+      // path lines, all skipped stops before sudo.
+      expect(script, isNot(contains('exit 6')));
+      final logsOnly = WebSudoersGrant.tryCreate(
+        user: 'hendr',
+        id: ServiceId.nginx,
+        binaries: const {},
+        toolPaths: _tools,
+        errorLog: '/var/log/nginx/error.log',
+        accessLog: '/var/log/nginx/access.log',
+      )!;
+      final s2 = buildWebGrantScript(logsOnly);
+      final stop = s2.indexOf(
+        '[ "\$KELOLA_P0" = 1 ] || [ "\$KELOLA_P1" = 1 ] || exit 6',
+      );
+      expect(stop, greaterThan(0));
+      expect(stop, lessThan(s2.indexOf('test -f')));
+    });
+
     test('unit grant script is byte-identical to PR #17', () {
       final snap = (jsonDecode(
         File('test/fixtures/sudoers/unit_grant_script_pre_m52.json')
@@ -734,14 +829,17 @@ cp "\$src" "\$dst"''');
 
     List<String> calls() => log.existsSync() ? log.readAsLinesSync() : [];
 
+    // The host-side path check is real (only find is stubbed), so the cert
+    // and log arguments are files every Linux has; these tests cover the
+    // merge, the path check has its own tests.
     final g = WebSudoersGrant.tryCreate(
       user: 'hendr',
       id: ServiceId.nginx,
       binaries: _nginxBins,
       toolPaths: _tools,
-      certPaths: const ['/etc/ssl/certs/a.pem', '/etc/ssl/certs/b.pem'],
-      errorLog: '/var/log/nginx/error.log',
-      accessLog: '/var/log/nginx/access.log',
+      certPaths: const ['/etc/passwd', '/etc/group'],
+      errorLog: '/etc/passwd',
+      accessLog: '/etc/group',
     )!;
 
     test(
@@ -932,9 +1030,21 @@ cp "\$src" "\$dst"''');
             )!,
           ];
           for (final g in grants) {
+            // The same merge as buildWebGrantScript, without its host-side
+            // checks (tested on real files below): these paths do not exist
+            // here, and the point is visudo's view of the lines.
             final p = await Process.start(
               'sh',
-              ['-c', buildWebGrantScript(g)],
+              [
+                '-c',
+                buildSudoersGrantScript(
+                  path: kelolaWebSudoersPath,
+                  header: '# Kelola: lens read rules, one command per line. '
+                      'Safe to edit.',
+                  lines: g.lines,
+                  okMarker: webGrantOkMarker,
+                ),
+              ],
               environment: {'PATH': '${dir.path}:/usr/bin:/bin'},
             );
             p.stdin.write('pw\n');
@@ -997,6 +1107,37 @@ cp "\$src" "\$dst"''');
       probe.parse(webGrantOkMarker, '', 0);
     });
 
+    test('skipped paths: listed, validated, and only fatal when nothing was installed', () {
+      final b64 = base64Encode(utf8.encode('/home/deploy/log/error.log'));
+      final junk = base64Encode(utf8.encode('/tmp/a b\nroot'));
+      final out = '$webGrantSkippedMarker $b64\n'
+          '$webGrantSkippedMarker $junk\n$webGrantOkMarker\n';
+      expect(probe.parse(out, '', 0), ['/home/deploy/log/error.log', 'a path']);
+      expect(probe.parse(webGrantOkMarker, '', 0), isEmpty);
+      expect(
+        webGrantSkippedCopy('/home/deploy/log/error.log'),
+        'Not granted: /home/deploy/log/error.log is in a directory that is '
+        'not root-owned or is writable by others.',
+      );
+      expect(
+        () => probe.parse('$webGrantSkippedMarker $b64\n', '', 6),
+        throwsA(
+          isA<KelolaException>().having(
+            (e) => e.message,
+            'message',
+            webGrantSkippedCopy('/home/deploy/log/error.log'),
+          ),
+        ),
+      );
+      // Another failure keeps its own error.
+      expect(
+        () => probe.parse('$webGrantSkippedMarker $b64\n', 'visudo: bad', 1),
+        throwsA(
+          isA<KelolaException>().having((e) => e.message, 'message', 'visudo: bad'),
+        ),
+      );
+    });
+
     test('an untrusted binary names itself, validated', () {
       final b64 = base64Encode(utf8.encode('/usr/sbin/nginx'));
       expect(
@@ -1040,10 +1181,16 @@ cp "\$src" "\$dst"''');
     });
   });
 
-  group('binary trust check (real files)', () {
-    final me = Platform.isWindows
-        ? ''
-        : (Process.runSync('id', ['-un']).stdout as String).trim();
+  final me = Platform.isWindows
+      ? ''
+      : (Process.runSync('id', ['-un']).stdout as String).trim();
+  // The owners mechanism takes plain names only; anything else cannot run
+  // these cases (say why instead of erroring).
+  final meOk = RegExp(r'^[a-z_][a-z0-9_-]{0,31}$').hasMatch(me);
+
+  group('binary trust check (real files)', skip: Platform.isWindows || meOk
+      ? false
+      : '`id -un` gave "$me", which is not a plain owner name', () {
     final isRoot = me == 'root';
 
     /// Trusted owners for the temp-file cases: root (for `/` and the system
@@ -1310,6 +1457,263 @@ cp "\$src" "\$dst"''');
       final (rc, out) = await check(['${root.path}/nope'], owners: owners);
       expect(rc, isNot(0));
       expect(untrusted(out), '${root.path}/nope');
+    });
+
+    test('a readlink target ending in a newline fails closed', () async {
+      if (!ready()) return;
+      // `$(...)` strips trailing newlines, so the walk would check `real`
+      // while the kernel follows `real<newline>`.
+      final d = sub('sbin');
+      exe('${d.path}/real');
+      exe('${d.path}/real\n', mode: '777');
+      final link = Link('${d.path}/nginx')..createSync('${d.path}/real\n');
+      final (rc, out) = await check([link.path], owners: owners);
+      expect(rc, isNot(0), reason: out);
+      expect(untrusted(out), link.path);
+      final mid = Link('${d.path}/mid')..createSync('real\nx');
+      final (rc2, out2) = await check([mid.path], owners: owners);
+      expect(rc2, isNot(0), reason: out2);
+    });
+
+    /// Runs the path checks; returns the skipped paths (decoded).
+    Future<List<String>> skippedOf(List<String> paths) async {
+      final r = await Process.run('sh', [
+        '-c',
+        'set -eu\n${webBinaryTrustShell(const [], paths: paths, owners: owners)}'
+            'echo CHECK_PASSED',
+      ]);
+      expect(r.exitCode, 0, reason: '${r.stdout}${r.stderr}');
+      expect(r.stdout, contains('CHECK_PASSED'));
+      return webGrantSkippedPaths(r.stdout as String);
+    }
+
+    test('a log in a writable directory is skipped, a clean one kept', () async {
+      if (!ready()) return;
+      final good = File('${sub('log').path}/error.log')..writeAsStringSync('x');
+      final bad = File('${sub('app/log', mode: '777').path}/error.log')
+        ..writeAsStringSync('x');
+      final upper = File('${sub('w/x').path}/access.log')
+        ..writeAsStringSync('x');
+      Process.runSync('chmod', ['775', '${root.path}/w']);
+      expect(await skippedOf([good.path, bad.path, upper.path]), [
+        bad.path,
+        upper.path,
+      ]);
+    });
+
+    test('a log file itself may be owned by anyone or writable', () async {
+      if (!ready()) return;
+      // tail only reads it; only who can replace it (its directory) counts.
+      final f = File('${sub('log').path}/access.log')..writeAsStringSync('x');
+      Process.runSync('chmod', ['666', f.path]);
+      if (isRoot) Process.runSync('chown', ['nobody', f.path]);
+      expect(await skippedOf([f.path]), isEmpty);
+    });
+
+    test('a symlinked log planted in a writable directory is skipped', () async {
+      if (!ready()) return;
+      final d = sub('app/log', mode: '777');
+      final link = Link('${d.path}/error.log')..createSync('/etc/shadow');
+      // A clean link to it does not launder it either.
+      final via = Link('${sub('log').path}/error.log')..createSync(link.path);
+      expect(await skippedOf([link.path, via.path]), [link.path, via.path]);
+    });
+
+    test('a cert through a user-owned symlink is skipped', () async {
+      if (!isRoot) {
+        markTestSkipped('needs root to own the link as another user');
+        return;
+      }
+      if (!ready()) return;
+      final link = Link('${sub('certs').path}/site.pem')
+        ..createSync('/etc/shadow');
+      Process.runSync('chown', ['-h', 'nobody', link.path]);
+      final real = File('${sub('real').path}/site.pem')..writeAsStringSync('');
+      final clean = Link('${sub('live').path}/site.pem')..createSync(real.path);
+      expect(await skippedOf([link.path, clean.path]), [link.path]);
+    });
+
+    test('a missing path, a directory or `/` is skipped', () async {
+      if (!ready()) return;
+      final d = sub('log');
+      expect(await skippedOf(['${d.path}/nope.log', d.path, '/']), [
+        '${d.path}/nope.log',
+        d.path,
+        // Not a plain path: named generically.
+        'a path',
+      ]);
+    });
+
+    group('grant script with real files', () {
+      late Directory bin;
+      late File target;
+      late File log;
+
+      setUp(() {
+        if (!baseClean) return;
+        bin = Directory.systemTemp.createTempSync('kelola_web_stub');
+        target = File('${bin.path}/kelola-web');
+        log = File('${bin.path}/calls.log');
+        void stub(String name, String body) {
+          File('${bin.path}/$name').writeAsStringSync('#!/bin/sh\n$body\n');
+          Process.runSync('chmod', ['+x', '${bin.path}/$name']);
+        }
+
+        stub('sudo', '''
+[ "\$1" = -S ] || exit 9
+shift 3
+IFS= read -r pw
+for a; do
+  shift
+  [ "\$a" = $kelolaWebSudoersPath ] && a=${target.path}
+  set -- "\$@" "\$a"
+done
+echo "sudo \$1" >> ${log.path}
+exec "\$@"''');
+        stub('visudo', 'exit 0');
+        stub('install', '''
+eval "src=\\\${\$((\$# - 1))}"
+eval "dst=\\\${\$#}"
+cp "\$src" "\$dst"''');
+      });
+
+      tearDown(() {
+        if (baseClean) bin.deleteSync(recursive: true);
+      });
+
+      Future<ProcessResult> run(WebSudoersGrant g) async {
+        final p = await Process.start(
+          'sh',
+          ['-c', buildWebGrantScript(g, trustOwners: owners)],
+          // Real find, readlink and base64.
+          environment: {'PATH': '${bin.path}:/usr/bin:/bin'},
+        );
+        p.stdin.write('pw\n');
+        await p.stdin.close();
+        final out = await p.stdout.transform(utf8.decoder).join();
+        final err = await p.stderr.transform(utf8.decoder).join();
+        return ProcessResult(p.pid, await p.exitCode, out, err);
+      }
+
+      /// openssl and tail as they sit on this machine, if their chain is
+      /// clean (the binaries stay all-or-nothing).
+      Future<Map<String, String>?> tools() async {
+        const t = {'openssl': '/usr/bin/openssl', 'tail': '/usr/bin/tail'};
+        for (final p in t.values) {
+          if (!File(p).existsSync()) return null;
+        }
+        final (rc, _) = await check(t.values.toList());
+        return rc == 0 ? t : null;
+      }
+
+      test('skipped lines left out, the rest installed, one marker each', () async {
+        if (!ready()) return;
+        final t = await tools();
+        if (t == null) {
+          markTestSkipped('/usr/bin/openssl or /usr/bin/tail missing here');
+          return;
+        }
+        final goodCert = File('${sub('certs').path}/a.pem')
+          ..writeAsStringSync('');
+        final badCert = Link('${sub('home/certs', mode: '777').path}/b.pem')
+          ..createSync('/etc/shadow');
+        final badLog = Link('${sub('home/log', mode: '777').path}/error.log')
+          ..createSync('/etc/shadow');
+        final goodLog = File('${sub('log').path}/access.log')
+          ..writeAsStringSync('');
+        final g = WebSudoersGrant.tryCreate(
+          user: 'hendr',
+          id: ServiceId.nginx,
+          binaries: const {},
+          toolPaths: t,
+          certPaths: [goodCert.path, badCert.path],
+          errorLog: badLog.path,
+          accessLog: goodLog.path,
+        )!;
+        expect(g.lines, hasLength(4));
+        final r = await run(g);
+        expect(r.exitCode, 0, reason: '${r.stdout}${r.stderr}');
+        expect(r.stdout, contains(webGrantOkMarker));
+        expect(webGrantSkippedPaths(r.stdout as String), [
+          badCert.path,
+          badLog.path,
+        ]);
+        expect(target.readAsLinesSync(), [
+          '# Kelola: lens read rules, one command per line. Safe to edit.',
+          g.lines[0],
+          g.lines[3],
+        ]);
+        final skipped = WebSudoersGrantProbe(
+          g,
+        ).parse(r.stdout as String, r.stderr as String, r.exitCode);
+        expect(skipped, [badCert.path, badLog.path]);
+      });
+
+      test('a clean root chain installs every line', () async {
+        if (!ready()) return;
+        final t = await tools();
+        if (t == null) {
+          markTestSkipped('/usr/bin/openssl or /usr/bin/tail missing here');
+          return;
+        }
+        final cert = File('${sub('real').path}/a.pem')..writeAsStringSync('');
+        final live = Link('${sub('live').path}/a.pem')..createSync(cert.path);
+        final err = File('${sub('log').path}/error.log')..writeAsStringSync('');
+        final g = WebSudoersGrant.tryCreate(
+          user: 'hendr',
+          id: ServiceId.nginx,
+          binaries: const {},
+          toolPaths: t,
+          certPaths: [live.path],
+          errorLog: err.path,
+          accessLog: err.path,
+        )!;
+        final r = await run(g);
+        expect(r.exitCode, 0, reason: '${r.stdout}${r.stderr}');
+        expect(r.stdout, isNot(contains(webGrantSkippedMarker)));
+        expect(target.readAsLinesSync().skip(1), g.lines);
+        expect(
+          WebSudoersGrantProbe(g).parse(r.stdout as String, '', 0),
+          isEmpty,
+        );
+      });
+
+      test('every line skipped: nothing read or installed', () async {
+        if (!ready()) return;
+        final t = await tools();
+        if (t == null) {
+          markTestSkipped('/usr/bin/openssl or /usr/bin/tail missing here');
+          return;
+        }
+        final d = sub('home/log', mode: '777');
+        final err = Link('${d.path}/error.log')..createSync('/etc/shadow');
+        final g = WebSudoersGrant.tryCreate(
+          user: 'hendr',
+          id: ServiceId.nginx,
+          binaries: const {},
+          toolPaths: t,
+          errorLog: err.path,
+          accessLog: '${d.path}/access.log',
+        )!;
+        final r = await run(g);
+        expect(r.exitCode, 6, reason: '${r.stdout}${r.stderr}');
+        expect(r.stdout, isNot(contains(webGrantOkMarker)));
+        expect(target.existsSync(), isFalse);
+        expect(log.existsSync(), isFalse, reason: 'no sudo call at all');
+        expect(
+          () => WebSudoersGrantProbe(
+            g,
+          ).parse(r.stdout as String, r.stderr as String, r.exitCode),
+          throwsA(
+            isA<KelolaException>().having(
+              (e) => e.message,
+              'message',
+              '${webGrantSkippedCopy(err.path)}\n'
+                  '${webGrantSkippedCopy('${d.path}/access.log')}',
+            ),
+          ),
+        );
+      });
     });
 
     test('binaries are carried encoded, never raw', () {

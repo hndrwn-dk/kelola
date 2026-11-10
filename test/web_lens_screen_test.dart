@@ -1159,6 +1159,57 @@ void main() {
         await dispose(tester);
       });
 
+      testWidgets('skipped log and cert paths are listed as Not granted, the rest installed',
+          (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        String b64(String p) => base64Encode(utf8.encode(p));
+        pool.grantStdout = '$webGrantSkippedMarker '
+            '${b64('/home/deploy/app/log/error.log')}\n'
+            '$webGrantOkMarker\n';
+        pool.grantExit = 0;
+        await pumpLens(tester);
+        await tapGrant(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Add rules'));
+        await frames(tester, 8);
+        pool.error = null;
+        pool.lens = _healthyLens();
+        await enterPassword(tester);
+        expect(
+          find.text(
+            'Read access granted · reading again\n'
+            'Not granted: /home/deploy/app/log/error.log is in a directory '
+            'that is not root-owned or is writable by others.',
+          ),
+          findsOneWidget,
+        );
+        // The rest was installed, so the lens reads again.
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(2));
+        await dispose(tester);
+      });
+
+      testWidgets('every path skipped: Not granted lines, no re-read',
+          (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        pool.grantStdout = '$webGrantSkippedMarker '
+            '${base64Encode(utf8.encode('/home/deploy/log/a.log'))}\n';
+        pool.grantExit = webGrantNothingExit;
+        await pumpLens(tester);
+        await tapGrant(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Add rules'));
+        await frames(tester, 8);
+        await enterPassword(tester);
+        expect(
+          find.text(webGrantSkippedCopy('/home/deploy/log/a.log')),
+          findsOneWidget,
+        );
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(1));
+        await dispose(tester);
+      });
+
       testWidgets('certs failing with openssl outside system dirs: no row, one reason',
           (tester) async {
         pool.lens = WebLens(
@@ -1255,6 +1306,7 @@ class _Pool extends SshSessionPool {
   int reloadExit = 0;
   List<int>? stdin;
   String? grantStdout;
+  int grantExit = 5;
 
   @override
   Future<T> execute<T>(
@@ -1288,12 +1340,18 @@ class _Pool extends SshSessionPool {
     if (probe is SudoFlavorProbe) {
       return const SudoRs('0.2.13') as T;
     }
-    if (probe is WebSudoersGrantProbe || probe is UnitSudoersGrantProbe) {
+    if (probe is WebSudoersGrantProbe) {
       stdin = stdinBytes;
       final out = grantStdout;
-      if (out != null && probe is WebSudoersGrantProbe) {
-        probe.parse(out, '', 5);
-      }
+      // The probe's own parse, on the host output the script would print.
+      return probe.parse(
+        out ?? webGrantOkMarker,
+        '',
+        out == null ? 0 : grantExit,
+      );
+    }
+    if (probe is UnitSudoersGrantProbe) {
+      stdin = stdinBytes;
       return null as T;
     }
     throw StateError('unexpected probe ${probe.runtimeType}');

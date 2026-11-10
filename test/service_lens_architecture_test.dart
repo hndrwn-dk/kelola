@@ -288,6 +288,50 @@ void main() {
       }
     });
 
+    test('trust check owners are root everywhere in lib (test-only override unused)', () {
+      final calls = <String>[];
+      for (final f in _dartFilesUnder('lib')) {
+        final src = f.readAsStringSync();
+        // The override is never passed, to either entry point.
+        expect(src, isNot(contains('owners:')), reason: f.path);
+        expect(src, isNot(contains('trustOwners:')), reason: f.path);
+        for (final m in RegExp(
+          r'(webBinaryTrustShell|buildWebGrantScript)\(',
+        ).allMatches(src)) {
+          calls.add('${f.path}:${m.start}');
+        }
+      }
+      expect(calls, isNotEmpty);
+      final src = _read('lib/domain/sudo/web_sudoers_grant.dart');
+      expect(
+        src,
+        contains(
+          "@visibleForTesting List<String> owners = const ['root'],",
+        ),
+      );
+      expect(
+        src,
+        contains(
+          "@visibleForTesting List<String> trustOwners = const ['root'],",
+        ),
+      );
+      // Production script: only root.
+      final grant = WebSudoersGrant.tryCreate(
+        user: 'alice',
+        id: ServiceId.nginx,
+        binaries: const {'nginx': '/usr/sbin/nginx'},
+        toolPaths: const {'tail': '/usr/bin/tail'},
+        errorLog: '/var/log/nginx/error.log',
+      )!;
+      expect(
+        RegExp(r"-user '([^']*)'")
+            .allMatches(buildWebGrantScript(grant))
+            .map((m) => m.group(1))
+            .toSet(),
+        {'root'},
+      );
+    });
+
     test('path is the pinned kelola-web file', () {
       expect(kelolaWebSudoersPath, '/etc/sudoers.d/kelola-web');
     });

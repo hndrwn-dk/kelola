@@ -16,6 +16,15 @@ const webGrantOkMarker = 'KELOLA_WEB_GRANT_OK';
 /// host-side ownership check; nothing is written then.
 const webGrantUntrustedMarker = 'KELOLA_WEB_GRANT_UNTRUSTED';
 
+/// Printed (with the path, base64) for each cert or log path whose
+/// directory chain failed the host-side check. Only the lines naming that
+/// path are left out; the rest are installed.
+const webGrantSkippedMarker = 'KELOLA_WEB_GRANT_SKIPPED';
+
+/// Exit status of the grant script when every line was skipped, so nothing
+/// was read or written.
+const webGrantNothingExit = 6;
+
 /// System directories. A NOPASSWD rule on a binary the login user can
 /// replace would be a root shell, and binary paths come from the host's own
 /// output, so only these directories are ever granted (not `/usr/local`,
@@ -70,46 +79,73 @@ List<String> webGrantLines({
   List<String> certPaths = const [],
   String? errorLog,
   String? accessLog,
+}) => [
+  for (final e in _webGrantEntries(
+    user: user,
+    id: id,
+    binaries: binaries,
+    toolPaths: toolPaths,
+    certPaths: certPaths,
+    errorLog: errorLog,
+    accessLog: accessLog,
+  ))
+    e.line,
+];
+
+/// [webGrantLines], each with the cert or log path it names (null for the
+/// server binary's own lines).
+List<({String line, String? path})> _webGrantEntries({
+  required String user,
+  required ServiceId id,
+  required Map<String, String> binaries,
+  required Map<String, String> toolPaths,
+  required List<String> certPaths,
+  required String? errorLog,
+  required String? accessLog,
 }) {
   // `ALL` in the user field would be every user.
   if (!_userName.hasMatch(user) || user.toUpperCase() == 'ALL') {
     return const [];
   }
   if (id != ServiceId.nginx && id != ServiceId.apache) return const [];
-  final commands = <String>[];
+  final commands = <({String cmd, String? path})>[];
 
   final names = webConfigTestBinaryNames(id);
   final bin = safeWebBinary(binaries, names);
   if (bin != null && names.any((n) => isGrantableWebBinary(bin, n))) {
     commands
-      ..add('$bin -t')
-      ..add(id == ServiceId.apache ? '$bin -S' : '$bin -T');
+      ..add((cmd: '$bin -t', path: null))
+      ..add((cmd: id == ServiceId.apache ? '$bin -S' : '$bin -T', path: null));
   }
 
   final openssl = toolPaths['openssl'];
   if (isGrantableWebBinary(openssl, 'openssl')) {
     for (final p in certPaths) {
       if (!isGrantableWebPath(p)) continue;
-      commands.add(
-        '$openssl x509 -noout -enddate -subject -ext subjectAltName -in $p',
-      );
+      commands.add((
+        cmd:
+            '$openssl x509 -noout -enddate -subject -ext subjectAltName '
+            '-in $p',
+        path: p,
+      ));
     }
   }
 
   final tail = toolPaths['tail'];
   if (isGrantableWebBinary(tail, 'tail')) {
     if (errorLog != null && isGrantableWebPath(errorLog)) {
-      commands.add('$tail -n 60 $errorLog');
+      commands.add((cmd: '$tail -n 60 $errorLog', path: errorLog));
     }
     if (accessLog != null && isGrantableWebPath(accessLog)) {
-      commands.add('$tail -n 2000 $accessLog');
+      commands.add((cmd: '$tail -n 2000 $accessLog', path: accessLog));
     }
   }
 
   final seen = <String>{};
   return [
     for (final c in commands)
-      if (seen.add(c)) '$user ALL=(root) NOPASSWD: $c',
+      if (seen.add(c.cmd))
+        (line: '$user ALL=(root) NOPASSWD: ${c.cmd}', path: c.path),
   ];
 }
 
@@ -120,11 +156,17 @@ class WebSudoersGrant {
     required this.id,
     required this.user,
     required this.lines,
+    required this.linePaths,
   });
 
   final ServiceId id;
   final String user;
   final List<String> lines;
+
+  /// For each of [lines], the cert or log path it names, or null (the
+  /// server binary's lines). The grant script checks each path on the host
+  /// and leaves out the lines of a path that fails.
+  final List<String?> linePaths;
 
   /// Null when [webGrantLines] gives no line.
   static WebSudoersGrant? tryCreate({
@@ -136,7 +178,7 @@ class WebSudoersGrant {
     String? errorLog,
     String? accessLog,
   }) {
-    final lines = webGrantLines(
+    final entries = _webGrantEntries(
       user: user,
       id: id,
       binaries: binaries,
@@ -145,15 +187,14 @@ class WebSudoersGrant {
       errorLog: errorLog,
       accessLog: accessLog,
     );
-    if (lines.isEmpty) return null;
+    if (entries.isEmpty) return null;
     return WebSudoersGrant._(
       id: id,
       user: user,
-      lines: List.unmodifiable(lines),
+      lines: List.unmodifiable([for (final e in entries) e.line]),
+      linePaths: List.unmodifiable([for (final e in entries) e.path]),
     );
   }
-
-  bool get hasCertLines => lines.any((l) => l.contains(' x509 '));
 
   /// Each distinct binary the lines name, in order.
   List<String> get binaries {
@@ -174,15 +215,40 @@ class WebSudoersGrant {
 /// Remote sh that reads the sudo password on stdin (one line) and adds the
 /// grant's lines to [kelolaWebSudoersPath], keeping the lines already there.
 /// Same script as the per-unit grant ([buildSudoersGrantScript]), with the
-/// binary ownership check ([webBinaryTrustShell]) first.
-String buildWebGrantScript(WebSudoersGrant g) {
+/// host-side checks ([webBinaryTrustShell]) first: every binary must pass or
+/// nothing is written; a cert or log path that fails only drops the lines
+/// naming it ([webGrantSkippedMarker]). When every line is dropped, the
+/// script exits [webGrantNothingExit] before any sudo call.
+///
+/// [trustOwners] exists for tests only (see [webBinaryTrustShell]).
+String buildWebGrantScript(
+  WebSudoersGrant g, {
+  @visibleForTesting List<String> trustOwners = const ['root'],
+}) {
+  final paths = _distinctPaths(g.linePaths);
+  String? gate(String? p) =>
+      p == null ? null : '[ "\$KELOLA_P${paths.indexOf(p)}" = 1 ]';
+  final gates = [for (final p in g.linePaths) gate(p)];
+  final stop = gates.every((c) => c != null)
+      ? '${paths.indexed.map((e) => '[ "\$KELOLA_P${e.$1}" = 1 ]').join(' || ')}'
+            ' || exit $webGrantNothingExit\n'
+      : '';
   return buildSudoersGrantScript(
     path: kelolaWebSudoersPath,
     header: '# Kelola: lens read rules, one command per line. Safe to edit.',
     lines: g.lines,
     okMarker: webGrantOkMarker,
-    preamble: webBinaryTrustShell(g.binaries),
+    preamble: _trustShell(g.binaries, paths, trustOwners) + stop,
+    lineConditions: gates,
   );
+}
+
+List<String> _distinctPaths(List<String?> linePaths) {
+  final out = <String>[];
+  for (final p in linePaths) {
+    if (p != null && !out.contains(p)) out.add(p);
+  }
+  return out;
 }
 
 /// Max symlinks followed per binary (Linux's own limit); more fails.
@@ -191,8 +257,8 @@ const webTrustMaxHops = 40;
 final _ownerName = RegExp(r'^[a-z_][a-z0-9_-]{0,31}$');
 
 /// Shell (for `set -eu`) that stops the grant unless every one of
-/// [binaries] is trusted on the host. Each path is walked one component at
-/// a time, following each symlink by hand (plain `readlink`, at most
+/// [binaries] is trusted on the host, then checks each of [paths]. Each path
+/// is walked one component at a time, following each symlink by hand (plain `readlink`, at most
 /// [webTrustMaxHops]; a relative target resolves against the link's
 /// directory), and:
 /// - `/`, every directory passed through and the final file must be owned by
@@ -203,9 +269,20 @@ final _ownerName = RegExp(r'^[a-z_][a-z0-9_-]{0,31}$');
 ///
 /// So no hop of the chain sudo re-resolves on every run can be repointed by
 /// anyone but root. Fail-closed: a missing tool, empty output, a missing
-/// path or too many hops all count as untrusted. On the first failure it
-/// prints [webGrantUntrustedMarker] and the path (base64) and exits 5, before
-/// the sudoers file is read or written.
+/// path, too many hops or a link target with a newline (which `\$(...)`
+/// would cut) all count as untrusted. On the first failing binary it prints
+/// [webGrantUntrustedMarker] and the path (base64) and exits 5, before the
+/// sudoers file is read or written.
+///
+/// [paths] (cert and log files, passed as command arguments) get the same
+/// walk, except that the final file only has to be a regular file: logs are
+/// often owned by the server's user, and `tail` / `openssl` only read it.
+/// Everything that decides which file that is (`/`, each directory, each
+/// symlink, including a final symlink) is checked as above, so the login
+/// user cannot point the path at another file such as `/etc/shadow`. Path
+/// number `j` sets `KELOLA_Pj=1` when it passes; when it fails it prints
+/// [webGrantSkippedMarker] and the path (base64) and the grant continues
+/// without the lines naming it.
 ///
 /// Plain `find`, no sudo: system binaries are readable. Only POSIX `find`
 /// options that busybox also has (`-maxdepth`, `-user`, `-perm -mode`; not
@@ -215,8 +292,15 @@ final _ownerName = RegExp(r'^[a-z_][a-z0-9_-]{0,31}$');
 /// root); [buildWebGrantScript] always uses root.
 String webBinaryTrustShell(
   List<String> binaries, {
+  List<String> paths = const [],
   @visibleForTesting List<String> owners = const ['root'],
-}) {
+}) => _trustShell(binaries, paths, owners);
+
+String _trustShell(
+  List<String> binaries,
+  List<String> paths,
+  List<String> owners,
+) {
   if (owners.isEmpty || !owners.every(_ownerName.hasMatch)) {
     throw ArgumentError.value(owners, 'owners');
   }
@@ -232,6 +316,9 @@ String webBinaryTrustShell(
     ..writeln('kelola_ok() { ${finds(' ! -perm -020 ! -perm -002')}; }')
     // A symlink: owner only.
     ..writeln('kelola_link_ok() { ${finds('')}; }')
+    // A newline, for spotting one in a link target.
+    ..writeln(r"kelola_nl=$(printf '\nx'); kelola_nl=${kelola_nl%x}")
+    // $1: the path. $2: `path` for a cert or log (final file: any owner).
     ..writeln('kelola_walk() {')
     ..writeln(r'  case "$1" in /*) ;; *) return 1 ;; esac')
     ..writeln('  kelola_ok / || return 1')
@@ -254,20 +341,33 @@ String webBinaryTrustShell(
     ..writeln(r'      kelola_link_ok "$cand" || return 1')
     ..writeln(r'      hops=$((hops + 1))')
     ..writeln('      [ "\$hops" -le $webTrustMaxHops ] || return 1')
-    ..writeln(r'      t=$(readlink "$cand" 2>/dev/null) || return 1')
+    // `x` keeps readlink's own trailing newline, so a target that itself
+    // ends in a newline is seen (and refused) instead of cut.
+    ..writeln(r'      t=$(readlink "$cand" 2>/dev/null && echo x) || return 1')
+    ..writeln(r'      t=${t%x}')
+    ..writeln(
+      r'      case "$t" in *"$kelola_nl") t=${t%?} ;; *) return 1 ;; esac',
+    )
+    ..writeln(r'      case "$t" in *"$kelola_nl"*) return 1 ;; esac')
     ..writeln(r'      [ -n "$t" ] || return 1')
     ..writeln(r'      case "$t" in /*) cur=; t=${t#/} ;; esac')
     ..writeln(r'      if [ -n "$rest" ]; then rest=$t/$rest; else rest=$t; fi')
     ..writeln(r'    elif [ -e "$cand" ]; then')
-    ..writeln(r'      kelola_ok "$cand" || return 1')
+    ..writeln(r'      if [ -z "$rest" ] && [ "${2-}" = path ]; then')
+    ..writeln(r'        [ -f "$cand" ] || return 1')
+    ..writeln(r'      elif ! kelola_ok "$cand"; then')
+    ..writeln('        return 1')
+    ..writeln('      fi')
     ..writeln(r'      cur=$cand')
     ..writeln('      last=file')
     ..writeln('    else')
     ..writeln('      return 1')
     ..writeln('    fi')
     ..writeln('  done')
-    // Ends on a checked path, never on `/` or a `..`.
-    ..writeln(r'  [ -n "$cur" ] && [ "$last" = file ]')
+    // Ends on a checked path, never on `/` or a `..`; a cert or log on a
+    // regular file.
+    ..writeln(r'  [ -n "$cur" ] && [ "$last" = file ] || return 1')
+    ..writeln(r'  [ "${2-}" != path ] || [ -f "$cur" ]')
     ..writeln('}')
     ..writeln('kelola_trust() {')
     ..writeln(r'  if kelola_walk "$1"; then return 0; fi')
@@ -280,6 +380,16 @@ String webBinaryTrustShell(
   for (final bin in binaries) {
     final b64 = base64Encode(utf8.encode(bin));
     b.writeln("kelola_trust \"\$(printf '%s' '$b64' | base64 -d)\"");
+  }
+  for (final (j, p) in paths.indexed) {
+    final b64 = base64Encode(utf8.encode(p));
+    b
+      ..writeln('KELOLA_P$j=0')
+      ..writeln(
+        'if kelola_walk "\$(printf \'%s\' \'$b64\' | base64 -d)" path; '
+        'then KELOLA_P$j=1; else '
+        "printf '%s %s\\n' '$webGrantSkippedMarker' '$b64'; fi",
+      );
   }
   return b.toString();
 }
@@ -307,3 +417,30 @@ String? webGrantUntrustedBinary(String stdout) {
 
 String webGrantUntrustedCopy(String binary) =>
     'Not granted: $binary is not root-owned or is writable by others.';
+
+/// The paths named after each [webGrantSkippedMarker] in [stdout], in
+/// order, once each: the decoded path when it is a plain absolute path,
+/// else `a path`.
+List<String> webGrantSkippedPaths(String stdout) {
+  final out = <String>[];
+  for (final line in const LineSplitter().convert(stdout)) {
+    if (!line.startsWith('$webGrantSkippedMarker ') &&
+        line != webGrantSkippedMarker) {
+      continue;
+    }
+    final raw = line.substring(webGrantSkippedMarker.length).trim();
+    var path = 'a path';
+    try {
+      final p = utf8.decode(base64Decode(raw));
+      if (isGrantableWebPath(p)) path = p;
+    } on FormatException {
+      // Stays `a path`.
+    }
+    if (!out.contains(path)) out.add(path);
+  }
+  return out;
+}
+
+String webGrantSkippedCopy(String path) =>
+    'Not granted: $path is in a directory that is not root-owned or is '
+    'writable by others.';
