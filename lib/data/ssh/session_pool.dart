@@ -330,7 +330,7 @@ class SshSessionPool {
           await _repository.finishAudit(
             auditId,
             durationMs: durationMs,
-            errorSummary: e.runtimeType.toString(),
+            errorSummary: auditErrorLabel(e),
             title: title == connectionLostTitle ? connectionLostTitle : title,
           );
         } else {
@@ -343,7 +343,7 @@ class SshSessionPool {
             risk: draft.risk,
             usedSudo: draft.usedSudo,
             durationMs: durationMs,
-            errorSummary: e.runtimeType.toString(),
+            errorSummary: auditErrorLabel(e),
           );
         }
       }
@@ -640,7 +640,7 @@ class SshSessionPool {
       await _repository.finishAudit(
         auditId,
         durationMs: DateTime.now().difference(openedAt).inMilliseconds,
-        errorSummary: e.runtimeType.toString(),
+        errorSummary: auditErrorLabel(e),
       );
       if (client != null && !client.isClosed) {
         await client.close();

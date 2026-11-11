@@ -127,4 +127,4 @@ purchase at no further cost. If it saves you time, you can support development:
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE). The name and icon are covered by [TRADEMARKS.md](TRADEMARKS.md).

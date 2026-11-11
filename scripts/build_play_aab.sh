@@ -30,6 +30,10 @@ fi
 prev=""
 for arg in "$@"; do
   case "$arg" in
+    --no-obfuscate|--obfuscate|--split-debug-info*)
+      echo "build_play_aab: $arg is not allowed; release builds are always obfuscated" >&2
+      exit 1
+      ;;
     --build-number*|--build-name*|--dart-define=KELOLA_*|--dart-define=APP_VERSION*|--dart-define-from-file*)
       echo "build_play_aab: $arg is not allowed; bump pubspec.yaml version instead" >&2
       exit 1
@@ -42,7 +46,14 @@ for arg in "$@"; do
   fi
   prev="$arg"
 done
+# Obfuscate Dart symbols so a decompiled AAB does not name the entitlement
+# code. Keep the symbol files next to the AAB (gitignored) to decode crash
+# stack traces: flutter symbolize -i <trace> -d <symbols>/app.android-arm64.symbols
+SYMBOLS="$ROOT/bundles_release/v${VERSION}/symbols"
+mkdir -p "$SYMBOLS"
 flutter build appbundle --release \
+  --obfuscate \
+  --split-debug-info="$SYMBOLS" \
   --build-name="$VERSION_NAME" \
   --build-number="$VERSION_CODE" \
   --dart-define=KELOLA_VERSION="$VERSION_NAME" \
@@ -55,4 +66,5 @@ mkdir -p "$DEST"
 cp -f "$ROOT/build/app/outputs/bundle/release/app-release.aab" \
   "$DEST/app-release-${VERSION}.aab"
 echo "AAB: $DEST/app-release-${VERSION}.aab"
+echo "Symbols: $SYMBOLS (keep them; needed to read crash traces)"
 echo "Play notes: $ROOT/bundles_release/play-console/PLAY_STORE_v${VERSION}.txt"

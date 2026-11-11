@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:kelola/domain/exceptions.dart';
+import 'package:kelola/domain/fleet/fleet_gate.dart';
+import 'package:kelola/domain/probes/probe.dart';
 
 String describeSshError(Object error) {
   if (error is SudoRequiredException) {
@@ -78,4 +80,27 @@ String _describeSocketException(SocketException error) {
     return 'Network error to $where — $msg';
   }
   return 'Network error to $where.';
+}
+
+/// Short, stable label for an audit row's error column.
+///
+/// Release builds are obfuscated, so `runtimeType.toString()` would store a
+/// minified name. Known errors get a fixed label; anything else falls back to
+/// the runtime type, which is readable in debug builds only.
+String auditErrorLabel(Object error) {
+  if (error is HostKeyMismatchException) return 'HostKeyMismatchException';
+  if (error is SudoRequiredException) return 'SudoRequiredException';
+  if (error is ProbeTimeoutException) return 'ProbeTimeoutException';
+  if (error is ReadOnlyViolation) return 'ReadOnlyViolation';
+  if (error is FleetReadOnlyViolation) return 'FleetReadOnlyViolation';
+  if (error is TimeoutException) return 'TimeoutException';
+  if (error is SocketException) return 'SocketException';
+  if (error is SftpStatusError) return 'SftpStatusError';
+  if (error is SftpError) return 'SftpError';
+  if (error is SSHAuthFailError) return 'SSHAuthFailError';
+  if (error is SSHAuthAbortError) return 'SSHAuthAbortError';
+  if (error is SSHDisconnectError) return 'SSHDisconnectError';
+  if (error is SSHHostkeyError) return 'SSHHostkeyError';
+  if (error is StateError) return 'StateError';
+  return error.runtimeType.toString();
 }
