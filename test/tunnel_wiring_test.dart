@@ -121,17 +121,6 @@ void main() {
     container.dispose();
     expect(bridge.handler, isNull);
   });
-
-  test('docs/specs and docs/play FGS declaration exist', () {
-    expect(File('docs/specs/m5-tunnels.md').existsSync(), isTrue);
-    expect(File('docs/play/fgs-declaration.md').existsSync(), isTrue);
-    final spec = File('docs/specs/m5-tunnels.md').readAsStringSync();
-    expect(spec, contains('loopback'));
-    expect(spec, contains('specialUse'));
-    final play = File('docs/play/fgs-declaration.md').readAsStringSync();
-    expect(play, contains('Stop all'));
-    expect(play, contains('specialUse'));
-  });
 }
 
 class _CapturingBridge implements TunnelBridge {

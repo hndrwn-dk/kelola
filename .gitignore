@@ -86,3 +86,13 @@ credentials.json
 play-*.json
 
 docs/screenshots/_*.png
+
+# Private working notes never live in this repo: plans, specs, handoff,
+# status and store drafts are kept by the owner elsewhere.
+docs/specs/
+docs/plans/
+docs/play/
+plans/
+materi/
+HANDOFF.md
+PRD.md
