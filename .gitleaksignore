@@ -1,0 +1,12 @@
+# Fake API keys used as fixtures in LLM settings tests (sk-abcdefghij3W5x).
+# Reviewed 2026-11-11: not real credentials.
+202c0d0e626abb16229222ee2f9df19275cf98a6:test/llm_api_key_field_test.dart:generic-api-key:22
+202c0d0e626abb16229222ee2f9df19275cf98a6:test/llm_api_key_hint_test.dart:generic-api-key:116
+202c0d0e626abb16229222ee2f9df19275cf98a6:test/llm_api_key_hint_test.dart:generic-api-key:43
+202c0d0e626abb16229222ee2f9df19275cf98a6:test/llm_api_key_hint_test.dart:generic-api-key:86
+202c0d0e626abb16229222ee2f9df19275cf98a6:test/llm_settings_api_key_screen_test.dart:generic-api-key:16
+test/llm_api_key_field_test.dart:generic-api-key:22
+test/llm_api_key_hint_test.dart:generic-api-key:116
+test/llm_api_key_hint_test.dart:generic-api-key:43
+test/llm_api_key_hint_test.dart:generic-api-key:86
+test/llm_settings_api_key_screen_test.dart:generic-api-key:16
