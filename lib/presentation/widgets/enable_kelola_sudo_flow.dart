@@ -10,10 +10,12 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
 import 'package:kelola/domain/probes/sudoers_install_probe.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo/unit_sudoers_grant.dart';
+import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/sudo/sudo_flavor.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/enrollment/password_key_install_flow.dart';
@@ -264,6 +266,88 @@ Future<bool> _runUnitGrantFlow({
   required Host host,
   required HostFacts facts,
   required UnitSudoersGrant grant,
+}) {
+  return _runExactGrantFlow(
+    context: context,
+    ref: ref,
+    host: host,
+    facts: facts,
+    title: 'Allow ${grant.action}?',
+    body: "This host's sudo cannot match a service by pattern, so "
+        'Kelola adds one rule for this action on this service. '
+        'Other services and actions are unchanged. Remove the line '
+        'on the host to undo it.',
+    path: kelolaUnitSudoersPath,
+    lines: [grant.line],
+    confirmLabel: 'Add rule',
+    probe: UnitSudoersGrantProbe(grant),
+    done: '${grant.action} allowed · try it again',
+    failed: 'Could not add the sudo rule',
+  );
+}
+
+/// M52 §7b: confirms and installs a web lens's exact read rules in
+/// [kelolaWebSudoersPath], the same way as a per-service grant. Returns true
+/// once the host confirmed every line.
+///
+/// [certsLater]: the config could not be read yet, so certificate and log
+/// lines can only come with a second grant.
+Future<bool> runWebGrantFlow({
+  required BuildContext context,
+  required WidgetRef ref,
+  required Host host,
+  required HostFacts facts,
+  required WebSudoersGrant grant,
+  bool certsLater = false,
+}) {
+  return _runExactGrantFlow(
+    context: context,
+    ref: ref,
+    host: host,
+    facts: facts,
+    title: 'Grant read access for this lens?',
+    body: 'Kelola adds these exact read-only rules, one command each, and '
+        'never a wildcard. Lines already in the file are kept; remove stale '
+        'ones on the host by hand.',
+    note: certsLater
+        ? 'Certificate and log lines come with a second grant, once the '
+            'config can be read.'
+        : null,
+    footer: 'These rules let this login run the listed commands as root. The '
+        'config test loads modules named in the server config, so only grant '
+        'this where that config is root-owned.',
+    path: kelolaWebSudoersPath,
+    lines: grant.lines,
+    confirmLabel: 'Add rules',
+    probe: WebSudoersGrantProbe(grant),
+    done: 'Read access granted · reading again',
+    // Cert or log paths the host refused (directory not root-owned or
+    // writable): their lines were left out, the rest installed.
+    doneDetail: (skipped) => (skipped as List<String>)
+        .map(webGrantSkippedCopy)
+        .join('\n'),
+    failed: 'Could not add the sudo rules',
+  );
+}
+
+/// Shows [lines] (exact, mono) for [path], asks for the sudo password once,
+/// passes it on stdin to [probe], then discards it.
+Future<bool> _runExactGrantFlow({
+  required BuildContext context,
+  required WidgetRef ref,
+  required Host host,
+  required HostFacts facts,
+  required String title,
+  required String body,
+  String? note,
+  String? footer,
+  required String path,
+  required List<String> lines,
+  required String confirmLabel,
+  required Probe<Object?> probe,
+  required String done,
+  String Function(Object? result)? doneDetail,
+  required String failed,
 }) async {
   final confirmed = await showModalBottomSheet<bool>(
     context: context,
@@ -281,22 +365,38 @@ Future<bool> _runUnitGrantFlow({
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Allow ${grant.action}?',
+                  title,
                   style: KelolaType.display(color: c.text, size: 16),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "This host's sudo cannot match a service by pattern, so "
-                  'Kelola adds one rule for this action on this service. '
-                  'Other services and actions are unchanged. Remove the line '
-                  'on the host to undo it.',
+                  body,
                   style: KelolaType.body(color: c.muted, size: 13),
                 ),
+                if (note != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    note,
+                    style: KelolaType.body(color: c.muted, size: 13),
+                  ),
+                ],
                 const SizedBox(height: 12),
-                SelectableText(
-                  '$kelolaUnitSudoersPath\n${grant.line}',
-                  style: KelolaType.mono(color: c.text, size: 11),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      '$path\n${lines.join('\n')}',
+                      style: KelolaType.mono(color: c.text, size: 11),
+                    ),
+                  ),
                 ),
+                if (footer != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    footer,
+                    style: KelolaType.body(color: c.muted, size: 13),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 Row(
                   children: [
@@ -310,7 +410,7 @@ Future<bool> _runUnitGrantFlow({
                     Expanded(
                       child: FilledButton(
                         onPressed: () => Navigator.of(ctx).pop(true),
-                        child: const Text('Add rule'),
+                        child: Text(confirmLabel),
                       ),
                     ),
                   ],
@@ -344,17 +444,20 @@ Future<bool> _runUnitGrantFlow({
       return false;
     }
     try {
-      await runHostProbe(
+      final result = await runHostProbe(
         ref: ref,
         context: context,
         host: host,
         facts: facts,
-        probe: UnitSudoersGrantProbe(grant),
+        probe: probe,
         stdinBytes: utf8.encode('$pass\n'),
       );
+      final detail = doneDetail?.call(result) ?? '';
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${grant.action} allowed · try it again')),
+          SnackBar(
+            content: Text(detail.isEmpty ? done : '$done\n$detail'),
+          ),
         );
       }
       return true;
@@ -362,9 +465,7 @@ Future<bool> _runUnitGrantFlow({
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              e is KelolaException ? e.message : 'Could not add the sudo rule',
-            ),
+            content: Text(e is KelolaException ? e.message : failed),
           ),
         );
       }

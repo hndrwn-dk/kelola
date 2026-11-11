@@ -1,0 +1,11 @@
+VirtualHost configuration:
+*:443                  is a NameVirtualHost
+         default server example.com (/etc/httpd/conf.d/ssl.conf:56)
+         port 443 namevhost example.com (/etc/httpd/conf.d/ssl.conf:56)
+                 alias www.example.com
+         port 443 namevhost other.example (/etc/httpd/conf.d/other.conf:1)
+*:80                   rocky.lab (/etc/httpd/conf.d/site.conf:1)
+ServerRoot: "/etc/httpd"
+Main DocumentRoot: "/var/www/html"
+Main ErrorLog: "/etc/httpd/logs/error_log"
+Mutex default: dir="/run/httpd/" mechanism=default

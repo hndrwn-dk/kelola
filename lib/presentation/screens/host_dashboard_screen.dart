@@ -18,6 +18,8 @@ import 'package:kelola/domain/k8s/coreos_node.dart';
 import 'package:kelola/domain/probes/coreos_node_probe.dart';
 import 'package:kelola/domain/probes/dashboard_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/domain/probes/service_detect_probe.dart';
+import 'package:kelola/domain/services/service_detection.dart';
 import 'package:kelola/domain/widget/publish_home_widget.dart';
 import 'package:kelola/presentation/destructive_auth.dart';
 import 'package:kelola/presentation/host_session.dart';
@@ -40,6 +42,8 @@ import 'package:kelola/presentation/screens/terminal_sheet.dart';
 import 'package:kelola/presentation/screens/snippets_screen.dart';
 import 'package:kelola/presentation/screens/tunnels_screen.dart';
 import 'package:kelola/presentation/screens/units_screen.dart';
+import 'package:kelola/presentation/screens/web_lens_screen.dart';
+import 'package:kelola/presentation/services/stack_section.dart';
 import 'package:kelola/presentation/screens/kubernetes_home_screen.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
@@ -177,13 +181,22 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   /// Kubernetes home has read this host's cluster once.
   ClusterKindRecord? _clusterKind;
 
+  /// M52 §3: last service detection (cache first, then a fresh read).
+  ServiceDetection? _stack;
+
+  /// Detection failure; set only by pull-to-refresh.
+  String? _stackError;
+
   @override
   void initState() {
     super.initState();
     _refresh();
   }
 
-  Future<void> _refresh() async {
+  /// [pull]: the operator pulled to refresh, so service detection always
+  /// runs and its error is shown. Other refreshes re-detect only when the
+  /// cached read is missing or older than 15 minutes.
+  Future<void> _refresh({bool pull = false}) async {
     setState(() {
       _loading = true;
       _error = dashboardErrorAfterRefreshStart(_error);
@@ -198,6 +211,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       _host = host;
       _hostsById = {for (final h in await repo.list()) h.id: h};
       unawaited(_reloadClusterKind());
+      unawaited(_loadStackCache());
       final startup = startupSnippetsForHost(
         await repo.listSnippetsForHost(host),
         host,
@@ -316,6 +330,9 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         _nodeError = nodeError;
         _bastionId = bastionId;
       });
+      // After the dashboard read so it reuses that session and never
+      // delays the first paint.
+      unawaited(_detectServices(host, knownFacts, force: pull));
     } on HostKeyMismatchException catch (e) {
       if (!mounted) {
         return;
@@ -436,7 +453,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       ),
       busy: _loading,
       body: RefreshIndicator(
-        onRefresh: _refresh,
+        onRefresh: () => _refresh(pull: true),
         child: ListView(
           padding: kelolaScrollPadding(context, top: 8),
           children: [
@@ -607,6 +624,22 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                 ),
               ],
             ],
+            if (_stackError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: KelolaError(
+                  message: _stackError!,
+                  sudoUser: host?.username,
+                  onDismiss: () => setState(() => _stackError = null),
+                ),
+              ),
+            StackSection(
+              detection: _stack,
+              now: DateTime.now(),
+              onOpen: (service) => _open(
+                (id) => WebLensScreen(hostId: id, service: service),
+              ),
+            ),
             const SizedBox(height: 14),
             Text(
               'TOOLS',
@@ -973,6 +1006,77 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     }
   }
 
+  /// Cached detection, never SSH. Any store failure reads as no cache.
+  Future<ServiceDetection?> _readStackCache() async {
+    try {
+      final store = await ref.read(serviceLensStoreProvider.future);
+      return await store.read(widget.hostId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _loadStackCache() async {
+    final cached = await _readStackCache();
+    if (cached == null || !mounted) {
+      return;
+    }
+    final shown = _stack;
+    // Never let an older cached read replace a newer one on screen.
+    if (shown != null && !cached.readAt.isAfter(shown.readAt)) {
+      return;
+    }
+    setState(() => _stack = cached);
+  }
+
+  /// M52 §2a: runs [ServiceDetectProbe] when [force] or when the cached
+  /// read is missing or stale. Failure never touches the rest of the
+  /// dashboard; it is shown only when [force] (pull-to-refresh).
+  Future<void> _detectServices(
+    Host host,
+    HostFacts facts, {
+    required bool force,
+  }) async {
+    try {
+      if (!force) {
+        final cached = await _readStackCache();
+        if (cached != null &&
+            !StackSection.isStale(cached, DateTime.now())) {
+          return;
+        }
+      }
+      if (!mounted) {
+        return;
+      }
+      final detection = await runHostProbe(
+        ref: ref,
+        context: context,
+        host: host,
+        probe: const ServiceDetectProbe(),
+        facts: facts,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _stack = detection;
+        _stackError = null;
+      });
+      try {
+        final store = await ref.read(serviceLensStoreProvider.future);
+        await store.write(host.id, detection);
+      } catch (_) {
+        // Cache only.
+      }
+    } catch (e) {
+      if (force && mounted) {
+        setState(
+          () => _stackError = 'Could not detect services: ${describeSshError(e)}',
+        );
+      }
+    }
+  }
+
   Future<void> _reloadPendingUpdates() async {
     final pending = await ref
         .read(hostRepositoryProvider)
@@ -1142,6 +1246,10 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     await ref.read(sessionPoolProvider).disconnect(host.id);
     await ref.read(hostRepositoryProvider).delete(host.id);
     await forgetClusterKind(ref.read(clusterKindStoreProvider.future), host.id);
+    await forgetServiceLens(
+      ref.read(serviceLensStoreProvider.future),
+      host.id,
+    );
     if (!mounted) {
       return;
     }

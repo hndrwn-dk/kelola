@@ -34,12 +34,17 @@ void main() {
     expect(find.byType(HelpTopic), findsOneWidget);
     expect(find.byType(SectionSlab), findsNWidgets(6));
     expect(find.byType(OsIcon), findsNWidgets(11));
-    expect(find.byType(ToolTile), findsNWidgets(2));
+    expect(find.byType(ToolTile), findsNWidgets(3));
     expect(find.byType(FilterPill), findsNWidgets(5));
     expect(find.byType(KelolaInput), findsNWidgets(2));
     expect(find.byType(MutateConfirmDialog), findsOneWidget);
     expect(find.byType(JournalLogLine), findsNWidgets(3));
     expect(find.byType(Sparkline), findsOneWidget);
+    final meter = tester.widget<StackedStatMeter>(find.byType(StackedStatMeter));
+    expect(
+      meter.segments.map((s) => s.tone),
+      contains(StatMeterTone.error),
+    );
     expect(find.byType(DestructiveConfirmSheet), findsOneWidget);
     expect(find.byType(KickerLine), findsNWidgets(2));
     expect(find.byType(ActionableError), findsOneWidget);

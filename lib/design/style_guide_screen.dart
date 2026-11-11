@@ -147,6 +147,21 @@ class StyleGuideScreen extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 7),
+          Row(
+            children: [
+              Expanded(
+                child: ToolTile(
+                  label: 'nginx',
+                  meta: '1.24.0 · failed',
+                  status: HealthStatus.failed,
+                  onTap: () {},
+                ),
+              ),
+              const SizedBox(width: 7),
+              const Expanded(child: SizedBox.shrink()),
+            ],
+          ),
           const SizedBox(height: 18),
           Text(
             'FILTERPILL',
@@ -231,6 +246,22 @@ class StyleGuideScreen extends StatelessWidget {
             value: '2',
             meterFraction: 1,
             status: HealthStatus.failed,
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'STACKEDSTATMETER',
+            style: KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9),
+          ),
+          const SizedBox(height: 8),
+          // Web lens status codes: 2xx / 3xx / 4xx / 5xx; the error tone only
+          // when the 5xx finding fires.
+          const StackedStatMeter(
+            segments: [
+              StatMeterSegment(fraction: 0.82, tone: StatMeterTone.used),
+              StatMeterSegment(fraction: 0.06, tone: StatMeterTone.cached),
+              StatMeterSegment(fraction: 0.05, tone: StatMeterTone.accent),
+              StatMeterSegment(fraction: 0.07, tone: StatMeterTone.error),
+            ],
           ),
           const SizedBox(height: 18),
           Text(

@@ -44,6 +44,7 @@ One hardware key per phone, reused for every host. That is intentional.
 | Encrypted vault sync (file free; LAN and host SFTP are Pro on Play builds) | Working; Argon2id + AES-256-GCM, no device key in the vault |
 | App lock | Working |
 | Kubernetes workloads | Working; read, restart/scale/delete, logs, one-shot exec via host kubectl |
+| Service lenses: nginx and Apache httpd (vhosts, certificate expiry, error log, status codes, config-tested reload) | Working; detection feeds a dashboard STACK section and fleet service filter pills |
 
 
 ## Screenshots

@@ -9,6 +9,7 @@ import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/fleet/fleet_probe_selection_store.dart';
 import 'package:kelola/data/hosts/coreos_ack_store.dart';
 import 'package:kelola/data/k8s/cluster_kind_store.dart';
+import 'package:kelola/data/services/service_lens_store.dart';
 import 'package:kelola/data/vault/vault_store.dart';
 import 'package:kelola/presentation/vault/vault_controller.dart';
 import 'package:kelola/data/db/host_repository.dart';
@@ -372,6 +373,30 @@ final clusterKindStoreProvider =
 /// M48: drop a removed host's cluster-kind entry. Cache only; never throws.
 Future<void> forgetClusterKind(
   Future<ClusterKindStore> store,
+  String hostId,
+) async {
+  try {
+    await (await store).remove(hostId);
+  } catch (_) {
+    // Cache only.
+  }
+}
+
+/// M52: last service detection per host, so the dashboard STACK section
+/// and the fleet read it without SSH.
+final serviceLensStoreProvider =
+    FutureProvider<ServiceLensStore>((ref) async {
+  try {
+    final dir = await getApplicationSupportDirectory();
+    return ServiceLensStore(File(p.join(dir.path, 'service_lens.json')));
+  } on MissingPluginException {
+    return ServiceLensStore.memory();
+  }
+});
+
+/// M52: drop a removed host's service detection. Cache only; never throws.
+Future<void> forgetServiceLens(
+  Future<ServiceLensStore> store,
   String hostId,
 ) async {
   try {

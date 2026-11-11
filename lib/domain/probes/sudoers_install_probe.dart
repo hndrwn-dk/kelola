@@ -2,9 +2,11 @@ import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo/sudoers_install_script.dart';
 import 'package:kelola/domain/sudo/unit_sudoers_grant.dart';
+import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 
 class SudoersInstallProbe extends Probe<SudoersInstallResult> {
   const SudoersInstallProbe({
@@ -76,6 +78,54 @@ class UnitSudoersGrantProbe extends Probe<void> {
     }
     final err = stderr.trim();
     throw KelolaException(err.isEmpty ? 'Could not add the sudo rule' : err);
+  }
+
+  @override
+  bool get needsSudo => true;
+
+  @override
+  RiskLevel get risk => RiskLevel.mutate;
+
+  @override
+  Duration get timeout => const Duration(seconds: 45);
+}
+
+/// Adds a lens's exact read rules to [kelolaWebSudoersPath] (M52 §7b). The
+/// sudo password arrives on stdin only. Returns the cert and log paths whose
+/// lines the host refused to install ([webGrantSkippedMarker]); the other
+/// lines were installed.
+class WebSudoersGrantProbe extends Probe<List<String>> {
+  const WebSudoersGrantProbe(this.grant);
+
+  final WebSudoersGrant grant;
+
+  String get _label => grant.id == ServiceId.apache ? 'Apache' : 'nginx';
+
+  @override
+  String get auditTitle => 'Allowed $_label lens reads without a password';
+
+  @override
+  String auditCommand(HostFacts facts) =>
+      'kelola-sudoers-web-grant $kelolaWebSudoersPath ${grant.linesHash}';
+
+  @override
+  String command(HostFacts facts) => buildWebGrantScript(grant);
+
+  @override
+  List<String> parse(String stdout, String stderr, int exitCode) {
+    final untrusted = webGrantUntrustedBinary(stdout);
+    if (untrusted != null) {
+      throw KelolaException(webGrantUntrustedCopy(untrusted));
+    }
+    final skipped = webGrantSkippedPaths(stdout);
+    if (exitCode == 0 && stdout.contains(webGrantOkMarker)) {
+      return skipped;
+    }
+    if (exitCode == webGrantNothingExit && skipped.isNotEmpty) {
+      throw KelolaException(skipped.map(webGrantSkippedCopy).join('\n'));
+    }
+    final err = stderr.trim();
+    throw KelolaException(err.isEmpty ? 'Could not add the sudo rules' : err);
   }
 
   @override

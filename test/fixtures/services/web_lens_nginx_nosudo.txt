@@ -1,0 +1,15 @@
+---TOOLS---
+|openssl /usr/bin/openssl
+|tail /usr/bin/tail
+---ACTIVE---
+---CONFTEST---
+@rc=nosudo
+---DUMP---
+---CERTS---
+@done=1
+---ERRLOG---
+@path=/var/log/nginx/error.log
+@read=fail
+---ACCESS---
+@path=/var/log/nginx/access.log
+@read=fail

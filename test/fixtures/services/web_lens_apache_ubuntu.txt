@@ -1,0 +1,35 @@
+---TOOLS---
+|openssl /usr/bin/openssl
+|tail /usr/bin/tail
+---ACTIVE---
+---CONFTEST---
+|AH00558: apache2: Could not reliably determine the server's fully qualified domain name, using 127.0.0.1. Set the 'ServerName' directive globally to suppress this message
+|Syntax OK
+@rc=0
+---DUMP---
+|VirtualHost configuration:
+|*:80                   127.0.0.1 (/etc/apache2/sites-enabled/000-default.conf:1)
+|ServerRoot: "/etc/apache2"
+|Main DocumentRoot: "/var/www/html"
+|Main ErrorLog: "/var/log/apache2/error.log"
+|Mutex default: dir="/var/run/apache2/" mechanism=default 
+|Mutex watchdog-callback: using_defaults
+|PidFile: "/var/run/apache2/apache2.pid"
+|Define: DUMP_VHOSTS
+|Define: DUMP_RUN_CFG
+|User: name="www-data" id=33
+|Group: name="www-data" id=33
+---CERTS---
+@cert=/etc/ssl/certs/ssl-cert-snakeoil.pem
+@read=ok
+|notAfter=Oct 24 19:42:20 2036 GMT
+|subject=CN = localhost
+|X509v3 Subject Alternative Name: 
+|    DNS:localhost
+@done=1
+---ERRLOG---
+@path=/var/log/apache2/error.log
+@read=ok
+---ACCESS---
+@path=/var/log/apache2/access.log
+@read=ok

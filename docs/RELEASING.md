@@ -27,7 +27,6 @@ pubspec or if the AAB build drops the dart-defines.
 Other changes (docs, tests, CI, refactors) must not bump versionName
 and must not rewrite whatsnew or `WhatsNewStrings.notes`.
 
-Longer optional changelog stays in `docs/play/release-notes-*.md`.
 Play Console only receives `docs/store/whatsnew/`.
 
 ## What's new card

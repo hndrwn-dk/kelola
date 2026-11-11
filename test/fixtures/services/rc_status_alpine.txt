@@ -1,0 +1,18 @@
+---UNITS---
+Runlevel: default
+ crond                                                             [  started  ]
+ sshd                                                              [  started  ]
+ nginx                                                             [  started  ]
+ postgresql                                                        [  stopped  ]
+Dynamic Runlevel: hotplugged
+Dynamic Runlevel: needed/wanted
+ networking                                                        [  started  ]
+Dynamic Runlevel: manual
+---BIN---
+nginx /usr/sbin/nginx
+psql /usr/bin/psql
+---VERSION---
+nginx nginx version: nginx/1.26.2
+---PORTS---
+0.0.0.0:22
+0.0.0.0:80
