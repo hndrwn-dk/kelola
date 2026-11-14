@@ -201,9 +201,26 @@ class WebLensProbe extends Probe<WebLens> {
         r'  [ -f "$f" ] && [ -r "$f" ] && n=$((n + 1))',
         'done',
         r'[ "$n" -gt 0 ] || echo @src=none',
-        'for f in ${apacheEnabledConfigGlobs(facts).join(' ')}; do',
-        r'  [ -f "$f" ] && [ -r "$f" ] && grep -hsi SSLCertificateFile -- "$f"',
-        'done | pick sslcertificatefile $maxCerts |',
+        // Fix 3: each certificate with where it is set: `global` (outside
+        // any <VirtualHost>), or the file and line of its `<VirtualHost`,
+        // the `file:line` that -S prints for that vhost. A file path outside
+        // the whitelist is never printed (`vhost`: not linkable). Every value
+        // is validated here; the parser checks again.
+        'L=\$(for f in ${apacheEnabledConfigGlobs(facts).join(' ')}; do',
+        r'  [ -f "$f" ] && [ -r "$f" ] || continue',
+        r'  g=$f; case "$g" in (/*) ;; (*) g= ;; esac',
+        r'  case "$g" in (*[!-A-Za-z0-9._/+@]*|*..*) g= ;; esac',
+        r'''  awk -v g="$g" -v q="'" '{ t = tolower($1) }''',
+        r'''    t == "<virtualhost" { if (d++ == 0) l = NR; next }''',
+        r'''    substr(t, 1, 13) == "</virtualhost" { if (d > 0) d--; next }''',
+        r'''    t == "sslcertificatefile" { v = $2; f = substr(v, 1, 1)''',
+        r'''      if ((f == "\"" || f == q) && length(v) > 1 && substr(v, length(v), 1) == f) v = substr(v, 2, length(v) - 2)''',
+        r'''      if (v !~ "^/[-A-Za-z0-9._/+@]+$" || index(v, "..") != 0) next''',
+        r'''      s = "global"; if (d > 0) s = (g == "" ? "vhost" : g ":" l)''',
+        r'''      print "@certin=" s " " v }' < "$f" 2>/dev/null''',
+        'done | head -n $webMaxCertLinks)',
+        r'''[ -z "$L" ] || printf '%s\n' "$L"''',
+        r'''printf '%s\n' "$L" | awk 'NF == 2 { print "sslcertificatefile", $2 }' | pick sslcertificatefile ''' '$maxCerts |',
       ] else
         'printf \'%s\\n\' "\$d" | pick ssl_certificate $maxCerts |',
       r'while IFS= read -r p; do',

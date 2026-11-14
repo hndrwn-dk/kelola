@@ -182,7 +182,11 @@ void main() {
     );
   });
 
-  test('apache 443 vhost: warning only when no certificate is configured', () {
+  // Fix 3: per vhost. A cert is linked to its vhost (`file:line`) or
+  // inherited from the server config; one linked to another vhost does not
+  // count.
+  test('apache 443 vhost: warning when it has neither own nor inherited cert',
+      () {
     const v = WebVhost(
       serverNames: ['example.com'],
       listen: ['*:443'],
@@ -190,18 +194,42 @@ void main() {
     );
     final none = lens(id: ServiceId.apache, vhosts: const [v]);
     expect(levels(none), [WebFindingLevel.warning]);
-    final withCert = lens(
+    expect(none.findings.single.kind, WebFindingKind.listens443WithoutCert);
+    final expiring = {
+      '/etc/pki/tls/certs/example.crt': WebCert(
+        path: '/etc/pki/tls/certs/example.crt',
+        notAfter: now.add(const Duration(days: 3, hours: 1)),
+      ),
+    };
+    // The only cert belongs to another vhost: still checked for expiry, and
+    // this vhost is still a 443 without a certificate.
+    final elsewhere = lens(
       id: ServiceId.apache,
       vhosts: const [v],
-      certs: {
-        '/etc/pki/tls/certs/example.crt': WebCert(
-          path: '/etc/pki/tls/certs/example.crt',
-          notAfter: now.add(const Duration(days: 3, hours: 1)),
-        ),
-      },
+      certs: expiring,
     );
-    // -S cannot attribute certs to vhosts; every configured cert is checked.
-    expect(levels(withCert), [WebFindingLevel.failed]);
+    expect(levels(elsewhere), [WebFindingLevel.failed, WebFindingLevel.warning]);
+    for (final own in [
+      const WebVhost(
+        serverNames: ['example.com'],
+        listen: ['*:443'],
+        tls: true,
+        certPath: '/etc/pki/tls/certs/example.crt',
+        certPaths: ['/etc/pki/tls/certs/example.crt'],
+      ),
+      const WebVhost(
+        serverNames: ['example.com'],
+        listen: ['*:443'],
+        tls: true,
+        certPath: '/etc/pki/tls/certs/example.crt',
+        certPaths: ['/etc/pki/tls/certs/example.crt'],
+        inherited: true,
+      ),
+    ]) {
+      final l = lens(id: ServiceId.apache, vhosts: [own], certs: expiring);
+      expect(levels(l), [WebFindingLevel.failed], reason: '${own.inherited}');
+      expect(l.findings.single.subject, 'example.com');
+    }
     final unknownCerts = lens(
       id: ServiceId.apache,
       vhosts: const [v],
@@ -210,6 +238,52 @@ void main() {
       },
     );
     expect(unknownCerts.findings, isEmpty);
+    // A cert set in a vhost the parser could not tie to any `-S` vhost:
+    // which vhost has it is unknown, so no vhost is called certless.
+    final unlinked = WebLens(
+      id: ServiceId.apache,
+      readAt: now,
+      activeState: 'active',
+      configOk: true,
+      vhosts: const [v],
+      certsByPath: expiring,
+      statusCounts: const {200: 100},
+      vhostCertsUnlinked: true,
+    );
+    expect(levels(unlinked), [WebFindingLevel.failed]);
+  });
+
+  test('nginx TLS vhost with an inherited cert: no 443 warning', () {
+    const inh = WebVhost(
+      serverNames: ['inh.lab'],
+      listen: ['443 ssl'],
+      tls: true,
+      certPath: '/etc/ssl/http.pem',
+      certPaths: ['/etc/ssl/http.pem'],
+      inherited: true,
+    );
+    final l = lens(
+      vhosts: const [inh],
+      certs: {
+        '/etc/ssl/http.pem': WebCert(
+          path: '/etc/ssl/http.pem',
+          notAfter: now.add(const Duration(days: 90)),
+        ),
+      },
+    );
+    expect(l.findings, isEmpty);
+    // Expiry is reported against the vhost that inherits it.
+    final soon = lens(
+      vhosts: const [inh],
+      certs: {
+        '/etc/ssl/http.pem': WebCert(
+          path: '/etc/ssl/http.pem',
+          notAfter: now.add(const Duration(days: 3, hours: 1)),
+        ),
+      },
+    );
+    expect(soon.findings.single.kind, WebFindingKind.certExpiring);
+    expect(soon.findings.single.subject, 'inh.lab');
   });
 
   test('unreadable cert is a fact, not a finding', () {

@@ -191,6 +191,18 @@ WebLens parseWebLens(
     }
   }
 
+  // Apache (fix 3): tie each cert to its -S vhost, or the server config.
+  var vhostCertsUnlinked = false;
+  if (id == ServiceId.apache) {
+    final linked = _linkApacheCerts(
+      vhosts,
+      certSec,
+      anyCert: certs.isNotEmpty,
+    );
+    vhosts = linked.vhosts;
+    vhostCertsUnlinked = linked.unlinked;
+  }
+
   // ERRLOG
   final el = _log(sections[_Sec.errlog]);
   final errorLogTail = el.ok
@@ -239,8 +251,97 @@ WebLens parseWebLens(
     errorLogStat: _stat(sections[_Sec.errlog]?.metaValue('stat')),
     accessLogStat: _stat(sections[_Sec.access]?.metaValue('stat')),
     loginGroups: loginGroups,
+    vhostCertsUnlinked: vhostCertsUnlinked,
   );
 }
+
+/// Max `@certin` lines read; the probe prints at most this many.
+const webMaxCertLinks = 1000;
+
+/// Max certs linked to one vhost.
+const _maxCertsPerVhost = 256;
+
+/// Fix 3. The probe prints `@certin=<scope> <cert path>` per
+/// `SSLCertificateFile`, in read order: `global` (outside any
+/// `<VirtualHost>`), `<file>:<line>` (the `<VirtualHost` line, as `-S` prints
+/// it) or `vhost` (in a file whose path it would not print). A vhost gets the
+/// certs of its own `file:line`; a TLS vhost with none inherits the last
+/// global one. `unlinked` when a cert could not be tied to a vhost.
+({List<WebVhost> vhosts, bool unlinked}) _linkApacheCerts(
+  List<WebVhost> vhosts,
+  _Section? sec, {
+  required bool anyCert,
+}) {
+  final own = <String, List<String>>{};
+  String? global;
+  var count = 0;
+  var unlinked = false;
+  for (final m in sec?.meta ?? const <MapEntry<String, String>>[]) {
+    if (m.key != 'certin') continue;
+    if (++count > webMaxCertLinks) {
+      // Possibly cut by the probe's cap: the rest is unknown.
+      unlinked = true;
+      break;
+    }
+    final parts = m.value.split(' ');
+    if (parts.length != 2 || !isSafeWebPath(parts[1])) continue;
+    final scope = parts[0];
+    final path = parts[1];
+    if (scope == 'global') {
+      global = path;
+    } else if (scope == 'vhost') {
+      unlinked = true;
+    } else if (_isVhostLoc(scope)) {
+      final list = own[scope] ??= <String>[];
+      if (!list.contains(path) && list.length < _maxCertsPerVhost) {
+        list.add(path);
+      }
+    }
+  }
+  // Certs read but no link printed: attribution unknown.
+  if (count == 0 && anyCert) unlinked = true;
+  final locs = {for (final v in vhosts) v.sourceFile};
+  if (own.keys.any((k) => !locs.contains(k))) unlinked = true;
+  final inherited = global;
+  return (
+    vhosts: [
+      for (final v in vhosts)
+        if (own[v.sourceFile] case final paths?)
+          _withCerts(v, paths, inherited: false)
+        else if (v.tls && inherited != null)
+          _withCerts(v, [inherited], inherited: true)
+        else
+          v,
+    ],
+    unlinked: unlinked,
+  );
+}
+
+/// `<safe absolute path>:<line>`.
+bool _isVhostLoc(String s) {
+  final i = s.lastIndexOf(':');
+  if (i <= 0) return false;
+  final line = s.substring(i + 1);
+  return line.isNotEmpty &&
+      line.length <= 9 &&
+      line.codeUnits.every((c) => c >= 48 && c <= 57) &&
+      isSafeWebPath(s.substring(0, i));
+}
+
+WebVhost _withCerts(
+  WebVhost v,
+  List<String> paths, {
+  required bool inherited,
+}) => WebVhost(
+  serverNames: v.serverNames,
+  listen: v.listen,
+  tls: v.tls,
+  root: v.root,
+  certPath: paths.first,
+  certPaths: List.unmodifiable(paths),
+  sourceFile: v.sourceFile,
+  inherited: inherited,
+);
 
 /// `@stat=<owner> <group> <mode>`; null unless all three are valid.
 WebLogStat? _stat(String? v) {

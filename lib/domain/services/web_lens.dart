@@ -17,6 +17,7 @@ class WebVhost {
     this.certPath,
     this.certPaths = const [],
     this.sourceFile = '',
+    this.inherited = false,
   });
 
   /// Empty when the block has no `server_name`; `['_']` only when the
@@ -34,10 +35,15 @@ class WebVhost {
   final List<String> certPaths;
   final String sourceFile;
 
+  /// Fix 3: the vhost sets no certificate of its own; [certPath] is the one
+  /// it inherits (nginx `http {}` level, Apache server config).
+  final bool inherited;
+
   @override
   String toString() =>
       'WebVhost(serverNames: $serverNames, listen: $listen, tls: $tls, '
-      'root: $root, certPath: $certPath, sourceFile: $sourceFile)';
+      'root: $root, certPath: $certPath, inherited: $inherited, '
+      'sourceFile: $sourceFile)';
 }
 
 class WebCert {
@@ -134,6 +140,7 @@ class WebLens {
     this.errorLogStat,
     this.accessLogStat,
     this.loginGroups,
+    this.vhostCertsUnlinked = false,
   });
 
   final ServiceId id;
@@ -168,6 +175,12 @@ class WebLens {
 
   /// The login's groups (`id -nG`); null = unknown, never guessed.
   final List<String>? loginGroups;
+
+  /// Apache (fix 3): a certificate was read that could not be tied to any
+  /// `-S` vhost or to the server config (its `<VirtualHost>` line matched no
+  /// vhost, or the probe printed no links). Which vhost has it is unknown,
+  /// so no vhost is called one without a certificate.
+  final bool vhostCertsUnlinked;
 
   /// Worst finding (facts never count). [HealthStatus.unknown] only when no
   /// section at all could be read.
@@ -221,8 +234,8 @@ class WebLens {
       );
     }
 
-    // -S cannot tie Apache certs to vhosts; nginx certs not referenced by a
-    // vhost (http{} or stream level) are still served. Check every cert read.
+    // Certs not tied to a vhost (stream level, an unlinked Apache vhost) are
+    // still served. Check every cert read.
     for (final cert in certsByPath.values) {
       final days = cert.daysLeft(readAt);
       if (days == null) {
@@ -301,10 +314,12 @@ class WebLens {
 
     for (final v in vhosts) {
       if (!v.listen.any(_listensOn443)) continue;
+      // Own or inherited (fix 3). Apache: never when the cert section failed
+      // or a cert could not be tied to its vhost.
       final noCert = id == ServiceId.apache
-          // Apache: only when the config has no certificate at all.
-          ? certsByPath.isEmpty &&
-                !sectionErrors.containsKey(WebLensSection.certs)
+          ? v.certPaths.isEmpty &&
+                !sectionErrors.containsKey(WebLensSection.certs) &&
+                !vhostCertsUnlinked
           : v.certPaths.isEmpty;
       if (noCert) {
         warning.add(

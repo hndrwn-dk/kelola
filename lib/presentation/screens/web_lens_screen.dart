@@ -27,6 +27,11 @@ import 'package:kelola/providers.dart';
 /// Certs at or under this many days left count as expiring (spec §5c).
 const webCertExpiringDays = 21;
 
+/// Fix 3: the note beside a certificate a vhost inherits.
+String webInheritedCertNote(ServiceId id) => id == ServiceId.apache
+    ? 'inherited from server config'
+    : 'inherited from http {}';
+
 /// Error log lines shown inline; the sheet has the full tail.
 const _inlineLogLines = 8;
 
@@ -1144,7 +1149,17 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
                       if (v.root != null) ...[label('Root'), mono(v.root!)],
                       for (final p in v.certPaths) ...[
                         label('Certificate'),
-                        mono(p),
+                        if (v.inherited)
+                          Wrap(
+                            spacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              mono(p),
+                              body(webInheritedCertNote(l.id)),
+                            ],
+                          )
+                        else
+                          mono(p),
                         ..._certLines(l.certsByPath[p], now, mono, body),
                       ],
                       if (v.tls && v.certPaths.isEmpty) ...[

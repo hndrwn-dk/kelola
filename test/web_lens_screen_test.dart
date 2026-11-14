@@ -605,6 +605,119 @@ void main() {
       await dispose(tester);
     });
 
+    // Fix 3: a cert inherited from http {} / the server config.
+    testWidgets('sheet marks an inherited cert; EXPIRING counts it',
+        (tester) async {
+      final at = DateTime.now().toUtc();
+      const inh = WebVhost(
+        serverNames: ['inh.example.com'],
+        listen: ['443 ssl'],
+        tls: true,
+        certPath: '/etc/ssl/certs/http.pem',
+        certPaths: ['/etc/ssl/certs/http.pem'],
+        inherited: true,
+        sourceFile: '/etc/nginx/conf.d/inh.conf',
+      );
+      pool.lens = _lens(
+        readAt: at,
+        vhosts: const [_api, inh],
+        certs: {
+          '/etc/ssl/certs/api.crt': WebCert(
+            path: '/etc/ssl/certs/api.crt',
+            notAfter: at.add(const Duration(days: 80)),
+          ),
+          '/etc/ssl/certs/http.pem': WebCert(
+            path: '/etc/ssl/certs/http.pem',
+            notAfter: at.add(const Duration(days: 5, hours: 2)),
+          ),
+        },
+      );
+      await pumpLens(tester);
+      expect(find.text('EXPIRING 1'), findsOneWidget);
+      await tester.tap(find.text('EXPIRING 1'));
+      await frames(tester, 4);
+      expect(vhostRow('inh.example.com'), findsOneWidget);
+      expect(vhostRow('api.example.com'), findsNothing);
+
+      await tester.tap(vhostRow('inh.example.com'));
+      await frames(tester, 10);
+      final sheet = find.byType(KelolaSheet);
+      final path = find.descendant(
+        of: sheet,
+        matching: find.text('/etc/ssl/certs/http.pem'),
+      );
+      expect(path, findsOneWidget);
+      expect(
+        tester.widget<Text>(path).style?.fontFamily,
+        KelolaType.mono(color: Colors.black).fontFamily,
+      );
+      final note = find.descendant(
+        of: sheet,
+        matching: find.text('inherited from http {}'),
+      );
+      expect(note, findsOneWidget);
+      final style = tester.widget<Text>(note).style;
+      expect(
+        style?.fontFamily,
+        KelolaType.body(color: Colors.black).fontFamily,
+      );
+      expect(style?.color, KelolaColors.dark.muted);
+      Navigator.of(tester.element(sheet)).pop();
+      await frames(tester, 10);
+
+      // An own cert carries no note.
+      await tester.tap(find.text('ALL 2'));
+      await frames(tester, 4);
+      await tester.tap(vhostRow('api.example.com'));
+      await frames(tester, 10);
+      expect(find.textContaining('inherited from'), findsNothing);
+      await dispose(tester);
+    });
+
+    test('inherited note names the right config level', () {
+      expect(webInheritedCertNote(ServiceId.nginx), 'inherited from http {}');
+      expect(
+        webInheritedCertNote(ServiceId.apache),
+        'inherited from server config',
+      );
+    });
+
+    // Fix 3: the grant takes cert paths from certsByPath, so an inherited
+    // (http-level or global) cert gets its openssl line unchanged.
+    test('an inherited cert path reaches the read grant', () {
+      final lens = WebLens(
+        id: ServiceId.nginx,
+        readAt: DateTime.utc(2026, 11, 10),
+        vhosts: const [
+          WebVhost(
+            serverNames: ['inh.example.com'],
+            listen: ['443 ssl'],
+            tls: true,
+            certPath: '/etc/ssl/certs/http.pem',
+            certPaths: ['/etc/ssl/certs/http.pem'],
+            inherited: true,
+          ),
+        ],
+        certsByPath: const {
+          '/etc/ssl/certs/http.pem': WebCert(path: '/etc/ssl/certs/http.pem'),
+        },
+        toolPaths: const {'openssl': '/usr/bin/openssl', 'tail': '/usr/bin/tail'},
+      );
+      final g = webReadGrantFor(
+        host: host,
+        service: _nginx,
+        facts: _facts(),
+        lens: lens,
+      )!;
+      expect(
+        g.lines,
+        contains(
+          'hendra ALL=(root) NOPASSWD: /usr/bin/openssl x509 -noout -enddate '
+          '-subject -ext subjectAltName -in /etc/ssl/certs/http.pem',
+        ),
+      );
+    });
+
     testWidgets('error log section renders tail', (tester) async {
       final tail = [
         for (var i = 0; i < 20; i++)

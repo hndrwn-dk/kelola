@@ -16,6 +16,11 @@ import 'web_lens.dart';
 /// `root` and `ssl_certificate` belong to every vhost whose block (at the
 /// server's own level) has a matching include, before or after the section.
 ///
+/// `ssl_certificate` at http level (directly in `http {}`, or at the top
+/// level of a file included there) is inherited by every TLS vhost that sets
+/// none of its own; the last one in the dump wins. A file whose context is a
+/// guess (matched by no include) never gives one.
+///
 /// Bounded for hostile input: at most [nginxMaxDepth] nested contexts (deeper
 /// blocks are skipped and mark the dump truncated), [nginxMaxIncludes]
 /// includes and [nginxMaxSections] sections matched against them.
@@ -81,9 +86,18 @@ class _Block {
 }
 
 class _Include {
-  _Include(this.pattern, this.context, {this.vhost, this.section});
+  _Include(
+    this.pattern,
+    this.context, {
+    required this.known,
+    this.vhost,
+    this.section,
+  });
   final String pattern;
   final List<String> context;
+
+  /// [context] is certain: not derived from a section's fallback guess.
+  final bool known;
 
   /// The vhost whose own level holds this include, if any.
   final _Block? vhost;
@@ -172,6 +186,10 @@ NginxDumpResult parseNginxDump(String dump) {
   final sections = <_Section>[];
   final stack = <_Block>[];
   var base = <String>[];
+  // [base] came from the main file or a matched include, not the fallback.
+  var baseKnown = true;
+  // Fix 3: the last http-level `ssl_certificate` seen.
+  String? httpCert;
   var truncated = false;
   var currentFile = '';
   final sourceFiles = <String>{};
@@ -221,6 +239,7 @@ NginxDumpResult parseNginxDump(String dump) {
           _Include(
             pattern,
             context(),
+            known: baseKnown,
             vhost: top != null && top.vhost ? top : null,
             section: stack.isEmpty && sections.isNotEmpty
                 ? sections.length - 1
@@ -228,6 +247,12 @@ NginxDumpResult parseNginxDump(String dump) {
           ),
         );
       }
+    }
+    if (name == 'ssl_certificate' && args.isNotEmpty && baseKnown) {
+      final httpLevel = base.isEmpty
+          ? stack.length == 1 && stack.first.name == 'http'
+          : stack.isEmpty && base.length == 1 && base.first == 'http';
+      if (httpLevel) httpCert = args.first;
     }
     if (stack.isEmpty) {
       // Top level of an included file: kept for the vhosts including it.
@@ -258,9 +283,12 @@ NginxDumpResult parseNginxDump(String dump) {
     if (mainFile == null) {
       mainFile = file;
       base = [];
+      baseKnown = true;
       return;
     }
+    // Matched by no include: http is a guess.
     base = ['http'];
+    baseKnown = false;
     if (sections.length >= nginxMaxSections) {
       // Past the bound: not matched, and its directives are not kept.
       truncated = true;
@@ -270,6 +298,7 @@ NginxDumpResult parseNginxDump(String dump) {
     for (final inc in includes) {
       if (_globMatch(inc.pattern, file)) {
         base = inc.context;
+        baseKnown = inc.known;
         break;
       }
     }
@@ -405,18 +434,32 @@ NginxDumpResult parseNginxDump(String dump) {
     truncated = true;
   }
 
+  // After attribution: a snippet's cert is the vhost's own.
+  final inheritedCert = httpCert;
   return NginxDumpResult(
     vhosts: [
       for (final b in complete)
-        WebVhost(
-          serverNames: List.unmodifiable(b.serverNames),
-          listen: List.unmodifiable(b.listen),
-          tls: b.tls,
-          root: b.root,
-          certPath: b.certPaths.isEmpty ? null : b.certPaths.first,
-          certPaths: List.unmodifiable(b.certPaths),
-          sourceFile: b.sourceFile,
-        ),
+        if (b.tls && b.certPaths.isEmpty && inheritedCert != null)
+          WebVhost(
+            serverNames: List.unmodifiable(b.serverNames),
+            listen: List.unmodifiable(b.listen),
+            tls: b.tls,
+            root: b.root,
+            certPath: inheritedCert,
+            certPaths: List.unmodifiable([inheritedCert]),
+            sourceFile: b.sourceFile,
+            inherited: true,
+          )
+        else
+          WebVhost(
+            serverNames: List.unmodifiable(b.serverNames),
+            listen: List.unmodifiable(b.listen),
+            tls: b.tls,
+            root: b.root,
+            certPath: b.certPaths.isEmpty ? null : b.certPaths.first,
+            certPaths: List.unmodifiable(b.certPaths),
+            sourceFile: b.sourceFile,
+          ),
     ],
     errorLogPaths: errorLogs,
     accessLogPaths: accessLogs,
