@@ -60,9 +60,11 @@ in CI drifted from pubspec).
 
 1. Wire the private billing package (see below) and
    `android/key.properties` locally.
-2. `bash scripts/build_play_aab.sh` → `bundles_release/v<version>/`.
+2. `bash scripts/build_play_aab.sh` → `bundles_release/v<version>/`
+   holds the AAB, `symbols/` and `whatsnew-en-US.txt` (a copy of
+   `docs/store/whatsnew/whatsnew-en-US`).
 3. Upload the AAB in Play Console → Internal testing. Paste
-   `docs/store/whatsnew/whatsnew-en-US` as release notes. The R8 mapping
+   `bundles_release/v<version>/whatsnew-en-US.txt` as release notes. The R8 mapping
    ships inside the AAB (`BUNDLE-METADATA/.../obfuscation/proguard.map`), so
    no separate upload is needed. To check, open the bundle under Test and
    release → Latest releases and bundles → Downloads → Assets. If ReTrace

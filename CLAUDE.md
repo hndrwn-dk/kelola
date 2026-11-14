@@ -83,6 +83,7 @@ Password auth exists only as a non-pooled bootstrap that installs the key (`runP
   - A release PR bumps `version:` **and** replaces both `docs/store/whatsnew/whatsnew-en-US` (one `- ` line per point, at most 3 points, ≤ 500 chars, this version only) and `WhatsNewStrings.notes` in `lib/presentation/whats_new_strings.dart`. `test/whats_new_test.dart` fails if the two differ.
   - Every other PR leaves `version:`, the whatsnew file and `WhatsNewStrings.notes` alone.
 - **Builds are manual.** CI does not build or upload AABs. The versionCode is only the pubspec `+N`. `scripts/build_play_aab.sh` passes it as `--build-number` and `--dart-define=KELOLA_BUILD`, and refuses overrides. Upload in Play Console.
+- **Release notes ride with the AAB.** `scripts/build_play_aab.sh` copies `docs/store/whatsnew/whatsnew-en-US` to `bundles_release/v<version>/whatsnew-en-US.txt`, next to the AAB and `symbols/`. Paste that file into Play Console with the upload. `test/build_play_aab_obfuscate_test.dart` pins the copy.
 
 ## Pull requests
 
