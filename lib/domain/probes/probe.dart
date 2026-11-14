@@ -43,5 +43,5 @@ class ReadOnlyViolation implements Exception {
 
   @override
   String toString() =>
-      'Read-only host refused ${probe.runtimeType} (${probe.risk.name})';
+      'Read-only host refused ${probe.auditTitle} (${probe.risk.name})';
 }

@@ -9,7 +9,7 @@ class FleetReadOnlyViolation implements Exception {
 
   @override
   String toString() =>
-      'Fleet mode refuses ${probe.runtimeType} (${probe.risk.name})';
+      'Fleet mode refuses ${probe.auditTitle} (${probe.risk.name})';
 }
 
 /// Fleet may only run [RiskLevel.read] probes. Mutate/destructive throw.
