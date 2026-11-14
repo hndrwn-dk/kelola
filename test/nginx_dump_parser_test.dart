@@ -173,6 +173,243 @@ server { server_name b; }
     });
   });
 
+  // Fix 3: `ssl_certificate` at http level is inherited by every TLS vhost
+  // that sets none of its own.
+  group('certificates inherited from http {}', () {
+    bool listens443WithoutCert(NginxDumpResult r, String name) => WebLens(
+          id: ServiceId.nginx,
+          readAt: DateTime.utc(2026, 11, 10),
+          vhosts: r.vhosts,
+        ).findings.any(
+          (f) =>
+              f.kind == WebFindingKind.listens443WithoutCert &&
+              f.subject == name,
+        );
+
+    test('http-level only: a TLS vhost inherits it, a plain one does not', () {
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http {
+  ssl_certificate /etc/ssl/certs/http.pem;
+  ssl_certificate_key /etc/ssl/private/http.key;
+  server { listen 443 ssl; server_name tls.lab; }
+  server { listen 80; server_name plain.lab; }
+}
+''');
+      final tls = r.vhosts[0];
+      expect(tls.serverNames, ['tls.lab']);
+      expect(tls.certPath, '/etc/ssl/certs/http.pem');
+      expect(tls.certPaths, ['/etc/ssl/certs/http.pem']);
+      expect(tls.inherited, isTrue);
+      final plain = r.vhosts[1];
+      expect(plain.certPath, isNull);
+      expect(plain.certPaths, isEmpty);
+      expect(plain.inherited, isFalse);
+      expect(listens443WithoutCert(r, 'tls.lab'), isFalse);
+      // The key directive at http level is never stored.
+      expect(r.toString(), isNot(contains('.key')));
+      expect(r.vhosts.join(), isNot(contains('http.key')));
+    });
+
+    test('a vhost with its own directive keeps it, not inherited', () {
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http {
+  ssl_certificate /etc/ssl/certs/http.pem;
+  server { listen 443 ssl; server_name own.lab;
+    ssl_certificate /etc/ssl/certs/own.pem; }
+  server { listen 443 ssl; server_name inh.lab; }
+}
+''');
+      expect(r.vhosts[0].certPaths, ['/etc/ssl/certs/own.pem']);
+      expect(r.vhosts[0].certPath, '/etc/ssl/certs/own.pem');
+      expect(r.vhosts[0].inherited, isFalse);
+      expect(r.vhosts[1].certPaths, ['/etc/ssl/certs/http.pem']);
+      expect(r.vhosts[1].inherited, isTrue);
+    });
+
+    test('a cert from a snippet included in the server block is its own', () {
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http {
+  ssl_certificate /etc/ssl/certs/http.pem;
+  server { listen 443 ssl; server_name snip.lab;
+    include /etc/nginx/snippets/snakeoil.conf; }
+}
+# configuration file /etc/nginx/snippets/snakeoil.conf:
+ssl_certificate /etc/ssl/certs/snakeoil.pem;
+ssl_certificate_key /etc/ssl/private/snakeoil.key;
+''');
+      final v = r.vhosts.single;
+      expect(v.certPaths, ['/etc/ssl/certs/snakeoil.pem']);
+      expect(v.inherited, isFalse);
+    });
+
+    test('http-level include file, also through a nested include', () {
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http { include /etc/nginx/conf.d/*.conf; }
+# configuration file /etc/nginx/conf.d/00-tls.conf:
+ssl_certificate /etc/ssl/certs/included.pem;
+ssl_certificate_key /etc/ssl/private/included.key;
+# configuration file /etc/nginx/conf.d/site.conf:
+server { listen 443 ssl; server_name site.lab; }
+''');
+      expect(r.vhosts.single.certPaths, ['/etc/ssl/certs/included.pem']);
+      expect(r.vhosts.single.inherited, isTrue);
+      expect(r.toString(), isNot(contains('.key')));
+
+      final nested = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http { include /etc/nginx/conf.d/*.conf; }
+# configuration file /etc/nginx/conf.d/a.conf:
+include /etc/nginx/tls/*.conf;
+server { listen 443 ssl; server_name a.lab; }
+# configuration file /etc/nginx/tls/cert.conf:
+ssl_certificate /etc/ssl/certs/nested.pem;
+''');
+      expect(nested.vhosts.single.certPaths, ['/etc/ssl/certs/nested.pem']);
+      expect(nested.vhosts.single.inherited, isTrue);
+    });
+
+    test('two http-level directives: the last in the dump wins', () {
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http {
+  ssl_certificate /etc/ssl/certs/first.pem;
+  server { listen 443 ssl; server_name a.lab; }
+  ssl_certificate /etc/ssl/certs/second.pem;
+}
+''');
+      expect(r.vhosts.single.certPaths, ['/etc/ssl/certs/second.pem']);
+      expect(r.vhosts.single.inherited, isTrue);
+      // An included http-level file printed after the main file comes later
+      // in the dump.
+      final inc = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http {
+  include /etc/nginx/conf.d/*.conf;
+  ssl_certificate /etc/ssl/certs/main.pem;
+  server { listen 443 ssl; server_name a.lab; }
+}
+# configuration file /etc/nginx/conf.d/tls.conf:
+ssl_certificate /etc/ssl/certs/conf-d.pem;
+''');
+      expect(inc.vhosts.single.certPaths, ['/etc/ssl/certs/conf-d.pem']);
+    });
+
+    test('plain listen 443 never inherits; the finding still fires', () {
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http {
+  ssl_certificate /etc/ssl/certs/http.pem;
+  server { listen 443; server_name plain443.lab; }
+  server { listen 443 ssl; server_name tls.lab; }
+}
+''');
+      expect(r.vhosts[0].certPaths, isEmpty);
+      expect(r.vhosts[0].inherited, isFalse);
+      expect(listens443WithoutCert(r, 'plain443.lab'), isTrue);
+      expect(listens443WithoutCert(r, 'tls.lab'), isFalse);
+      // No certificate anywhere: still fires.
+      final none = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http { server { listen 443; server_name nocert.lab; } }
+''');
+      expect(listens443WithoutCert(none, 'nocert.lab'), isTrue);
+      // A TLS vhost with no certificate anywhere: still fires too.
+      final tlsNone = parseNginxDump(
+        'http { server { listen 443 ssl; server_name bare.lab; } }',
+      );
+      expect(tlsNone.vhosts.single.inherited, isFalse);
+      expect(listens443WithoutCert(tlsNone, 'bare.lab'), isTrue);
+    });
+
+    test('a section of unknown context never creates an inherited cert', () {
+      // /etc/other/x.conf matches no include: its context is a guess.
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+events {}
+# configuration file /etc/other/x.conf:
+ssl_certificate /etc/ssl/certs/guess.pem;
+include /etc/other/more/*.conf;
+server { listen 443 ssl; server_name x.lab; }
+# configuration file /etc/other/more/y.conf:
+ssl_certificate /etc/ssl/certs/guess-nested.pem;
+''');
+      expect(r.vhosts.single.serverNames, ['x.lab']);
+      expect(r.vhosts.single.certPaths, isEmpty);
+      expect(r.vhosts.single.inherited, isFalse);
+    });
+
+    test('a vhost in a section of guessed context never inherits', () {
+      // A real http-level cert exists, but x.conf matches no include: its
+      // server {} is only guessed to sit in http.
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http {
+  ssl_certificate /etc/ssl/certs/http.pem;
+  server { listen 443 ssl; server_name main.lab; }
+}
+# configuration file /etc/other/x.conf:
+server { listen 443 ssl; server_name guessed.lab; }
+''');
+      expect(r.vhosts.map((v) => v.serverNames.single), ['main.lab', 'guessed.lab']);
+      expect(r.vhosts[0].certPaths, ['/etc/ssl/certs/http.pem']);
+      expect(r.vhosts[0].inherited, isTrue);
+      expect(r.vhosts[1].certPaths, isEmpty);
+      expect(r.vhosts[1].inherited, isFalse);
+      // Included through an include inside a guessed section: still a guess.
+      final n = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http { ssl_certificate /etc/ssl/certs/http.pem; }
+# configuration file /etc/other/x.conf:
+include /etc/other/sites/*.conf;
+# configuration file /etc/other/sites/a.conf:
+server { listen 443 ssl; server_name nested.lab; }
+''');
+      expect(n.vhosts.single.inherited, isFalse);
+      expect(n.vhosts.single.certPaths, isEmpty);
+    });
+
+    test('server-, stream- and location-level certs are not http level', () {
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+stream { ssl_certificate /etc/ssl/certs/stream.pem; }
+http {
+  server { listen 443 ssl; server_name a.lab;
+    ssl_certificate /etc/ssl/certs/a.pem;
+    location / { include /etc/nginx/loc.conf; } }
+  server { listen 443 ssl; server_name b.lab;
+    include /etc/nginx/snippets/b.conf; }
+  server { listen 443 ssl; server_name c.lab; }
+}
+# configuration file /etc/nginx/loc.conf:
+ssl_certificate /etc/ssl/certs/location.pem;
+# configuration file /etc/nginx/snippets/b.conf:
+ssl_certificate /etc/ssl/certs/b.pem;
+''');
+      expect(r.vhosts.map((v) => v.serverNames.single), ['a.lab', 'b.lab', 'c.lab']);
+      expect(r.vhosts[0].certPaths, ['/etc/ssl/certs/a.pem']);
+      expect(r.vhosts[1].certPaths, ['/etc/ssl/certs/b.pem']);
+      expect(r.vhosts[2].certPaths, isEmpty);
+      expect(r.vhosts.every((v) => !v.inherited), isTrue);
+    });
+
+    test('a vhost cut by the end of the dump is still dropped', () {
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http {
+  ssl_certificate /etc/ssl/certs/http.pem;
+  server { listen 443 ssl; server_name ok.lab; }
+  server { listen 443 ssl; server_name cut.lab;
+''');
+      expect(r.truncated, isTrue);
+      expect(r.vhosts.single.serverNames, ['ok.lab']);
+      expect(r.vhosts.single.inherited, isTrue);
+    });
+  });
+
   group('hostile input is bounded', () {
     test('200k nested blocks with includes: fast, truncated, no throw', () {
       final sw = Stopwatch()..start();
@@ -388,5 +625,36 @@ http { access_log off; access_log /var/log/\$host.log;
       ).daysLeft(now),
       -2,
     );
+  });
+
+  test('section files are listed once each, in order, and bounded', () {
+    final r = parseNginxDump(fixture('nginx_T_ubuntu.txt'));
+    expect(r.sourceFiles, [
+      '/etc/nginx/nginx.conf',
+      '/etc/nginx/mime.types',
+      '/etc/nginx/conf.d/soon.conf',
+      '/etc/nginx/sites-enabled/default',
+    ]);
+    // The stderr preamble's "configuration file ... syntax is ok" is not a
+    // section; a repeated header is listed once.
+    final twice = parseNginxDump(
+      '# configuration file /etc/nginx/nginx.conf:\nevents {}\n'
+      '# configuration file /etc/letsencrypt/options-ssl-nginx.conf:\n'
+      '# configuration file /etc/nginx/nginx.conf:\n',
+    );
+    expect(twice.sourceFiles, [
+      '/etc/nginx/nginx.conf',
+      '/etc/letsencrypt/options-ssl-nginx.conf',
+    ]);
+    // Past the section bound: one more than the bound is kept, so a caller
+    // can tell there were too many to check.
+    final many = StringBuffer();
+    for (var i = 0; i < nginxMaxSections + 50; i++) {
+      many.writeln('# configuration file /etc/nginx/conf.d/$i.conf:');
+    }
+    final big = parseNginxDump(many.toString());
+    expect(big.sourceFiles, hasLength(nginxMaxSections + 1));
+    expect(parseNginxDump('').sourceFiles, isEmpty);
+    expect(parseNginxDump('junk { ; } } {').sourceFiles, isEmpty);
   });
 }

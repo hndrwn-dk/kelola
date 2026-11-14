@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/app.dart';
@@ -96,6 +96,10 @@ WebLens _lens({
   Map<String, WebCert>? certs,
   Map<int, int> statusCounts = const {200: 900, 301: 40, 404: 56, 502: 4},
   Map<WebLensSection, String> sectionErrors = const {},
+  WebLogStat? errorLogStat,
+  WebLogStat? accessLogStat,
+  List<String>? loginGroups,
+  bool vhostCertsUnlinked = false,
   List<String> errorLogTail = const [
     '2026/11/10 01:31:42 [error] 3159#3159: *1 connect() failed (111: Connection refused) while connecting to upstream',
     '2026/11/10 01:31:48 [warn] 3176#3176: *2 an upstream response is buffered to a temporary file',
@@ -133,6 +137,10 @@ WebLens _lens({
     errorLogTail: errorLogTail,
     statusCounts: statusCounts,
     sectionErrors: sectionErrors,
+    errorLogStat: errorLogStat,
+    accessLogStat: accessLogStat,
+    loginGroups: loginGroups,
+    vhostCertsUnlinked: vhostCertsUnlinked,
   );
 }
 
@@ -255,6 +263,97 @@ void main() {
       expect(p.timestamp, '');
       expect(p.message, 'junk without a timestamp');
       expect(p.kind, JournalLineKind.info);
+    });
+  });
+
+  // Fix 2: the adm group hint (pure).
+  group('webAdmHintSection', () {
+    const err = 'Could not read error log: no access with or without sudo -n';
+    const acc = 'Could not read access log: no access with or without sudo -n';
+    const adm = WebLogStat(owner: 'www-data', group: 'adm', mode: '640');
+
+    WebLens l({
+      Map<WebLensSection, String> errors = const {
+        WebLensSection.errorLog: err,
+        WebLensSection.access: acc,
+      },
+      WebLogStat? errStat = adm,
+      WebLogStat? accStat,
+      List<String>? groups = const ['deploy', 'sudo'],
+    }) =>
+        _lens(
+          sectionErrors: errors,
+          errorLogStat: errStat,
+          accessLogStat: accStat,
+          loginGroups: groups,
+        );
+
+    test('matching error log', () {
+      expect(webAdmHintSection(user: 'deploy', lens: l()),
+          WebLensSection.errorLog);
+    });
+
+    test('both logs match: one hint, at the error log', () {
+      expect(webAdmHintSection(user: 'deploy', lens: l(accStat: adm)),
+          WebLensSection.errorLog);
+    });
+
+    test('only the access log matches', () {
+      expect(
+        webAdmHintSection(
+          user: 'deploy',
+          lens: l(
+            errStat: const WebLogStat(owner: 'root', group: 'root', mode: '600'),
+            accStat: adm,
+          ),
+        ),
+        WebLensSection.access,
+      );
+      // The error log read fine: its stat alone is no reason.
+      expect(
+        webAdmHintSection(
+          user: 'deploy',
+          lens: l(errors: const {WebLensSection.access: acc}, accStat: null),
+        ),
+        isNull,
+      );
+    });
+
+    test('no hint unless every condition holds', () {
+      for (final (name, lens, user) in [
+        ('no section error', l(errors: const {}), 'deploy'),
+        ('stat unknown', l(errStat: null), 'deploy'),
+        (
+          'group nginx (Alpine)',
+          l(errStat: const WebLogStat(owner: 'nginx', group: 'nginx', mode: '640')),
+          'deploy',
+        ),
+        (
+          'no group read',
+          l(errStat: const WebLogStat(owner: 'root', group: 'adm', mode: '600')),
+          'deploy',
+        ),
+        ('groups unknown', l(groups: null), 'deploy'),
+        ('already in adm', l(groups: const ['deploy', 'adm']), 'deploy'),
+        ('unsafe user', l(), 'bad user'),
+        ('unsafe user', l(), r'x$(id)'),
+        ('ALL', l(), 'ALL'),
+        ('empty user', l(), ''),
+      ]) {
+        expect(webAdmHintSection(user: user, lens: lens), isNull, reason: name);
+      }
+    });
+
+    test('group read bit', () {
+      expect(const WebLogStat(owner: 'a', group: 'adm', mode: '640').groupReadable, isTrue);
+      expect(const WebLogStat(owner: 'a', group: 'adm', mode: '0644').groupReadable, isTrue);
+      expect(const WebLogStat(owner: 'a', group: 'adm', mode: '2750').groupReadable, isTrue);
+      expect(const WebLogStat(owner: 'a', group: 'adm', mode: '604').groupReadable, isFalse);
+      expect(const WebLogStat(owner: 'a', group: 'adm', mode: '630').groupReadable, isFalse);
+    });
+
+    test('command text', () {
+      expect(webAdmUsermodCommand('deploy'), 'sudo usermod -aG adm deploy');
     });
   });
 
@@ -508,6 +607,119 @@ void main() {
       await dispose(tester);
     });
 
+    // Fix 3: a cert inherited from http {} / the server config.
+    testWidgets('sheet marks an inherited cert; EXPIRING counts it',
+        (tester) async {
+      final at = DateTime.now().toUtc();
+      const inh = WebVhost(
+        serverNames: ['inh.example.com'],
+        listen: ['443 ssl'],
+        tls: true,
+        certPath: '/etc/ssl/certs/http.pem',
+        certPaths: ['/etc/ssl/certs/http.pem'],
+        inherited: true,
+        sourceFile: '/etc/nginx/conf.d/inh.conf',
+      );
+      pool.lens = _lens(
+        readAt: at,
+        vhosts: const [_api, inh],
+        certs: {
+          '/etc/ssl/certs/api.crt': WebCert(
+            path: '/etc/ssl/certs/api.crt',
+            notAfter: at.add(const Duration(days: 80)),
+          ),
+          '/etc/ssl/certs/http.pem': WebCert(
+            path: '/etc/ssl/certs/http.pem',
+            notAfter: at.add(const Duration(days: 5, hours: 2)),
+          ),
+        },
+      );
+      await pumpLens(tester);
+      expect(find.text('EXPIRING 1'), findsOneWidget);
+      await tester.tap(find.text('EXPIRING 1'));
+      await frames(tester, 4);
+      expect(vhostRow('inh.example.com'), findsOneWidget);
+      expect(vhostRow('api.example.com'), findsNothing);
+
+      await tester.tap(vhostRow('inh.example.com'));
+      await frames(tester, 10);
+      final sheet = find.byType(KelolaSheet);
+      final path = find.descendant(
+        of: sheet,
+        matching: find.text('/etc/ssl/certs/http.pem'),
+      );
+      expect(path, findsOneWidget);
+      expect(
+        tester.widget<Text>(path).style?.fontFamily,
+        KelolaType.mono(color: Colors.black).fontFamily,
+      );
+      final note = find.descendant(
+        of: sheet,
+        matching: find.text('inherited from http {}'),
+      );
+      expect(note, findsOneWidget);
+      final style = tester.widget<Text>(note).style;
+      expect(
+        style?.fontFamily,
+        KelolaType.body(color: Colors.black).fontFamily,
+      );
+      expect(style?.color, KelolaColors.dark.muted);
+      Navigator.of(tester.element(sheet)).pop();
+      await frames(tester, 10);
+
+      // An own cert carries no note.
+      await tester.tap(find.text('ALL 2'));
+      await frames(tester, 4);
+      await tester.tap(vhostRow('api.example.com'));
+      await frames(tester, 10);
+      expect(find.textContaining('inherited from'), findsNothing);
+      await dispose(tester);
+    });
+
+    test('inherited note names the right config level', () {
+      expect(webInheritedCertNote(ServiceId.nginx), 'inherited from http {}');
+      expect(
+        webInheritedCertNote(ServiceId.apache),
+        'inherited from server config',
+      );
+    });
+
+    // Fix 3: the grant takes cert paths from certsByPath, so an inherited
+    // (http-level or global) cert gets its openssl line unchanged.
+    test('an inherited cert path reaches the read grant', () {
+      final lens = WebLens(
+        id: ServiceId.nginx,
+        readAt: DateTime.utc(2026, 11, 10),
+        vhosts: const [
+          WebVhost(
+            serverNames: ['inh.example.com'],
+            listen: ['443 ssl'],
+            tls: true,
+            certPath: '/etc/ssl/certs/http.pem',
+            certPaths: ['/etc/ssl/certs/http.pem'],
+            inherited: true,
+          ),
+        ],
+        certsByPath: const {
+          '/etc/ssl/certs/http.pem': WebCert(path: '/etc/ssl/certs/http.pem'),
+        },
+        toolPaths: const {'openssl': '/usr/bin/openssl', 'tail': '/usr/bin/tail'},
+      );
+      final g = webReadGrantFor(
+        host: host,
+        service: _nginx,
+        facts: _facts(),
+        lens: lens,
+      )!;
+      expect(
+        g.lines,
+        contains(
+          'hendra ALL=(root) NOPASSWD: /usr/bin/openssl x509 -noout -enddate '
+          '-subject -ext subjectAltName -in /etc/ssl/certs/http.pem',
+        ),
+      );
+    });
+
     testWidgets('error log section renders tail', (tester) async {
       final tail = [
         for (var i = 0; i < 20; i++)
@@ -675,6 +887,29 @@ void main() {
       );
       final band = tester.widget<RiskBand>(find.byType(RiskBand).first);
       expect(band.status, HealthStatus.healthy);
+      await dispose(tester);
+    });
+
+    // Fix 3 round 2: certs that could not be tied to a vhost are shown.
+    testWidgets('unattributed certs render as a fact row', (tester) async {
+      final c = KelolaColors.dark;
+      pool.lens = _lens(
+        vhosts: const [_plain],
+        certs: const {},
+        vhostCertsUnlinked: true,
+      );
+      await pumpLens(tester);
+      final fact = find.text('Some certificates could not be tied to a vhost.');
+      expect(fact, findsOneWidget);
+      expect(tester.widget<Text>(fact).style?.color, c.muted);
+      expect(
+        find.ancestor(of: fact, matching: find.byType(RiskBand)),
+        findsNothing,
+      );
+      expect(
+        tester.widget<RiskBand>(find.byType(RiskBand).first).status,
+        HealthStatus.healthy,
+      );
       await dispose(tester);
     });
 
@@ -1016,7 +1251,8 @@ void main() {
           find.text(
             'These rules let this login run the listed commands as root. '
             'The config test loads modules named in the server config, so '
-            'only grant this where that config is root-owned.',
+            'Kelola adds it only when that config and its module directories '
+            'are root-owned and not writable by others.',
           ),
           findsOneWidget,
         );
@@ -1255,6 +1491,123 @@ void main() {
         await dispose(tester);
       });
 
+      testWidgets('a config refusal names the path in mono, in the result and in ACTIONS',
+          (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        const bad = '/etc/nginx/sites-enabled';
+        pool.grantStdout = '$webGrantConfigMarker '
+            '${base64Encode(utf8.encode(bad))} mode\n'
+            '$webGrantOkMarker\n';
+        pool.grantExit = 0;
+        await pumpLens(tester);
+        await tapGrant(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Add rules'));
+        await frames(tester, 8);
+        pool.error = null;
+        pool.lens = _healthyLens();
+        await enterPassword(tester);
+        const copy =
+            'Config test not granted: $bad is writable by group or others.';
+        expect(
+          find.text('Read access granted · reading again\n$copy'),
+          findsOneWidget,
+        );
+        final mono = KelolaType.mono(color: Colors.black).fontFamily;
+        bool monoPath(Widget w) {
+          if (w is! RichText) return false;
+          var found = false;
+          w.text.visitChildren((span) {
+            if (span is TextSpan &&
+                span.text == bad &&
+                span.style?.fontFamily == mono) {
+              found = true;
+            }
+            return !found;
+          });
+          return found;
+        }
+
+        expect(find.byWidgetPredicate(monoPath), findsWidgets);
+        // The lens read again; the refusal stays in ACTIONS, in mono.
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(2));
+        await tester.pump(const Duration(seconds: 10));
+        await frames(tester, 8);
+        expect(find.text(copy), findsOneWidget);
+        expect(find.byWidgetPredicate(monoPath), findsOneWidget);
+        await dispose(tester);
+      });
+
+      testWidgets('config test lines refused and nothing else: the refusal is the error, no re-read',
+          (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        const bad = '/opt/le/options-ssl-nginx.conf';
+        pool.grantStdout = '$webGrantConfigMarker '
+            '${base64Encode(utf8.encode(bad))} owner\n';
+        pool.grantExit = webGrantNothingExit;
+        await pumpLens(tester);
+        await tapGrant(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Add rules'));
+        await frames(tester, 8);
+        await enterPassword(tester);
+        const copy = 'Config test not granted: $bad is not root-owned.';
+        expect(find.text(copy), findsWidgets);
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(1));
+        // Under the hint's grant row as well, once the snackbar is gone.
+        await tester.pump(const Duration(seconds: 10));
+        await frames(tester, 8);
+        expect(find.text(copy), findsOneWidget);
+        await dispose(tester);
+      });
+
+      testWidgets('unsupported and cap refusals read as their own copy, path in mono',
+          (tester) async {
+        const bad = '/etc/apache2/conf-enabled/macro.conf';
+        final copies = {
+          'unsupported': 'Config test not granted: $bad uses a directive that '
+              'loads code at config-test time, which Kelola cannot check.',
+          'cap': 'Config test not granted: $bad has too many config files to '
+              'check.',
+        };
+        final mono = KelolaType.mono(color: Colors.black).fontFamily;
+        bool monoPath(Widget w) {
+          if (w is! RichText) return false;
+          var found = false;
+          w.text.visitChildren((span) {
+            if (span is TextSpan &&
+                span.text == bad &&
+                span.style?.fontFamily == mono) {
+              found = true;
+            }
+            return !found;
+          });
+          return found;
+        }
+
+        for (final e in copies.entries) {
+          pool.error = SudoRequiredException(
+            SudoHintContext.webServices(service: 'nginx'),
+          );
+          pool.grantStdout = '$webGrantConfigMarker '
+              '${base64Encode(utf8.encode(bad))} ${e.key}\n';
+          pool.grantExit = webGrantNothingExit;
+          await pumpLens(tester);
+          await tapGrant(tester);
+          await tester.tap(find.widgetWithText(FilledButton, 'Add rules'));
+          await frames(tester, 8);
+          await enterPassword(tester);
+          expect(find.text(e.value), findsWidgets, reason: e.key);
+          await tester.pump(const Duration(seconds: 10));
+          await frames(tester, 8);
+          expect(find.text(e.value), findsOneWidget, reason: e.key);
+          expect(find.byWidgetPredicate(monoPath), findsOneWidget);
+          await dispose(tester);
+        }
+      });
+
       testWidgets('every path skipped: Not granted lines, no re-read',
           (tester) async {
         pool.error = SudoRequiredException(
@@ -1360,6 +1713,169 @@ void main() {
         await dispose(tester);
       });
     });
+
+    // Fix 2: Debian / Ubuntu logs are group adm, so joining adm reads them
+    // with no sudo at all.
+    group('adm group hint', () {
+      const errCopy =
+          'Could not read error log: no access with or without sudo -n';
+      const accCopy =
+          'Could not read access log: no access with or without sudo -n';
+      const hintCopy =
+          'Add your login to the adm group to read web server logs without '
+          'sudo:';
+      const command = 'sudo usermod -aG adm hendra';
+
+      WebLens admLens({
+        String group = 'adm',
+        String mode = '640',
+        List<String>? loginGroups = const ['hendra', 'sudo'],
+        bool bothLogs = false,
+      }) =>
+          _lens(
+            sectionErrors: {
+              WebLensSection.errorLog: errCopy,
+              WebLensSection.access: accCopy,
+            },
+            errorLogTail: const [],
+            statusCounts: const {},
+            errorLogStat: WebLogStat(owner: 'www-data', group: group, mode: mode),
+            accessLogStat: bothLogs
+                ? WebLogStat(owner: 'root', group: group, mode: mode)
+                : null,
+            loginGroups: loginGroups,
+          );
+
+      testWidgets('shown with the section error, once, in the matching case',
+          (tester) async {
+        pool.lens = admLens(bothLogs: true);
+        await pumpLens(tester);
+        expect(find.text(errCopy), findsOneWidget);
+        expect(find.text(accCopy), findsOneWidget);
+        expect(find.text(hintCopy), findsOneWidget);
+        final cmd = find.byWidgetPredicate(
+          (w) => w is SelectableText && w.data == command,
+        );
+        expect(cmd, findsOneWidget);
+        expect(
+          tester.widget<SelectableText>(cmd).style?.fontFamily,
+          KelolaType.mono(color: Colors.white).fontFamily,
+        );
+        expect(
+          find.text(
+            'Takes effect on the next connection. Reconnect also closes this '
+            "host's tunnels, terminal and log follow.",
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Reconnect'), findsOneWidget);
+        // Kelola never runs usermod itself.
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(1));
+        expect(pool.probes, hasLength(1));
+        await dispose(tester);
+      });
+
+      testWidgets('Alpine-like group nginx: message unchanged, no hint',
+          (tester) async {
+        pool.lens = admLens(group: 'nginx');
+        await pumpLens(tester);
+        expect(find.text(errCopy), findsOneWidget);
+        expect(find.text(hintCopy), findsNothing);
+        expect(find.textContaining('usermod'), findsNothing);
+        expect(find.text('Reconnect'), findsNothing);
+        await dispose(tester);
+      });
+
+      testWidgets('no hint without group read, when already in adm, or groups unknown',
+          (tester) async {
+        for (final l in [
+          admLens(mode: '600'),
+          admLens(loginGroups: const ['hendra', 'adm']),
+          admLens(loginGroups: null),
+        ]) {
+          pool.lens = l;
+          await pumpLens(tester);
+          expect(find.text(errCopy), findsOneWidget);
+          expect(find.text(hintCopy), findsNothing);
+          expect(find.textContaining('usermod'), findsNothing);
+          await dispose(tester);
+        }
+      });
+
+      testWidgets('copy puts exactly the command on the clipboard',
+          (tester) async {
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String?;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger
+              .setMockMethodCallHandler(SystemChannels.platform, null),
+        );
+        pool.lens = admLens();
+        await pumpLens(tester);
+        final copy = find.byTooltip('Copy');
+        expect(copy, findsOneWidget);
+        await tester.ensureVisible(copy);
+        await tester.tap(copy);
+        await frames(tester, 4);
+        expect(copied, command);
+        await dispose(tester);
+      });
+
+      testWidgets('Reconnect drops the pooled client once and re-reads the lens',
+          (tester) async {
+        pool.lens = admLens();
+        await pumpLens(tester);
+        expect(pool.disconnects, isEmpty);
+        final reconnect = find.text('Reconnect');
+        await tester.ensureVisible(reconnect);
+        await tester.tap(reconnect);
+        await frames(tester, 12);
+        expect(pool.disconnects, [host.id]);
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(2));
+        expect(pool.probes, hasLength(2));
+        await dispose(tester);
+      });
+
+      testWidgets('a failing disconnect shows its error and still re-reads the lens',
+          (tester) async {
+        pool.lens = admLens();
+        await pumpLens(tester);
+        pool.disconnectError = StateError('pool closed under us');
+        final reconnect = find.text('Reconnect');
+        await tester.ensureVisible(reconnect);
+        await tester.tap(reconnect);
+        await frames(tester, 12);
+        expect(tester.takeException(), isNull);
+        expect(pool.disconnects, [host.id]);
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(2));
+        expect(find.textContaining('pool closed under us'), findsOneWidget);
+        // Not stuck: the action is usable again.
+        final again = find.text('Reconnect');
+        await tester.ensureVisible(again);
+        final button = tester.widget<TextButton>(
+          find.ancestor(of: again, matching: find.byType(TextButton)),
+        );
+        expect(button.onPressed, isNotNull);
+        await dispose(tester);
+      });
+
+      testWidgets('read-only host shows the hint too', (tester) async {
+        await repo.setReadOnly(host.id, true);
+        pool.lens = admLens();
+        await pumpLens(tester);
+        expect(find.text(hintCopy), findsOneWidget);
+        expect(find.text('Reconnect'), findsOneWidget);
+        await dispose(tester);
+      });
+    });
   });
 
   test('source has no AlertDialog, Card, ListTile', () {
@@ -1384,6 +1900,8 @@ class _Pool extends SshSessionPool {
         );
 
   final probes = <Probe<dynamic>>[];
+  final disconnects = <String>[];
+  Object? disconnectError;
   WebLens? lens;
   String? stdout;
   Object? error;
@@ -1445,6 +1963,14 @@ class _Pool extends SshSessionPool {
       return null as T;
     }
     throw StateError('unexpected probe ${probe.runtimeType}');
+  }
+
+  @override
+  Future<void> disconnect(String hostId) async {
+    disconnects.add(hostId);
+    final err = disconnectError;
+    if (err != null) throw err;
+    await super.disconnect(hostId);
   }
 }
 

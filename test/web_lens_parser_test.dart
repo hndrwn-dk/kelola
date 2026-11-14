@@ -404,6 +404,29 @@ void main() {
       );
       expect(lens.vhosts, isNotEmpty);
       expect(lens.sectionErrors.containsKey(WebLensSection.dump), isFalse);
+      // The vhost files from -S, without their line numbers (fix 1).
+      expect(lens.configFiles, [
+        '/etc/httpd/conf.d/ssl.conf',
+        '/etc/httpd/conf.d/other.conf',
+        '/etc/httpd/conf.d/site.conf',
+      ]);
+    });
+
+    test('nginx config files come from the dump sections', () {
+      final lens = parseWebLens(nginxOutput(), id: ServiceId.nginx, now: now);
+      expect(lens.configFiles, [
+        '/etc/nginx/nginx.conf',
+        '/etc/nginx/mime.types',
+        '/etc/nginx/conf.d/soon.conf',
+        '/etc/nginx/sites-enabled/default',
+      ]);
+      // No dump: none known.
+      final none = parseWebLens(
+        nginxOutput(dump: const []),
+        id: ServiceId.nginx,
+        now: now,
+      );
+      expect(none.configFiles, isEmpty);
     });
 
     test('unsafe tool and log paths are dropped', () {
@@ -421,6 +444,170 @@ void main() {
       );
       expect(lens.toolPaths, isEmpty);
       expect(lens.errorLogPath, isNull);
+    });
+  });
+
+  // Fix 2: `@stat=<owner> <group> <mode>` in the log sections and
+  // `@groups=<names>` in TOOLS, so the lens can suggest the adm group.
+  group('log stat and login groups', () {
+    String out({List<String>? tools, List<String>? err, List<String>? acc}) {
+      final base = nginxOutput(
+        errlog: err ??
+            ['@path=/var/log/nginx/error.log', '@read=fail'],
+        access: acc ??
+            ['@path=/var/log/nginx/access.log', '@read=fail'],
+      );
+      return tools == null
+          ? base
+          : base.replaceFirst('---TOOLS---', ['---TOOLS---', ...tools].join('\n'));
+    }
+
+    WebLens parse(String s) => parseWebLens(s, id: ServiceId.nginx, now: now);
+
+    test('adm with group read', () {
+      final l = parse(
+        out(
+          tools: ['@groups=deploy sudo'],
+          err: [
+            '@path=/var/log/nginx/error.log',
+            '@stat=www-data adm 640',
+            '@read=fail',
+          ],
+          acc: [
+            '@path=/var/log/nginx/access.log',
+            '@stat=root adm 0640',
+            '@read=fail',
+          ],
+        ),
+      );
+      expect(l.errorLogStat!.owner, 'www-data');
+      expect(l.errorLogStat!.group, 'adm');
+      expect(l.errorLogStat!.mode, '640');
+      expect(l.errorLogStat!.groupReadable, isTrue);
+      expect(l.accessLogStat!.owner, 'root');
+      expect(l.accessLogStat!.groupReadable, isTrue);
+      expect(l.loginGroups, ['deploy', 'sudo']);
+      // Still a section error each; findings unchanged.
+      expect(l.sectionErrors[WebLensSection.errorLog], isNotNull);
+      expect(l.sectionErrors[WebLensSection.access], isNotNull);
+    });
+
+    test('adm without group read', () {
+      final l = parse(
+        out(
+          err: [
+            '@path=/var/log/nginx/error.log',
+            '@stat=root adm 600',
+            '@read=fail',
+          ],
+          acc: [
+            '@path=/var/log/nginx/access.log',
+            '@stat=root adm 2604',
+            '@read=fail',
+          ],
+        ),
+      );
+      expect(l.errorLogStat!.group, 'adm');
+      expect(l.errorLogStat!.groupReadable, isFalse);
+      // setgid digit first: the group digit is still the middle one of the
+      // last three.
+      expect(l.accessLogStat!.mode, '2604');
+      expect(l.accessLogStat!.groupReadable, isFalse);
+    });
+
+    test('another group (Alpine: nginx owns its logs)', () {
+      final l = parse(
+        out(
+          tools: ['@groups=deploy wheel'],
+          err: [
+            '@path=/var/log/nginx/error.log',
+            '@stat=nginx nginx 640',
+            '@read=fail',
+          ],
+        ),
+      );
+      expect(l.errorLogStat!.group, 'nginx');
+      expect(l.errorLogStat!.groupReadable, isTrue);
+      expect(l.accessLogStat, isNull);
+    });
+
+    test('missing lines: stat and groups unknown', () {
+      final l = parse(out());
+      expect(l.errorLogStat, isNull);
+      expect(l.accessLogStat, isNull);
+      expect(l.loginGroups, isNull);
+    });
+
+    test('junk is ignored, never guessed', () {
+      for (final bad in const [
+        'root adm',
+        'root adm 640 x',
+        'root adm 9x0',
+        'root adm 64',
+        'root adm 06400',
+        'r;oot adm 640',
+        r'root a$m 640',
+        'root  adm 640',
+        '',
+      ]) {
+        final l = parse(
+          out(
+            err: [
+              '@path=/var/log/nginx/error.log',
+              '@stat=$bad',
+              '@read=fail',
+            ],
+          ),
+        );
+        expect(l.errorLogStat, isNull, reason: bad);
+      }
+      final long = 'a' * 65;
+      expect(
+        parse(
+          out(
+            err: [
+              '@path=/var/log/nginx/error.log',
+              '@stat=$long adm 640',
+              '@read=fail',
+            ],
+          ),
+        ).errorLogStat,
+        isNull,
+      );
+      // Host text (`|` prefix) never counts as a meta line.
+      final hostText = parse(
+        out(
+          tools: ['|@groups=adm'],
+          err: [
+            '@path=/var/log/nginx/error.log',
+            '|@stat=root adm 640',
+            '@read=fail',
+          ],
+        ),
+      );
+      expect(hostText.errorLogStat, isNull);
+      expect(hostText.loginGroups, isNull);
+      // Bad names in the group list are dropped; the rest kept.
+      expect(
+        parse(out(tools: [r'@groups=deploy $(x) a;b sudo'])).loginGroups,
+        ['deploy', 'sudo'],
+      );
+      // Nothing usable: unknown, not "no groups".
+      expect(parse(out(tools: ['@groups='])).loginGroups, isNull);
+      expect(parse(out(tools: [r'@groups=$(x) a;b'])).loginGroups, isNull);
+      // A meta line in the wrong section does not count.
+      expect(
+        parse(
+          out(
+            err: [
+              '@path=/var/log/nginx/error.log',
+              '@groups=deploy',
+              '@read=fail',
+            ],
+          ),
+        ).loginGroups,
+        isNull,
+      );
     });
   });
 
@@ -618,6 +805,216 @@ void main() {
         final calls = cmd.replaceAll('command -v sudo ', '');
         expect(RegExp(r'sudo (?!-n )').hasMatch(calls), isFalse);
         expect(cmd, isNot(contains('sudo -S')));
+      }
+    });
+
+    // Fix 2: the log stat and the login's groups are plain reads, never
+    // through sudo or try.
+    test('log stat and id -nG run plain, never via sudo or try', () {
+      for (final p in [nginx, apache]) {
+        for (final f in [ubuntu, rocky]) {
+          final cmd = p.command(f);
+          expect(cmd, contains(r'''stat -L -c '%U %G %a' "$e" 2>/dev/null'''));
+          expect(cmd, contains(r'''stat -L -c '%U %G %a' "$a" 2>/dev/null'''));
+          expect('id -nG 2>/dev/null'.allMatches(cmd), hasLength(1));
+          final lines = [
+            for (final l in cmd.split('\n'))
+              if (l.contains('stat -L -c') || l.contains('id -nG')) l,
+          ];
+          expect(lines, hasLength(3));
+          for (final l in lines) {
+            expect(l, isNot(contains('sudo')), reason: l);
+            expect(l, isNot(contains('try')), reason: l);
+          }
+          // Every sudo invocation is still sudo -n.
+          final calls = cmd.replaceAll('command -v sudo ', '');
+          expect(RegExp(r'sudo (?!-n )').hasMatch(calls), isFalse);
+          expect(cmd, isNot(contains('usermod')));
+        }
+      }
+    });
+
+    test('a hostile stat or id cannot forge a marker (executed)', () async {
+      final dir = await Directory.systemTemp.createTemp('kelola_lens_forge');
+      addTearDown(() => dir.delete(recursive: true));
+      Future<void> stub(String name, String body) async {
+        File('${dir.path}/$name').writeAsStringSync('#!/bin/sh\n$body\n');
+        await Process.run('chmod', ['+x', '${dir.path}/$name']);
+      }
+
+      await stub('stat', r"printf 'root adm 640\n---ACCESS---\n@read=ok\n|200\n'");
+      await stub('id', r"printf 'deploy\n---ERRLOG---\n@stat=root adm 640\n'");
+      await stub('nginx', 'exit 0');
+      final probe = WebLensProbe(
+        id: ServiceId.nginx,
+        binaries: {'nginx': '${dir.path}/nginx'},
+      );
+      final r = await Process.run(
+        'sh',
+        ['-c', probe.command(ubuntu)],
+        environment: {'PATH': '${dir.path}:/usr/bin:/bin'},
+      );
+      final out = r.stdout as String;
+      expect('---ACCESS---'.allMatches(out), hasLength(1), reason: out);
+      expect('---ERRLOG---'.allMatches(out), hasLength(1), reason: out);
+      expect(out, contains('@groups=deploy\n'));
+      expect(RegExp(r'^@stat=root adm 640$', multiLine: true).allMatches(out),
+          hasLength(2));
+    }, skip: Platform.isWindows);
+
+    group('log stat on a real tree (executed, dash and busybox)', () {
+      String? bbDir;
+      late Directory dir;
+      final isRoot =
+          !Platform.isWindows &&
+          (Process.runSync('id', ['-u']).stdout as String).trim() == '0';
+      final hasSetpriv =
+          !Platform.isWindows &&
+          Process.runSync('sh', ['-c', 'command -v setpriv']).exitCode == 0;
+      final hasDash =
+          !Platform.isWindows &&
+          Process.runSync('sh', ['-c', 'command -v dash']).exitCode == 0;
+
+      setUpAll(() {
+        if (Platform.isWindows) return;
+        final which = Process.runSync('sh', ['-c', 'command -v busybox']);
+        final bb = (which.stdout as String).trim();
+        if (which.exitCode != 0 || bb.isEmpty) return;
+        final d = Directory.systemTemp.createTempSync('kelola_bb_lens');
+        final r = Process.runSync(bb, ['--install', '-s', d.path]);
+        if (r.exitCode == 0 && File('${d.path}/stat').existsSync()) {
+          bbDir = d.path;
+        } else {
+          d.deleteSync(recursive: true);
+        }
+      });
+
+      tearDownAll(() {
+        final d = bbDir;
+        if (d != null) Directory(d).deleteSync(recursive: true);
+      });
+
+      setUp(() {
+        if (Platform.isWindows) return;
+        dir = Directory.systemTemp.createTempSync('kelola_lens_stat');
+        Process.runSync('chmod', ['755', dir.path]);
+      });
+
+      tearDown(() {
+        if (Platform.isWindows) return;
+        Process.runSync('chmod', ['-R', 'u+rwx', dir.path]);
+        dir.deleteSync(recursive: true);
+      });
+
+      void stub(String name, String body) {
+        File('${dir.path}/$name').writeAsStringSync('#!/bin/sh\n$body\n');
+        Process.runSync('chmod', ['755', '${dir.path}/$name']);
+      }
+
+      /// The section of [stdout] after marker [name], up to the next one.
+      List<String> section(String stdout, String name) {
+        final lines = stdout.split('\n');
+        final i = lines.indexOf('---$name---');
+        if (i < 0) return const [];
+        final rest = lines.sublist(i + 1);
+        final j = rest.indexWhere((l) => RegExp(r'^---[A-Z]+---$').hasMatch(l));
+        return j < 0 ? rest : rest.sublist(0, j);
+      }
+
+      for (final shell in const ['dash', 'busybox']) {
+        test('$shell: @stat for a readable dir, nothing for an untraversable one',
+            () async {
+          if (shell == 'busybox' && bbDir == null) {
+            markTestSkipped('busybox is not installed here');
+            return;
+          }
+          if (shell == 'dash' && !hasDash) {
+            markTestSkipped('dash is not installed here');
+            return;
+          }
+          if (isRoot && !hasSetpriv) {
+            markTestSkipped('running as root without setpriv: cannot drop '
+                'to nobody, and root reads every file');
+            return;
+          }
+          // Debian layout: the log dir is traversable, the log itself
+          // root:adm 0640. A second log sits in a directory nobody can
+          // traverse.
+          final logs = Directory('${dir.path}/logs')..createSync();
+          final locked = Directory('${dir.path}/locked')..createSync();
+          final err = File('${logs.path}/error.log')
+            ..writeAsStringSync('x\n');
+          final acc = File('${locked.path}/access.log')
+            ..writeAsStringSync('x\n');
+          for (final f in [err, acc]) {
+            Process.runSync('chmod', ['640', f.path]);
+            if (isRoot) Process.runSync('chgrp', ['adm', f.path]);
+          }
+          Process.runSync('chmod', ['755', logs.path]);
+          Process.runSync('chmod', ['000', locked.path]);
+          stub('nginx', '''
+case "\$1" in
+  -t) echo "nginx: test is successful" >&2 ;;
+  -T) printf '%s\\n' 'error_log ${err.path};' 'access_log ${acc.path};' ;;
+esac''');
+          stub('sudo', 'echo "sudo: a password is required" >&2\nexit 1');
+          final probe = WebLensProbe(
+            id: ServiceId.nginx,
+            binaries: {'nginx': '${dir.path}/nginx'},
+          );
+          final script = probe.command(ubuntu);
+          final path = shell == 'busybox'
+              ? '${dir.path}:$bbDir'
+              : '${dir.path}:/usr/bin:/bin';
+          final argv = shell == 'busybox'
+              ? ['busybox', 'sh', '-c', script]
+              : ['dash', '-c', script];
+          final cmd = isRoot
+              ? [
+                  'setpriv',
+                  '--reuid=nobody',
+                  '--regid=${(Process.runSync('id', ['-g', 'nobody']).stdout as String).trim()}',
+                  '--clear-groups',
+                  '--',
+                  'env',
+                  'PATH=$path',
+                  ...argv,
+                ]
+              : ['env', 'PATH=$path', ...argv];
+          final r = await Process.run(cmd.first, cmd.sublist(1));
+          final stdout = r.stdout as String;
+          final errSec = section(stdout, 'ERRLOG');
+          final accSec = section(stdout, 'ACCESS');
+          final group = isRoot
+              ? 'adm'
+              : (Process.runSync('id', ['-gn']).stdout as String).trim();
+          final owner = isRoot
+              ? 'root'
+              : (Process.runSync('id', ['-un']).stdout as String).trim();
+          expect(errSec, contains('@path=${err.path}'), reason: stdout);
+          expect(errSec, contains('@stat=$owner $group 640'), reason: stdout);
+          expect(accSec, contains('@path=${acc.path}'), reason: stdout);
+          expect(accSec.where((l) => l.startsWith('@stat')), isEmpty,
+              reason: stdout);
+          if (isRoot) {
+            // nobody cannot read either log, with or without sudo -n.
+            expect(errSec, contains('@read=fail'), reason: stdout);
+            expect(accSec, contains('@read=fail'), reason: stdout);
+          }
+          final groups = section(stdout, 'TOOLS')
+              .where((l) => l.startsWith('@groups='))
+              .toList();
+          expect(groups, hasLength(1), reason: stdout);
+          final lens = parseWebLens(stdout, id: ServiceId.nginx, now: now);
+          expect(lens.errorLogStat?.group, group);
+          expect(lens.errorLogStat?.groupReadable, isTrue);
+          expect(lens.accessLogStat, isNull);
+          expect(lens.loginGroups, isNotEmpty);
+          if (isRoot) {
+            expect(lens.loginGroups, isNot(contains('adm')));
+            expect(lens.sectionErrors[WebLensSection.errorLog], isNotNull);
+          }
+        }, skip: Platform.isWindows);
       }
     });
 
@@ -909,6 +1306,684 @@ echo "subject=CN = site.example"''');
       expect(lens.errorLogPath, '/var/log/x/err.log');
       expect(lens.accessLogPath, '/var/log/x/acc.log');
       expect(lens.toolPaths['openssl'], '${dir.path}/openssl');
+    }, skip: Platform.isWindows);
+
+    // Fix 3: `pick` takes every ssl_certificate line of the dump, whatever
+    // its context, so a cert set only at http level is read too.
+    test('a cert set only at http level reaches openssl (executed)', () async {
+      final dir = await Directory.systemTemp.createTemp('kelola_http_cert');
+      addTearDown(() => dir.delete(recursive: true));
+      final log = File('${dir.path}/openssl.log');
+      final dump = [
+        '# configuration file /etc/nginx/nginx.conf:',
+        'http {',
+        '  ssl_certificate /etc/ssl/certs/http-level.pem;',
+        '  ssl_certificate_key /etc/ssl/private/http-level.key;',
+        '  include /etc/nginx/conf.d/*.conf;',
+        '}',
+        '# configuration file /etc/nginx/conf.d/site.conf:',
+        'server { listen 443 ssl; server_name site.lab; }',
+      ].join('\n');
+      File('${dir.path}/nginx').writeAsStringSync(
+        '#!/bin/sh\n'
+        'if [ "\$1" = -T ]; then cat <<\'EOF\'\n$dump\nEOF\n'
+        'else echo "nginx: test is successful" >&2; fi\n',
+      );
+      File('${dir.path}/openssl').writeAsStringSync(
+        '#!/bin/sh\n'
+        'echo "\$*" >> ${log.path}\n'
+        'echo "notAfter=Nov 15 01:32:00 2030 GMT"\n'
+        'echo "subject=CN = site.lab"\n',
+      );
+      File('${dir.path}/tail').writeAsStringSync('#!/bin/sh\nexit 0\n');
+      for (final f in ['nginx', 'openssl', 'tail']) {
+        await Process.run('chmod', ['+x', '${dir.path}/$f']);
+      }
+      final probe = WebLensProbe(
+        id: ServiceId.nginx,
+        binaries: {'nginx': '${dir.path}/nginx'},
+      );
+      final r = await Process.run(
+        'sh',
+        ['-c', probe.command(ubuntu)],
+        environment: {'PATH': '${dir.path}:/usr/bin:/bin'},
+      );
+      expect(log.readAsLinesSync(), [
+        'x509 -noout -enddate -subject -ext subjectAltName '
+            '-in /etc/ssl/certs/http-level.pem',
+      ], reason: '${r.stdout}');
+      expect(r.stdout, isNot(contains('@cert=/etc/ssl/private')));
+      final lens = parseWebLens(
+        r.stdout as String,
+        id: ServiceId.nginx,
+        now: now,
+      );
+      expect(lens.certsByPath.keys, ['/etc/ssl/certs/http-level.pem']);
+      final v = lens.vhosts.single;
+      expect(v.certPaths, ['/etc/ssl/certs/http-level.pem']);
+      expect(v.inherited, isTrue);
+      expect(
+        lens.findings.where(
+          (f) => f.kind == WebFindingKind.listens443WithoutCert,
+        ),
+        isEmpty,
+      );
+      expect(lens.toString(), isNot(contains('.key')));
+    }, skip: Platform.isWindows);
+  });
+
+  // Fix 3: Apache certs tied to their `-S` vhost by `file:line`, and global
+  // ones inherited by TLS vhosts that set none.
+  group('Apache certificate links', () {
+    String apacheOut(List<String> certs) => nginxOutput(
+          dump: data(fixture('httpd_S_rocky.txt')),
+          certs: certs,
+        );
+    List<String> cert(String path, {String end = 'Nov 15 01:32:00 2030 GMT'}) =>
+        ['@cert=$path', '@read=ok', '|notAfter=$end', '|subject=CN = x'];
+    WebVhost named(WebLens l, String name) =>
+        l.vhosts.firstWhere((v) => v.serverNames.first == name);
+    Iterable<String?> no443(WebLens l) => l.findings
+        .where((f) => f.kind == WebFindingKind.listens443WithoutCert)
+        .map((f) => f.subject);
+
+    test('own cert linked by file:line; a global one is inherited', () {
+      final l = parseWebLens(
+        apacheOut([
+          '@certin=global /etc/pki/tls/certs/global.crt',
+          '@certin=/etc/httpd/conf.d/ssl.conf:56 /etc/pki/tls/certs/localhost.crt',
+          ...cert('/etc/pki/tls/certs/global.crt'),
+          ...cert('/etc/pki/tls/certs/localhost.crt'),
+          '@done=1',
+        ]),
+        id: ServiceId.apache,
+        now: now,
+      );
+      final own = named(l, 'example.com');
+      expect(own.certPaths, ['/etc/pki/tls/certs/localhost.crt']);
+      expect(own.certPath, '/etc/pki/tls/certs/localhost.crt');
+      expect(own.inherited, isFalse);
+      final inh = named(l, 'other.example');
+      expect(inh.certPaths, ['/etc/pki/tls/certs/global.crt']);
+      expect(inh.inherited, isTrue);
+      // Port 80: not TLS, never inherits.
+      final plain = named(l, 'rocky.lab');
+      expect(plain.certPaths, isEmpty);
+      expect(plain.inherited, isFalse);
+      expect(l.vhostCertsUnlinked, isFalse);
+      expect(no443(l), isEmpty);
+      expect(
+        l.findings.map((f) => f.kind),
+        isNot(contains(WebFindingKind.certsUnattributed)),
+      );
+      // Both certs still reach the grant source.
+      expect(l.certsByPath.keys, [
+        '/etc/pki/tls/certs/global.crt',
+        '/etc/pki/tls/certs/localhost.crt',
+      ]);
+    });
+
+    test('unlinked: the global cert is never assigned by a guess', () {
+      final l = parseWebLens(
+        apacheOut([
+          '@certin=global /etc/pki/tls/certs/global.crt',
+          '@certin=/etc/httpd/conf.d/ssl.conf:56 /etc/pki/tls/certs/localhost.crt',
+          // other.conf's vhost starts at line 1, not 2: this cert is
+          // probably other.example's own, but that is not known.
+          '@certin=/etc/httpd/conf.d/other.conf:2 /etc/pki/tls/certs/other.crt',
+          ...cert('/etc/pki/tls/certs/global.crt'),
+          ...cert('/etc/pki/tls/certs/localhost.crt'),
+          ...cert('/etc/pki/tls/certs/other.crt'),
+          '@done=1',
+        ]),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(l.vhostCertsUnlinked, isTrue);
+      expect(l.vhosts.where((v) => v.inherited), isEmpty);
+      // A cert that did match stays linked.
+      expect(
+        named(l, 'example.com').certPaths,
+        ['/etc/pki/tls/certs/localhost.crt'],
+      );
+      // The vhost owning the unlinked cert is not shown inheriting the global.
+      expect(named(l, 'other.example').certPaths, isEmpty);
+      expect(named(l, 'other.example').certPath, isNull);
+      final fact = l.findings
+          .where((f) => f.kind == WebFindingKind.certsUnattributed)
+          .single;
+      expect(fact.level, WebFindingLevel.fact);
+      expect(fact.message, 'Some certificates could not be tied to a vhost.');
+      // Unknown is not a warning.
+      expect(no443(l), isEmpty);
+      // Every cert is still read for expiry.
+      expect(l.certsByPath, hasLength(3));
+    });
+
+    test('reaching the link cap is unlinked; one below is not', () {
+      List<String> links(int n) => [
+            for (var i = 0; i < n; i++) '@certin=global /etc/ssl/g$i.pem',
+          ];
+      final full = parseWebLens(
+        apacheOut([...links(webMaxCertLinks), '@done=1']),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(full.vhostCertsUnlinked, isFalse);
+      expect(
+        named(full, 'other.example').certPaths,
+        ['/etc/ssl/g${webMaxCertLinks - 1}.pem'],
+      );
+      expect(named(full, 'other.example').inherited, isTrue);
+      final over = parseWebLens(
+        apacheOut([...links(webMaxCertLinks + 1), '@done=1']),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(over.vhostCertsUnlinked, isTrue);
+      expect(over.vhosts.where((v) => v.inherited), isEmpty);
+      expect(
+        over.findings.map((f) => f.kind),
+        contains(WebFindingKind.certsUnattributed),
+      );
+      final many = parseWebLens(
+        apacheOut([...links(webMaxCertLinks * 3), '@done=1']),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(many.vhostCertsUnlinked, isTrue);
+    });
+
+    test('the last global SSLCertificateFile wins', () {
+      final l = parseWebLens(
+        apacheOut([
+          '@certin=global /etc/pki/tls/certs/first.crt',
+          '@certin=global /etc/pki/tls/certs/second.crt',
+          ...cert('/etc/pki/tls/certs/first.crt'),
+          ...cert('/etc/pki/tls/certs/second.crt'),
+          '@done=1',
+        ]),
+        id: ServiceId.apache,
+        now: now,
+      );
+      for (final n in ['example.com', 'other.example']) {
+        expect(named(l, n).certPaths, ['/etc/pki/tls/certs/second.crt']);
+        expect(named(l, n).inherited, isTrue);
+      }
+      expect(no443(l), isEmpty);
+    });
+
+    test('no global: a 443 vhost without its own cert gets the warning', () {
+      final l = parseWebLens(
+        apacheOut([
+          '@certin=/etc/httpd/conf.d/ssl.conf:56 /etc/pki/tls/certs/localhost.crt',
+          ...cert('/etc/pki/tls/certs/localhost.crt'),
+          '@done=1',
+        ]),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(named(l, 'other.example').certPaths, isEmpty);
+      expect(named(l, 'other.example').inherited, isFalse);
+      expect(no443(l), ['other.example']);
+    });
+
+    test('a vhost cert whose file:line matches no -S vhost: unlinked, no crash',
+        () {
+      for (final scope in [
+        '/etc/httpd/conf.d/ssl.conf:57',
+        '/etc/httpd/conf.d/elsewhere.conf:56',
+        'vhost',
+      ]) {
+        final l = parseWebLens(
+          apacheOut([
+            '@certin=$scope /etc/pki/tls/certs/macro.crt',
+            ...cert('/etc/pki/tls/certs/macro.crt'),
+            '@done=1',
+          ]),
+          id: ServiceId.apache,
+          now: now,
+        );
+        expect(l.vhosts, hasLength(3), reason: scope);
+        expect(l.vhosts.every((v) => v.certPaths.isEmpty), isTrue, reason: scope);
+        expect(l.vhostCertsUnlinked, isTrue, reason: scope);
+        // Which vhost holds it is unknown: none is called certless.
+        expect(no443(l), isEmpty, reason: scope);
+        // Still checked for expiry.
+        expect(l.certsByPath.keys, ['/etc/pki/tls/certs/macro.crt']);
+      }
+    });
+
+    test('certs read with no link lines: attribution unknown, no warning', () {
+      final l = parseWebLens(
+        apacheOut([...cert('/etc/pki/tls/certs/a.crt'), '@done=1']),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(l.vhostCertsUnlinked, isTrue);
+      expect(no443(l), isEmpty);
+      // No certificate at all: the warning, per vhost.
+      final none = parseWebLens(apacheOut(['@done=1']), id: ServiceId.apache, now: now);
+      expect(none.vhostCertsUnlinked, isFalse);
+      expect(no443(none), ['example.com', 'other.example']);
+    });
+
+    test('junk link lines are ignored and never throw', () {
+      final l = parseWebLens(
+        apacheOut([
+          '@certin=',
+          '@certin=global',
+          '@certin=global relative.crt',
+          '@certin=global /etc/../shadow',
+          '@certin=global /etc/pki/a b.crt',
+          '@certin=/etc/httpd/conf.d/ssl.conf:5x /etc/pki/a.crt',
+          '@certin=/etc/httpd/conf.d/ssl.conf: /etc/pki/a.crt',
+          '@certin=relative.conf:56 /etc/pki/a.crt',
+          '@certin=/etc/httpd/conf.d/ssl.conf:56 /etc/pki/a.crt extra',
+          '@certin=/etc/httpd/conf.d/ssl.conf:${'9' * 40} /etc/pki/a.crt',
+          '|@certin=global /etc/pki/forged.crt',
+          '@done=1',
+        ]),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(l.vhosts.every((v) => v.certPaths.isEmpty), isTrue);
+      expect(l.toString(), isNot(contains('forged')));
+      for (final junk in ['@certin=x' * 5000, '@certin=global /a\u0000']) {
+        expect(
+          () => parseWebLens(apacheOut([junk, '@done=1']),
+              id: ServiceId.apache, now: now),
+          returnsNormally,
+        );
+      }
+    });
+
+    test('a cert section error still silences the 443 warning', () {
+      final l = parseWebLens(
+        apacheOut(['@src=none', '@done=1']),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(l.sectionErrors[WebLensSection.certs], isNotNull);
+      expect(no443(l), isEmpty);
+    });
+
+    test('nginx output ignores @certin lines', () {
+      final l = parseWebLens(
+        nginxOutput(
+          certs: [
+            '@certin=global /etc/ssl/certs/forged.pem',
+            ...cert('/etc/ssl/certs/soon.crt'),
+            '@done=1',
+          ],
+        ),
+        id: ServiceId.nginx,
+        now: now,
+      );
+      expect(
+        l.vhosts.expand((v) => v.certPaths),
+        isNot(contains('/etc/ssl/certs/forged.pem')),
+      );
+    });
+
+    group('executed against a real file tree (dash and busybox)', () {
+      String? bbDir;
+      late Directory dir;
+      late Directory conf;
+      late File log;
+      final hasDash = !Platform.isWindows &&
+          Process.runSync('sh', ['-c', 'command -v dash']).exitCode == 0;
+
+      setUpAll(() {
+        if (Platform.isWindows) return;
+        final which = Process.runSync('sh', ['-c', 'command -v busybox']);
+        final bb = (which.stdout as String).trim();
+        if (which.exitCode != 0 || bb.isEmpty) return;
+        final d = Directory.systemTemp.createTempSync('kelola_bb_apache');
+        final r = Process.runSync(bb, ['--install', '-s', d.path]);
+        if (r.exitCode == 0 && File('${d.path}/awk').existsSync()) {
+          bbDir = d.path;
+        } else {
+          d.deleteSync(recursive: true);
+        }
+      });
+
+      tearDownAll(() {
+        final d = bbDir;
+        if (d != null) Directory(d).deleteSync(recursive: true);
+      });
+
+      void stub(String name, String body) {
+        File('${dir.path}/$name').writeAsStringSync('#!/bin/sh\n$body\n');
+        Process.runSync('chmod', ['755', '${dir.path}/$name']);
+      }
+
+      void write(String rel, String text) {
+        File('${conf.path}/$rel')
+          ..createSync(recursive: true)
+          ..writeAsStringSync(text);
+      }
+
+      setUp(() {
+        if (Platform.isWindows) return;
+        dir = Directory.systemTemp.createTempSync('kelola_apache_links');
+        conf = Directory('${dir.path}/apache2')..createSync();
+        log = File('${dir.path}/openssl.log');
+        final site = '${conf.path}/sites-enabled/site.conf';
+        stub('apache2ctl', '''
+case "\$1" in
+  -t) echo "Syntax OK" >&2 ;;
+  -S) cat <<'DUMP'
+VirtualHost configuration:
+*:443                  is a NameVirtualHost
+         default server own.lab ($site:3)
+         port 443 namevhost own.lab ($site:3)
+         port 443 namevhost inherit.lab ($site:9)
+         port 443 namevhost odd.lab (${conf.path}/sites-enabled/odd.conf:1)
+*:80                   plain.lab (${conf.path}/sites-enabled/plain.conf:1)
+DUMP
+  ;;
+esac''');
+        stub('openssl', '''
+echo "\$*" >> ${log.path}
+echo "notAfter=Nov 15 01:32:00 2030 GMT"
+echo "subject=CN = x"''');
+        stub('tail', 'exit 0');
+        write(
+          'apache2.conf',
+          '# SSLCertificateFile /etc/ssl/commented.pem\n'
+              'SSLCertificateFile /etc/ssl/first-global.pem\n'
+              'IncludeOptional sites-enabled/*.conf\n',
+        );
+        write(
+          'sites-enabled/site.conf',
+          '# two TLS vhosts\n'
+              '<IfModule mod_ssl.c>\n'
+              '  <VirtualHost *:443>\n'
+              '    ServerName own.lab\n'
+              '    #SSLCertificateFile /etc/ssl/commented-vhost.pem\n'
+              '    sslcertificatefile "/etc/ssl/own.pem"\n'
+              '    SSLCertificateKeyFile /etc/ssl/private/own.key\n'
+              '  </virtualhost>\n'
+              '  <virtualhost *:443>\n'
+              '    ServerName inherit.lab\n'
+              '  </VirtualHost>\n'
+              '</IfModule>\n',
+        );
+        // Hostile values never reach a link or openssl.
+        write(
+          'sites-enabled/plain.conf',
+          '<VirtualHost *:80>\n'
+              '  SSLCertificateFile /etc/ssl/../shadow\n'
+              '  SSLCertificateFile "/etc/ssl/\$(reboot).pem"\n'
+              '  SSLCertificateFile /etc/ssl/a.pem;reboot\n'
+              '  SSLCertificateFileX /etc/ssl/prefix.pem\n'
+              '</VirtualHost>\n',
+        );
+        // A file whose name could forge a line: never named in a link.
+        write(
+          'sites-enabled/x\n@certin=global .conf',
+          '<VirtualHost *:443>\n  SSLCertificateFile /etc/ssl/odd-name.pem\n'
+              '</VirtualHost>\n',
+        );
+        write(
+          'conf-enabled/zz-ssl.conf',
+          'SSLCertificateFile /etc/ssl/global.pem\n'
+              'SSLCertificateKeyFile /etc/ssl/private/global.key\n',
+        );
+      });
+
+      tearDown(() {
+        if (Platform.isWindows) return;
+        dir.deleteSync(recursive: true);
+      });
+
+      for (final shell in const ['dash', 'busybox']) {
+        test('$shell: links, inheritance and openssl calls', () async {
+          if (shell == 'busybox' && bbDir == null) {
+            markTestSkipped('busybox is not installed here');
+            return;
+          }
+          if (shell == 'dash' && !hasDash) {
+            markTestSkipped('dash is not installed here');
+            return;
+          }
+          final cmd = const WebLensProbe(
+            id: ServiceId.apache,
+            binaries: {},
+          ).command(ubuntu);
+          expect("D='/etc/apache2'".allMatches(cmd), hasLength(1));
+          final script = cmd
+              .replaceFirst("D='/etc/apache2'", "D='${conf.path}'")
+              .replaceFirst("B='apachectl'", "B='${dir.path}/apache2ctl'");
+          final path = shell == 'busybox'
+              ? '${dir.path}:$bbDir'
+              : '${dir.path}:/usr/bin:/bin';
+          final argv = shell == 'busybox'
+              ? ['busybox', 'sh', '-c', script]
+              : ['dash', '-c', script];
+          Future<String> runIt() async =>
+              (await Process.run('env', ['PATH=$path', ...argv])).stdout
+                  as String;
+          final out = await runIt();
+          final site = '${conf.path}/sites-enabled/site.conf';
+          expect(
+            [
+              for (final l in out.split('\n'))
+                if (l.startsWith('@certin=')) l,
+            ],
+            [
+              '@certin=global /etc/ssl/first-global.pem',
+              '@certin=$site:3 /etc/ssl/own.pem',
+              '@certin=vhost /etc/ssl/odd-name.pem',
+              '@certin=global /etc/ssl/global.pem',
+            ],
+            reason: out,
+          );
+          expect(out, isNot(contains('.key')));
+          expect(out, isNot(contains('commented')));
+          for (final bad in ['shadow', 'reboot', 'prefix']) {
+            expect(out, isNot(contains(bad)), reason: bad);
+          }
+          final calls = log.readAsLinesSync().toSet();
+          expect(calls, {
+            for (final p in [
+              '/etc/ssl/first-global.pem',
+              '/etc/ssl/own.pem',
+              '/etc/ssl/odd-name.pem',
+              '/etc/ssl/global.pem',
+            ])
+              'x509 -noout -enddate -subject -ext subjectAltName -in $p',
+          });
+          final lens = parseWebLens(out, id: ServiceId.apache, now: now);
+          WebVhost v(String n) =>
+              lens.vhosts.firstWhere((x) => x.serverNames.first == n);
+          expect(v('own.lab').certPaths, ['/etc/ssl/own.pem']);
+          expect(v('own.lab').inherited, isFalse);
+          expect(v('plain.lab').certPaths, isEmpty);
+          // The hostile-named file's cert could not be linked: which vhost
+          // holds it is unknown, so no vhost is given the global cert by a
+          // guess (odd.lab may be the one that owns it), and none is called
+          // certless; a fact says so.
+          expect(lens.vhostCertsUnlinked, isTrue);
+          for (final n in ['inherit.lab', 'odd.lab']) {
+            expect(v(n).certPaths, isEmpty, reason: n);
+            expect(v(n).certPath, isNull, reason: n);
+            expect(v(n).inherited, isFalse, reason: n);
+          }
+          expect(lens.vhosts.where((x) => x.inherited), isEmpty);
+          expect(
+            lens.findings.map((f) => f.kind),
+            contains(WebFindingKind.certsUnattributed),
+          );
+          expect(
+            lens.findings.where(
+              (f) => f.kind == WebFindingKind.listens443WithoutCert,
+            ),
+            isEmpty,
+          );
+          expect(lens.sectionErrors[WebLensSection.certs], isNull);
+
+          // Without the unlinkable file every cert is attributed: the last
+          // global in read order (conf-enabled after apache2.conf) is
+          // inherited by the TLS vhosts that set none.
+          File('${conf.path}/sites-enabled/x\n@certin=global .conf')
+              .deleteSync();
+          final linked =
+              parseWebLens(await runIt(), id: ServiceId.apache, now: now);
+          WebVhost lv(String n) =>
+              linked.vhosts.firstWhere((x) => x.serverNames.first == n);
+          expect(linked.vhostCertsUnlinked, isFalse);
+          expect(lv('own.lab').certPaths, ['/etc/ssl/own.pem']);
+          expect(lv('own.lab').inherited, isFalse);
+          for (final n in ['inherit.lab', 'odd.lab']) {
+            expect(lv(n).certPaths, ['/etc/ssl/global.pem'], reason: n);
+            expect(lv(n).inherited, isTrue, reason: n);
+          }
+          expect(lv('plain.lab').certPaths, isEmpty);
+          expect(
+            linked.findings.map((f) => f.kind),
+            isNot(contains(WebFindingKind.certsUnattributed)),
+          );
+        }, skip: Platform.isWindows);
+
+        test('$shell: more links than the cap is detected', () async {
+          if (shell == 'busybox' && bbDir == null) {
+            markTestSkipped('busybox is not installed here');
+            return;
+          }
+          if (shell == 'dash' && !hasDash) {
+            markTestSkipped('dash is not installed here');
+            return;
+          }
+          File('${conf.path}/sites-enabled/x\n@certin=global .conf')
+              .deleteSync();
+          write('conf-enabled/many.conf', [
+            for (var i = 0; i < webMaxCertLinks + 5; i++)
+              'SSLCertificateFile /etc/ssl/many/$i.pem',
+          ].join('\n'));
+          final script = const WebLensProbe(
+            id: ServiceId.apache,
+            binaries: {},
+          )
+              .command(ubuntu)
+              .replaceFirst("D='/etc/apache2'", "D='${conf.path}'")
+              .replaceFirst("B='apachectl'", "B='${dir.path}/apache2ctl'");
+          final path = shell == 'busybox'
+              ? '${dir.path}:$bbDir'
+              : '${dir.path}:/usr/bin:/bin';
+          final argv = shell == 'busybox'
+              ? ['busybox', 'sh', '-c', script]
+              : ['dash', '-c', script];
+          final r = await Process.run('env', ['PATH=$path', ...argv]);
+          final out = r.stdout as String;
+          // One past the cap, so the parser can tell there were more.
+          expect(
+            RegExp(r'^@certin=', multiLine: true).allMatches(out),
+            hasLength(webMaxCertLinks + 1),
+          );
+          final lens = parseWebLens(out, id: ServiceId.apache, now: now);
+          expect(lens.vhostCertsUnlinked, isTrue);
+          expect(lens.vhosts.where((x) => x.inherited), isEmpty);
+          expect(
+            lens.findings.map((f) => f.kind),
+            contains(WebFindingKind.certsUnattributed),
+          );
+          // openssl stays capped at 50.
+          expect(log.readAsLinesSync(), hasLength(WebLensProbe.maxCerts));
+        }, skip: Platform.isWindows);
+      }
+    });
+
+    // The `file:line` a real `apache2 -S` prints is the `<VirtualHost` line
+    // the probe's awk reports. Needs apache2 with mod_ssl; skipped elsewhere.
+    test('real apache2 -S agrees with the probe on file:line (executed)',
+        () async {
+      final apache2 = Process.runSync('sh', ['-c', 'command -v apache2']);
+      if (Platform.isWindows ||
+          apache2.exitCode != 0 ||
+          !File('/etc/apache2/mods-available/ssl.load').existsSync() ||
+          Process.runSync('sh', ['-c', 'command -v openssl']).exitCode != 0) {
+        markTestSkipped('apache2 with mod_ssl and openssl not installed here');
+        return;
+      }
+      final dir = Directory.systemTemp.createTempSync('kelola_real_apache');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final d = '${dir.path}/apache2';
+      Process.runSync('cp', ['-a', '/etc/apache2', d]);
+      for (final n in ['global', 'own']) {
+        final g = Process.runSync('openssl', [
+          'req', '-x509', '-newkey', 'rsa:2048', '-nodes', //
+          '-keyout', '${dir.path}/$n.key', '-out', '${dir.path}/$n.pem',
+          '-days', '30', '-subj', '/CN=$n.lab',
+        ]);
+        expect(g.exitCode, 0, reason: '${g.stderr}');
+      }
+      for (final f in Directory('$d/sites-enabled').listSync()) {
+        f.deleteSync();
+      }
+      for (final m in ['ssl.load', 'ssl.conf', 'socache_shmcb.load']) {
+        Link('$d/mods-enabled/$m').createSync('../mods-available/$m');
+      }
+      File('$d/conf-enabled/zz-global-ssl.conf').writeAsStringSync(
+        'SSLCertificateFile ${dir.path}/global.pem\n'
+        'SSLCertificateKeyFile ${dir.path}/global.key\n',
+      );
+      File('$d/sites-available/multi.conf').writeAsStringSync(
+        '# two TLS vhosts\n'
+        '<IfModule mod_ssl.c>\n'
+        '  <virtualhost *:443>\n'
+        '    ServerName inherit.lab\n'
+        '    SSLEngine on\n'
+        '  </virtualhost>\n'
+        '\n'
+        '  <VirtualHost *:443>\n'
+        '    ServerName own.lab\n'
+        '    SSLEngine on\n'
+        '    SSLCertificateFile "${dir.path}/own.pem"\n'
+        '    SSLCertificateKeyFile ${dir.path}/own.key\n'
+        '  </VirtualHost>\n'
+        '</IfModule>\n',
+      );
+      Link('$d/sites-enabled/multi.conf')
+          .createSync('../sites-available/multi.conf');
+      for (final s in ['run', 'lock', 'log']) {
+        Directory('${dir.path}/$s').createSync();
+      }
+      File('${dir.path}/apache2ctl').writeAsStringSync('''
+#!/bin/sh
+export APACHE_RUN_USER=www-data APACHE_RUN_GROUP=www-data
+export APACHE_RUN_DIR=${dir.path}/run APACHE_LOCK_DIR=${dir.path}/lock
+export APACHE_LOG_DIR=${dir.path}/log APACHE_PID_FILE=${dir.path}/run/pid
+exec ${(apache2.stdout as String).trim()} -d $d "\$@"
+''');
+      Process.runSync('chmod', ['755', '${dir.path}/apache2ctl']);
+      final script = const WebLensProbe(id: ServiceId.apache, binaries: {})
+          .command(ubuntu)
+          .replaceFirst("D='/etc/apache2'", "D='$d'")
+          .replaceFirst("B='apachectl'", "B='${dir.path}/apache2ctl'");
+      final r = await Process.run('sh', ['-c', script]);
+      final out = r.stdout as String;
+      final multi = '$d/sites-enabled/multi.conf';
+      expect(out, contains('|         port 443 namevhost own.lab ($multi:8)'),
+          reason: out);
+      expect(out, contains('@certin=$multi:8 ${dir.path}/own.pem'));
+      expect(out, contains('@certin=global ${dir.path}/global.pem'));
+      final lens = parseWebLens(out, id: ServiceId.apache, now: now);
+      WebVhost v(String n) =>
+          lens.vhosts.firstWhere((x) => x.serverNames.first == n);
+      expect(v('own.lab').certPaths, ['${dir.path}/own.pem']);
+      expect(v('own.lab').inherited, isFalse);
+      expect(v('inherit.lab').certPaths, ['${dir.path}/global.pem']);
+      expect(v('inherit.lab').inherited, isTrue);
+      expect(lens.vhostCertsUnlinked, isFalse);
+      expect(lens.certsByPath[('${dir.path}/own.pem')]?.notAfter, isNotNull);
+      expect(
+        lens.findings.where(
+          (f) => f.kind == WebFindingKind.listens443WithoutCert,
+        ),
+        isEmpty,
+      );
     }, skip: Platform.isWindows);
   });
 }

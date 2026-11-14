@@ -40,6 +40,10 @@ final _safeToolPath = RegExp(r'^/[A-Za-z0-9._/+-]+$');
 bool isSafeWebPath(String p) =>
     p.length <= 4096 && _safePath.hasMatch(p) && !p.contains('..');
 
+/// Owner / group / login group names from `stat` and `id -nG`.
+final _safeName = RegExp(r'^[A-Za-z0-9_.-]{1,64}$');
+final _safeMode = RegExp(r'^[0-7]{3,4}$');
+
 const _maxLines = 60;
 const _maxConfigErrors = 50;
 const _maxLineLength = 2000;
@@ -109,6 +113,8 @@ WebLens parseWebLens(
     }
   }
 
+  final loginGroups = _groups(sections[_Sec.tools]?.metaValue('groups'));
+
   // ACTIVE
   final activeState = _activeState(sections[_Sec.active]?.data);
   if (activeState == null) {
@@ -138,6 +144,7 @@ WebLens parseWebLens(
 
   // DUMP
   var vhosts = const <WebVhost>[];
+  var configFiles = const <String>[];
   final dumpLines = sections[_Sec.dump]?.data ?? const <String>[];
   final dumpText = dumpLines.join('\n');
   if (dumpText.trim().isEmpty) {
@@ -151,9 +158,11 @@ WebLens parseWebLens(
         : 'Could not read the config dump';
   } else if (id == ServiceId.apache) {
     vhosts = parseApacheVhosts(dumpText);
+    configFiles = _apacheConfigFiles(vhosts);
   } else {
     final r = parseNginxDump(dumpText);
     vhosts = r.vhosts;
+    configFiles = r.sourceFiles;
     if (r.truncated) {
       errors[WebLensSection.dump] =
           'Config dump truncated; showing complete vhosts only';
@@ -180,6 +189,18 @@ WebLens parseWebLens(
       errors[WebLensSection.certs] =
           'Could not read the $label config for certificates';
     }
+  }
+
+  // Apache (fix 3): tie each cert to its -S vhost, or the server config.
+  var vhostCertsUnlinked = false;
+  if (id == ServiceId.apache) {
+    final linked = _linkApacheCerts(
+      vhosts,
+      certSec,
+      anyCert: certs.isNotEmpty,
+    );
+    vhosts = linked.vhosts;
+    vhostCertsUnlinked = linked.unlinked;
   }
 
   // ERRLOG
@@ -226,7 +247,137 @@ WebLens parseWebLens(
     toolPaths: toolPaths,
     errorLogPath: el.path,
     accessLogPath: ac.path,
+    configFiles: configFiles,
+    errorLogStat: _stat(sections[_Sec.errlog]?.metaValue('stat')),
+    accessLogStat: _stat(sections[_Sec.access]?.metaValue('stat')),
+    loginGroups: loginGroups,
+    vhostCertsUnlinked: vhostCertsUnlinked,
   );
+}
+
+/// Max `@certin` lines read. The probe prints at most one more, so reaching
+/// that one means links were cut.
+const webMaxCertLinks = 1000;
+
+/// Max certs linked to one vhost.
+const _maxCertsPerVhost = 256;
+
+/// Fix 3. The probe prints `@certin=<scope> <cert path>` per
+/// `SSLCertificateFile`, in read order: `global` (outside any
+/// `<VirtualHost>`), `<file>:<line>` (the `<VirtualHost` line, as `-S` prints
+/// it) or `vhost` (in a file whose path it would not print). A vhost gets the
+/// certs of its own `file:line`; a TLS vhost with none inherits the last
+/// global one, unless `unlinked`: a cert could not be tied to a vhost, so
+/// any vhost may be the one that owns it and no inheritance is guessed.
+/// Links that did match stay.
+({List<WebVhost> vhosts, bool unlinked}) _linkApacheCerts(
+  List<WebVhost> vhosts,
+  _Section? sec, {
+  required bool anyCert,
+}) {
+  final own = <String, List<String>>{};
+  String? global;
+  var count = 0;
+  var unlinked = false;
+  for (final m in sec?.meta ?? const <MapEntry<String, String>>[]) {
+    if (m.key != 'certin') continue;
+    if (++count > webMaxCertLinks) {
+      // Past the cap (the probe prints one more): the rest is unknown.
+      unlinked = true;
+      break;
+    }
+    final parts = m.value.split(' ');
+    if (parts.length != 2 || !isSafeWebPath(parts[1])) continue;
+    final scope = parts[0];
+    final path = parts[1];
+    if (scope == 'global') {
+      global = path;
+    } else if (scope == 'vhost') {
+      unlinked = true;
+    } else if (_isVhostLoc(scope)) {
+      final list = own[scope] ??= <String>[];
+      if (!list.contains(path) && list.length < _maxCertsPerVhost) {
+        list.add(path);
+      }
+    }
+  }
+  // Certs read but no link printed: attribution unknown.
+  if (count == 0 && anyCert) unlinked = true;
+  final locs = {for (final v in vhosts) v.sourceFile};
+  if (own.keys.any((k) => !locs.contains(k))) unlinked = true;
+  final inherited = unlinked ? null : global;
+  return (
+    vhosts: [
+      for (final v in vhosts)
+        if (own[v.sourceFile] case final paths?)
+          _withCerts(v, paths, inherited: false)
+        else if (v.tls && inherited != null)
+          _withCerts(v, [inherited], inherited: true)
+        else
+          v,
+    ],
+    unlinked: unlinked,
+  );
+}
+
+/// `<safe absolute path>:<line>`.
+bool _isVhostLoc(String s) {
+  final i = s.lastIndexOf(':');
+  if (i <= 0) return false;
+  final line = s.substring(i + 1);
+  return line.isNotEmpty &&
+      line.length <= 9 &&
+      line.codeUnits.every((c) => c >= 48 && c <= 57) &&
+      isSafeWebPath(s.substring(0, i));
+}
+
+WebVhost _withCerts(
+  WebVhost v,
+  List<String> paths, {
+  required bool inherited,
+}) => WebVhost(
+  serverNames: v.serverNames,
+  listen: v.listen,
+  tls: v.tls,
+  root: v.root,
+  certPath: paths.first,
+  certPaths: List.unmodifiable(paths),
+  sourceFile: v.sourceFile,
+  inherited: inherited,
+);
+
+/// `@stat=<owner> <group> <mode>`; null unless all three are valid.
+WebLogStat? _stat(String? v) {
+  if (v == null) return null;
+  final p = v.split(' ');
+  if (p.length != 3) return null;
+  if (!_safeName.hasMatch(p[0]) ||
+      !_safeName.hasMatch(p[1]) ||
+      !_safeMode.hasMatch(p[2])) {
+    return null;
+  }
+  return WebLogStat(owner: p[0], group: p[1], mode: p[2]);
+}
+
+/// `@groups=<names>`: valid names only; null (unknown) when none is valid.
+List<String>? _groups(String? v) {
+  if (v == null) return null;
+  final names = [
+    for (final g in v.split(' '))
+      if (_safeName.hasMatch(g)) g,
+  ];
+  return names.isEmpty ? null : List.unmodifiable(names);
+}
+
+/// The files `-S` names for vhosts (`path:line`, line dropped), once each.
+List<String> _apacheConfigFiles(List<WebVhost> vhosts) {
+  final out = <String>{};
+  for (final v in vhosts) {
+    final i = v.sourceFile.lastIndexOf(':');
+    if (i <= 0) continue;
+    out.add(v.sourceFile.substring(0, i));
+  }
+  return List.unmodifiable(out);
 }
 
 /// `@cert=<path>`, `@read=ok|fail`, then openssl's lines for that path.

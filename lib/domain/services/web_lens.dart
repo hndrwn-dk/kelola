@@ -17,6 +17,7 @@ class WebVhost {
     this.certPath,
     this.certPaths = const [],
     this.sourceFile = '',
+    this.inherited = false,
   });
 
   /// Empty when the block has no `server_name`; `['_']` only when the
@@ -34,10 +35,15 @@ class WebVhost {
   final List<String> certPaths;
   final String sourceFile;
 
+  /// Fix 3: the vhost sets no certificate of its own; [certPath] is the one
+  /// it inherits (nginx `http {}` level, Apache server config).
+  final bool inherited;
+
   @override
   String toString() =>
       'WebVhost(serverNames: $serverNames, listen: $listen, tls: $tls, '
-      'root: $root, certPath: $certPath, sourceFile: $sourceFile)';
+      'root: $root, certPath: $certPath, inherited: $inherited, '
+      'sourceFile: $sourceFile)';
 }
 
 class WebCert {
@@ -65,6 +71,28 @@ class WebCert {
   }
 }
 
+/// `stat -L -c '%U %G %a'` of a log file, as the host printed it and the
+/// parser validated it (fix 2). Only used to suggest the adm group.
+class WebLogStat {
+  const WebLogStat({
+    required this.owner,
+    required this.group,
+    required this.mode,
+  });
+
+  final String owner;
+  final String group;
+
+  /// Octal, 3 or 4 digits (`640`, `2750`).
+  final String mode;
+
+  /// Group read bit (`0o040`) of [mode]; false when [mode] is not octal.
+  bool get groupReadable {
+    final m = int.tryParse(mode, radix: 8);
+    return m != null && m & 0x20 != 0;
+  }
+}
+
 enum WebFindingLevel { failed, warning, fact }
 
 /// Which §5c row produced a finding; screens branch on this, never on copy.
@@ -77,6 +105,10 @@ enum WebFindingKind {
   http5xx,
   listens443WithoutCert,
   defaultVhostOnly,
+
+  /// Apache: a cert could not be tied to a vhost (fix 3). A fact: unknown is
+  /// not a warning.
+  certsUnattributed,
 }
 
 class WebFinding {
@@ -108,6 +140,11 @@ class WebLens {
     this.toolPaths = const {},
     this.errorLogPath,
     this.accessLogPath,
+    this.configFiles = const [],
+    this.errorLogStat,
+    this.accessLogStat,
+    this.loginGroups,
+    this.vhostCertsUnlinked = false,
   });
 
   final ServiceId id;
@@ -129,6 +166,26 @@ class WebLens {
   final Map<String, String> toolPaths;
   final String? errorLogPath;
   final String? accessLogPath;
+
+  /// Config files the dump named, as the host printed them: nginx's
+  /// `# configuration file` sections, Apache's vhost files from `-S`. The
+  /// read grant checks each on the host before it adds the config test.
+  final List<String> configFiles;
+
+  /// Owner, group and mode of the error / access log; null when the probe
+  /// could not stat it (directory not traversable, file missing, junk).
+  final WebLogStat? errorLogStat;
+  final WebLogStat? accessLogStat;
+
+  /// The login's groups (`id -nG`); null = unknown, never guessed.
+  final List<String>? loginGroups;
+
+  /// Apache (fix 3): a certificate was read that could not be tied to any
+  /// `-S` vhost or to the server config (its `<VirtualHost>` line matched no
+  /// vhost, the probe's link cap was reached, or it printed no links).
+  /// Which vhost has it is unknown, so no vhost is called one without a
+  /// certificate and none is given the global one; a fact says so.
+  final bool vhostCertsUnlinked;
 
   /// Worst finding (facts never count). [HealthStatus.unknown] only when no
   /// section at all could be read.
@@ -182,8 +239,8 @@ class WebLens {
       );
     }
 
-    // -S cannot tie Apache certs to vhosts; nginx certs not referenced by a
-    // vhost (http{} or stream level) are still served. Check every cert read.
+    // Certs not tied to a vhost (stream level, an unlinked Apache vhost) are
+    // still served. Check every cert read.
     for (final cert in certsByPath.values) {
       final days = cert.daysLeft(readAt);
       if (days == null) {
@@ -262,10 +319,12 @@ class WebLens {
 
     for (final v in vhosts) {
       if (!v.listen.any(_listensOn443)) continue;
+      // Own or inherited (fix 3). Apache: never when the cert section failed
+      // or a cert could not be tied to its vhost.
       final noCert = id == ServiceId.apache
-          // Apache: only when the config has no certificate at all.
-          ? certsByPath.isEmpty &&
-                !sectionErrors.containsKey(WebLensSection.certs)
+          ? v.certPaths.isEmpty &&
+                !sectionErrors.containsKey(WebLensSection.certs) &&
+                !vhostCertsUnlinked
           : v.certPaths.isEmpty;
       if (noCert) {
         warning.add(
@@ -277,6 +336,16 @@ class WebLens {
           ),
         );
       }
+    }
+
+    if (vhostCertsUnlinked) {
+      facts.add(
+        const WebFinding(
+          kind: WebFindingKind.certsUnattributed,
+          level: WebFindingLevel.fact,
+          message: 'Some certificates could not be tied to a vhost.',
+        ),
+      );
     }
 
     if (vhosts.isNotEmpty &&

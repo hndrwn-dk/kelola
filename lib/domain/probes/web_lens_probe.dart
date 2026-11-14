@@ -170,6 +170,9 @@ class WebLensProbe extends Probe<WebLens> {
       'echo ---TOOLS---',
       r'''case "$O" in /*) printf '|openssl %s\n' "$O" ;; esac''',
       r'''case "$T" in /*) printf '|tail %s\n' "$T" ;; esac''',
+      // Fix 2: the login's groups, plain (never sudo). One script-authored
+      // meta line; the parser validates each name.
+      r"id -nG 2>/dev/null | head -n 1 | sed 's/^/@groups=/'",
       'echo ---ACTIVE---',
       ..._activeLines(facts),
       'echo ---CONFTEST---',
@@ -198,9 +201,30 @@ class WebLensProbe extends Probe<WebLens> {
         r'  [ -f "$f" ] && [ -r "$f" ] && n=$((n + 1))',
         'done',
         r'[ "$n" -gt 0 ] || echo @src=none',
-        'for f in ${apacheEnabledConfigGlobs(facts).join(' ')}; do',
-        r'  [ -f "$f" ] && [ -r "$f" ] && grep -hsi SSLCertificateFile -- "$f"',
-        'done | pick sslcertificatefile $maxCerts |',
+        // Fix 3: each certificate with where it is set: `global` (outside
+        // any <VirtualHost>), or the file and line of its `<VirtualHost`,
+        // the `file:line` that -S prints for that vhost. A file path outside
+        // the whitelist is never printed (`vhost`: not linkable). Every value
+        // is validated here; the parser checks again. A file in the enabled
+        // globs that is itself included from inside a <VirtualHost> is
+        // reported as global: the per-file awk cannot see the enclosing
+        // block. One line past the parser's cap is kept, so it can tell the
+        // links were cut.
+        'L=\$(for f in ${apacheEnabledConfigGlobs(facts).join(' ')}; do',
+        r'  [ -f "$f" ] && [ -r "$f" ] || continue',
+        r'  g=$f; case "$g" in (/*) ;; (*) g= ;; esac',
+        r'  case "$g" in (*[!-A-Za-z0-9._/+@]*|*..*) g= ;; esac',
+        r'''  awk -v g="$g" -v q="'" '{ t = tolower($1) }''',
+        r'''    t == "<virtualhost" { if (d++ == 0) l = NR; next }''',
+        r'''    substr(t, 1, 13) == "</virtualhost" { if (d > 0) d--; next }''',
+        r'''    t == "sslcertificatefile" { v = $2; f = substr(v, 1, 1)''',
+        r'''      if ((f == "\"" || f == q) && length(v) > 1 && substr(v, length(v), 1) == f) v = substr(v, 2, length(v) - 2)''',
+        r'''      if (v !~ "^/[-A-Za-z0-9._/+@]+$" || index(v, "..") != 0) next''',
+        r'''      s = "global"; if (d > 0) s = (g == "" ? "vhost" : g ":" l)''',
+        r'''      print "@certin=" s " " v }' < "$f" 2>/dev/null''',
+        'done | head -n ${webMaxCertLinks + 1})',
+        r'''[ -z "$L" ] || printf '%s\n' "$L"''',
+        r'''printf '%s\n' "$L" | awk 'NF == 2 { print "sslcertificatefile", $2 }' | pick sslcertificatefile ''' '$maxCerts |',
       ] else
         'printf \'%s\\n\' "\$d" | pick ssl_certificate $maxCerts |',
       r'while IFS= read -r p; do',
@@ -217,6 +241,7 @@ class WebLensProbe extends Probe<WebLens> {
         r'''e=$(printf '%s\n' "$d" | pick error_log 1)''',
       '[ -n "\$e" ] || e=${shellSingleQuote(logs.error)}',
       r'echo "@path=$e"',
+      _logStatLine('e'),
       r'if o=$(try "$T" -n 60 "$e" </dev/null); then echo @read=ok; out "$o"; else echo @read=fail; fi',
       'echo ---ACCESS---',
       if (_apache)
@@ -226,12 +251,23 @@ class WebLensProbe extends Probe<WebLens> {
         '[ -n "\$a" ] || a=${shellSingleQuote(logs.access)}',
       ],
       r'echo "@path=$a"',
+      _logStatLine('a'),
       r'if o=$(try "$T" -n 2000 "$a" </dev/null); then echo @read=ok;',
       r'''  [ -z "$o" ] || out "$(printf '%s\n' "$o" | awk '{print $9}' | sort | uniq -c)"''',
       r'else echo @read=fail; fi',
       'true',
     ].join('\n');
   }
+
+  /// Fix 2: owner, group and mode of the log in shell variable [v], as one
+  /// `@stat=` line, only when its directory can be traversed; plain, never
+  /// through sudo or `try`. `-L`: the mode tail would meet, not a symlink's
+  /// 777. Prints nothing on failure; the parser validates the fields.
+  static String _logStatLine(String v) =>
+      'ld=\${$v%/*}; [ -n "\$ld" ] || ld=/; '
+      'if [ -x "\$ld" ]; then '
+      "stat -L -c '%U %G %a' \"\$$v\" 2>/dev/null | head -n 1 | sed 's/^/@stat=/'; "
+      'fi';
 
   @override
   WebLens parse(String stdout, String stderr, int exitCode) =>
