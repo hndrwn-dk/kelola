@@ -688,11 +688,14 @@ String _configTrustShell(
 /// skipped): `I <pattern>` for nginx `include` / Apache `Include`,
 /// `IncludeOptional`; `M <path>` for `load_module` / `LoadModule` /
 /// `LoadFile`; `R <path>` for Apache `ServerRoot`; `U` for a directive that
-/// loads code at config-test time (nginx `perl_modules`, `perl_require`,
-/// `perl_set`, `js_import`, `js_include`, `js_path`, `lua_package_path`,
-/// `lua_package_cpath`, `init_by_lua*`, `init_worker_by_lua*`; Apache
-/// `<Perl>`, `PerlLoadModule`, `PerlRequire`, `PerlModule`,
-/// `PerlPostConfigRequire`, `PerlConfigRequire`) or for Apache mod_macro
+/// loads code at config-test time (nginx: every directive whose name starts
+/// with `perl` (`perl`, `perl_modules`, `perl_require`, `perl_set`, ...),
+/// `js_import`, `js_include`, `js_path`, `lua_package_path`,
+/// `lua_package_cpath`, `init_by_lua*`, `init_worker_by_lua*`; Apache: the
+/// `<Perl>` section and every directive whose unquoted name starts with
+/// `perl`, any case (`PerlSwitches`, `PerlOptions`, `PerlRequire`,
+/// `PerlModule`, `PerlLoadModule`, `PerlPostConfigRequire`,
+/// `PerlConfigRequire`, `PerlSetVar`, ...)) or for Apache mod_macro
 /// (`<Macro>`, `Use`), whose expansion can include any file: these fail
 /// (`unsupported`); `X` for one it cannot
 /// evaluate (a value with `$`, a backslash, a newline, a space, `..`, `//`,
@@ -748,7 +751,7 @@ function unq(v,  f) {
   return v
 }
 function code(d) {
-  return d == "perl_modules" || d == "perl_require" || d == "perl_set" || d == "js_import" || d == "js_include" || d == "js_path" || d == "lua_package_path" || d == "lua_package_cpath" || index(d, "init_by_lua") == 1 || index(d, "init_worker_by_lua") == 1
+  return index(d, "perl") == 1 || d == "js_import" || d == "js_include" || d == "js_path" || d == "lua_package_path" || d == "lua_package_cpath" || index(d, "init_by_lua") == 1 || index(d, "init_worker_by_lua") == 1
 }
 function stmt(  d) {
   if (ntok > 0) {
@@ -766,7 +769,7 @@ function apache(s,  n, a, d, j) {
   n = split(s, a, /[ \t]+/)
   d = tolower(unq(a[1]))
   if (index(d, "$") > 0) { print "X"; return }
-  if (d == "use" || d ~ /^<(macro|perl)(>|$)/ || d == "perlloadmodule" || d == "perlrequire" || d == "perlmodule" || d == "perlpostconfigrequire" || d == "perlconfigrequire") { print "U"; return }
+  if (d == "use" || d ~ /^<(macro|perl)(>|$)/ || index(d, "perl") == 1) { print "U"; return }
   if (d == "include" || d == "includeoptional") { if (n == 2) emit("I", unq(a[2])); else print "X" }
   else if (d == "loadmodule") { if (n == 3) emit("M", unq(a[3])); else print "X" }
   else if (d == "loadfile") { if (n >= 2) { for (j = 2; j <= n; j++) emit("M", unq(a[j])) } else print "X" }

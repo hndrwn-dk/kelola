@@ -2996,6 +2996,9 @@ cp "\$src" "\$dst"''');
           'init_worker_by_lua_block { x = 1 }',
           'INIT_WORKER_BY_LUA_FILE /srv/lua/w.lua;',
           '"js_import" /srv/njs/a.js;',
+          // Any perl* directive (follow-up): the location-level handler.
+          'server { location / { perl Foo::handler; } }',
+          'perl_xyz on;',
         ]) {
           test('$shell: nginx `$d` drops them as unsupported', () async {
             if (!await go(shell)) return;
@@ -3038,6 +3041,11 @@ cp "\$src" "\$dst"''');
           'PerlPostConfigRequire /srv/perl/post.pl\n',
           'PerlConfigRequire /srv/perl/c.pl\n',
           "'PerlRequire' /srv/perl/startup.pl\n",
+          // Any Perl* directive (follow-up).
+          'PerlSwitches -I/srv/x\n',
+          'PerlOptions +Parent\n',
+          'PerlSetVar a b\n',
+          '"PerlSwitches" -I/srv/x\n',
         ]) {
           test('$shell: Apache `${d.split('\n').first}` drops them as unsupported', () async {
             if (!await go(shell)) return;
@@ -3061,6 +3069,8 @@ cp "\$src" "\$dst"''');
                 'http {\n'
                 '  add_header X "use js_import";\n'
                 '  add_header X-Lua init_by_lua;\n'
+                '  add_header X-Perl 1;\n'
+                '  add_header X perl_require;\n'
                 '  map \$a \$b { default perl_set; }\n'
                 '}\n',
           );
@@ -3073,11 +3083,40 @@ cp "\$src" "\$dst"''');
                 'Header set X "Use VH"\n'
                 'ServerAdmin perlrequire@example.com\n'
                 'UseCanonicalName Off\n'
-                'ServerName use\n',
+                'ServerName use\n'
+                'Header set X-Perl 1\n'
+                'SetEnv X PerlRequire\n',
           );
           final ga = grant(ServiceId.apache, certPath: cert());
           target.deleteSync();
           expectKept(await run(scriptFor(ga, a.stub), shell), ga);
+        });
+
+        // Apache (2.4.58, checked by the coordinator) joins any line ending
+        // in a backslash, a comment included: the next line is then part of
+        // the comment, so neither Apache nor the walk reads that Include.
+        test('$shell: an Apache comment ending in backslashes swallows the next line, as Apache does', () async {
+          if (!await go(shell)) return;
+          final x = file('${sub('srv/u').path}/x.conf', body: 'Listen 81\n');
+          final why = untrust(x.path);
+          for (final tail in const ['\\', '\\\\', '\\\\\\']) {
+            final t = apacheTree(
+              apacheConf: '# note $tail\nInclude ${x.path}\n',
+            );
+            final g = grant(ServiceId.apache, certPath: cert());
+            if (target.existsSync()) target.deleteSync();
+            expectKept(await run(scriptFor(g, t.stub), shell), g);
+          }
+          // Without the backslash the Include is read, and refused.
+          final t = apacheTree(apacheConf: '# note\nInclude ${x.path}\n');
+          final g = grant(ServiceId.apache, certPath: cert());
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: x.path,
+            reason: why,
+          );
         });
 
         // Apache parses a quoted directive name and expands `${VAR}` before
