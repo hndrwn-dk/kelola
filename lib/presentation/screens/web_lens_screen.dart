@@ -408,8 +408,11 @@ bool webGrantSafeUser(String user) => webGrantLines(
 const webAdmHintCopy =
     'Add your login to the adm group to read web server logs without sudo:';
 
-/// Fix 2: note under the adm command.
-const webAdmHintNote = 'Takes effect on the next connection.';
+/// Fix 2: note under the adm command. Reconnect drops the pooled client,
+/// which also closes the host's tunnels, PTY sessions and journal follow.
+const webAdmHintNote =
+    'Takes effect on the next connection. Reconnect also closes this '
+    "host's tunnels, terminal and log follow.";
 
 /// Fix 2: the command the user runs themselves; Kelola never runs it.
 String webAdmUsermodCommand(String user) => 'sudo usermod -aG adm $user';
@@ -766,17 +769,27 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
   }
 
   /// Fix 2: group changes apply to new logins, so drop the pooled client
-  /// for this host and read the lens again on a fresh connection.
+  /// for this host and read the lens again on a fresh connection. A failed
+  /// disconnect is shown as the screen's error (unless the re-read has its
+  /// own); the lens is read again either way.
   Future<void> _reconnect() async {
     final host = _host;
     if (host == null || _busy) return;
     setState(() => _busy = true);
+    Object? failed;
     try {
       await ref.read(sessionPoolProvider).disconnect(host.id);
+    } catch (e) {
+      failed = e;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-    if (mounted) await _load();
+    if (!mounted) return;
+    await _load();
+    final err = failed;
+    if (err != null && mounted && _error == null) {
+      setState(() => _error = describeSshError(err));
+    }
   }
 
   /// Fix 2: the adm hint under the log section [section], when it is the

@@ -1307,11 +1307,17 @@ cp "\$src" "\$dst"''');
       final copies = {
         'owner': 'Config test not granted: $p is not root-owned.',
         'mode': 'Config test not granted: $p is writable by group or others.',
-        'cap': 'Config test not granted: $p too many config files to check.',
+        'cap': 'Config test not granted: $p has too many config files to check.',
         'loop': 'Config test not granted: $p is a symlink loop.',
         'missing': 'Config test not granted: $p is missing.',
         'unreadable': 'Config test not granted: $p could not be checked.',
+        'unsupported': 'Config test not granted: $p uses a directive that '
+            'loads code at config-test time, which Kelola cannot check.',
       };
+      expect(
+        copies.keys.toSet(),
+        {for (final r in WebConfigRefusalReason.values) r.name},
+      );
       for (final e in copies.entries) {
         final r = probe.parse(
           '$webGrantConfigMarker ${b64(p)} ${e.key}\n$webGrantOkMarker\n',
@@ -2927,6 +2933,221 @@ cp "\$src" "\$dst"''');
             g,
             path: link.path,
             reason: WebConfigRefusalReason.owner,
+          );
+        });
+
+        // Review polish A1: mod_macro's `Use` includes what `<Macro>`
+        // names, which the include walk cannot follow.
+        test('$shell: Apache <Macro> with Use in a clean tree drops them as unsupported', () async {
+          if (!await go(shell)) return;
+          final u = sub('srv/u');
+          final x = file('${u.path}/x.conf', body: 'Listen 81\n');
+          untrust(x.path);
+          for (final body in [
+            '<Macro VH @f>\nInclude @f\n</Macro>\nUse VH ${x.path}\n',
+            '<Macro VH dir>\n  Include dir/x.conf\n</Macro>\nUse VH ${u.path}\n',
+            '\t<macro\tVH @f>\nInclude @f\n</MACRO>\nuSe VH ${x.path}\n',
+            '<Macro VH @f>\nInclude @f\n</Macro>\nUse \\\n  VH ${x.path}\n',
+            // Use alone (the macro defined somewhere the walk never reads).
+            'Use VH ${x.path}\n',
+            '"Use" VH ${x.path}\n',
+            // The macro alone.
+            '<Macro VH @f>\nInclude @f\n</Macro>\n',
+          ]) {
+            final t = apacheTree(apacheConf: body);
+            final g = grant(ServiceId.apache, certPath: cert());
+            if (target.existsSync()) target.deleteSync();
+            expectDropped(
+              await run(scriptFor(g, t.stub), shell),
+              g,
+              path: '${t.conf.path}/apache2.conf',
+              reason: WebConfigRefusalReason.unsupported,
+            );
+          }
+          // In an included file, too: the refusal names that file.
+          final inc = file(
+            '${sub('etc/apache2/conf-enabled').path}/m.conf',
+            body: 'Use VH ${x.path}\n',
+          );
+          final t = apacheTree(apacheConf: 'IncludeOptional conf-enabled/*.conf\n');
+          final g = grant(ServiceId.apache, certPath: cert());
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: inc.path,
+            reason: WebConfigRefusalReason.unsupported,
+          );
+        });
+
+        // Review polish A2: code loaded at config-test time.
+        for (final d in const [
+          'perl_modules /srv/perl/lib;',
+          'perl_require /srv/perl/a.pm;',
+          r"perl_set $x 'sub { return 1; }';",
+          'js_import /srv/njs/a.js;',
+          'js_include /srv/njs/a.js;',
+          'js_path /srv/njs;',
+          'lua_package_path "/srv/lua/?.lua;;";',
+          'lua_package_cpath "/srv/lua/?.so;;";',
+          'init_by_lua_block { x = 1 }',
+          "init_by_lua 'x = 1';",
+          'init_by_lua_file /srv/lua/init.lua;',
+          'init_worker_by_lua_block { x = 1 }',
+          'INIT_WORKER_BY_LUA_FILE /srv/lua/w.lua;',
+          '"js_import" /srv/njs/a.js;',
+        ]) {
+          test('$shell: nginx `$d` drops them as unsupported', () async {
+            if (!await go(shell)) return;
+            final t = nginxTree(nginxConf: 'events {}\nhttp {\n  $d\n}\n');
+            final g = grant(ServiceId.nginx, certPath: cert());
+            expectDropped(
+              await run(scriptFor(g, t.stub), shell),
+              g,
+              path: '${t.conf.path}/nginx.conf',
+              reason: WebConfigRefusalReason.unsupported,
+            );
+          });
+        }
+
+        test('$shell: an nginx code directive in an included file drops them', () async {
+          if (!await go(shell)) return;
+          final inc = file(
+            '${sub('etc/nginx/conf.d').path}/njs.conf',
+            body: 'js_import /srv/njs/a.js;\n',
+          );
+          final t = nginxTree(
+            nginxConf: 'events {}\nhttp { include conf.d/*.conf; }\n',
+          );
+          final g = grant(ServiceId.nginx, certPath: cert());
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: inc.path,
+            reason: WebConfigRefusalReason.unsupported,
+          );
+        });
+
+        for (final d in const [
+          '<Perl>\n\$x = 1;\n</Perl>\n',
+          '<perl >\n\$x = 1;\n</Perl>\n',
+          'PerlRequire /srv/perl/startup.pl\n',
+          'perlrequire /srv/perl/startup.pl\n',
+          'PerlModule Apache2::Foo\n',
+          'PerlLoadModule Apache2::Foo\n',
+          'PerlPostConfigRequire /srv/perl/post.pl\n',
+          'PerlConfigRequire /srv/perl/c.pl\n',
+          "'PerlRequire' /srv/perl/startup.pl\n",
+        ]) {
+          test('$shell: Apache `${d.split('\n').first}` drops them as unsupported', () async {
+            if (!await go(shell)) return;
+            final t = apacheTree(apacheConf: d);
+            final g = grant(ServiceId.apache, certPath: cert());
+            expectDropped(
+              await run(scriptFor(g, t.stub), shell),
+              g,
+              path: '${t.conf.path}/apache2.conf',
+              reason: WebConfigRefusalReason.unsupported,
+            );
+          });
+        }
+
+        test('$shell: those words in a comment or as a later argument keep them', () async {
+          if (!await go(shell)) return;
+          final t = nginxTree(
+            nginxConf: '# perl_require /srv/a.pm;\n'
+                '  # js_import /srv/a.js; init_by_lua_block { }\n'
+                'events {} # lua_package_path x;\n'
+                'http {\n'
+                '  add_header X "use js_import";\n'
+                '  add_header X-Lua init_by_lua;\n'
+                '  map \$a \$b { default perl_set; }\n'
+                '}\n',
+          );
+          final g = grant(ServiceId.nginx, certPath: cert());
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+          final a = apacheTree(
+            apacheConf: '# Use VH /srv/u/x.conf\n'
+                '#PerlRequire /srv/a.pl\n'
+                '  # <Macro VH @f>\n'
+                'Header set X "Use VH"\n'
+                'ServerAdmin perlrequire@example.com\n'
+                'UseCanonicalName Off\n'
+                'ServerName use\n',
+          );
+          final ga = grant(ServiceId.apache, certPath: cert());
+          target.deleteSync();
+          expectKept(await run(scriptFor(ga, a.stub), shell), ga);
+        });
+
+        // Apache parses a quoted directive name and expands `${VAR}` before
+        // it reads the name, so neither hides an Include.
+        test('$shell: a quoted or variable Apache directive name is not a way around the walk', () async {
+          if (!await go(shell)) return;
+          final x = file('${sub('srv/u').path}/x.conf', body: 'Listen 81\n');
+          final why = untrust(x.path);
+          var t = apacheTree(apacheConf: '"Include" ${x.path}\n');
+          final g = grant(ServiceId.apache, certPath: cert());
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: x.path,
+            reason: why,
+          );
+          t = apacheTree(apacheConf: 'Define X Include\n\${X} ${x.path}\n');
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: '${t.conf.path}/apache2.conf',
+            reason: WebConfigRefusalReason.unreadable,
+          );
+        });
+
+        // Review polish A3: a matched name ending in a newline.
+        test('$shell: an include match whose name ends in a newline drops them', () async {
+          if (!await go(shell)) return;
+          final d = sub('srv/d');
+          file('${d.path}/a\n');
+          final t = nginxTree(
+            nginxConf: 'events {}\nhttp { include ${d.path}/*; }\n',
+          );
+          final g = grant(ServiceId.nginx, certPath: cert());
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: d.path,
+            reason: WebConfigRefusalReason.unreadable,
+          );
+          // With a plain match next to it (either order in find's output).
+          file('${d.path}/b.conf');
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: d.path,
+            reason: WebConfigRefusalReason.unreadable,
+          );
+          // Gone: kept.
+          File('${d.path}/a\n').deleteSync();
+          target.deleteSync();
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+        });
+
+        // Review polish A4: SUSE's apache2ctl sources it as root.
+        test('$shell: a user-owned /etc/sysconfig/apache2 drops them', () async {
+          if (!await go(shell)) return;
+          final t = apacheTree();
+          final g = grant(ServiceId.apache, certPath: cert());
+          final sys = file('${sub('etc/sysconfig').path}/apache2');
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+          final why = untrust(sys.path);
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: sys.path,
+            reason: why,
           );
         });
 

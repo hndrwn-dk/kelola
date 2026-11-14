@@ -1538,6 +1538,51 @@ void main() {
         await dispose(tester);
       });
 
+      testWidgets('unsupported and cap refusals read as their own copy, path in mono',
+          (tester) async {
+        const bad = '/etc/apache2/conf-enabled/macro.conf';
+        final copies = {
+          'unsupported': 'Config test not granted: $bad uses a directive that '
+              'loads code at config-test time, which Kelola cannot check.',
+          'cap': 'Config test not granted: $bad has too many config files to '
+              'check.',
+        };
+        final mono = KelolaType.mono(color: Colors.black).fontFamily;
+        bool monoPath(Widget w) {
+          if (w is! RichText) return false;
+          var found = false;
+          w.text.visitChildren((span) {
+            if (span is TextSpan &&
+                span.text == bad &&
+                span.style?.fontFamily == mono) {
+              found = true;
+            }
+            return !found;
+          });
+          return found;
+        }
+
+        for (final e in copies.entries) {
+          pool.error = SudoRequiredException(
+            SudoHintContext.webServices(service: 'nginx'),
+          );
+          pool.grantStdout = '$webGrantConfigMarker '
+              '${base64Encode(utf8.encode(bad))} ${e.key}\n';
+          pool.grantExit = webGrantNothingExit;
+          await pumpLens(tester);
+          await tapGrant(tester);
+          await tester.tap(find.widgetWithText(FilledButton, 'Add rules'));
+          await frames(tester, 8);
+          await enterPassword(tester);
+          expect(find.text(e.value), findsWidgets, reason: e.key);
+          await tester.pump(const Duration(seconds: 10));
+          await frames(tester, 8);
+          expect(find.text(e.value), findsOneWidget, reason: e.key);
+          expect(find.byWidgetPredicate(monoPath), findsOneWidget);
+          await dispose(tester);
+        }
+      });
+
       testWidgets('every path skipped: Not granted lines, no re-read',
           (tester) async {
         pool.error = SudoRequiredException(
@@ -1691,7 +1736,13 @@ void main() {
           tester.widget<SelectableText>(cmd).style?.fontFamily,
           KelolaType.mono(color: Colors.white).fontFamily,
         );
-        expect(find.text('Takes effect on the next connection.'), findsOneWidget);
+        expect(
+          find.text(
+            'Takes effect on the next connection. Reconnect also closes this '
+            "host's tunnels, terminal and log follow.",
+          ),
+          findsOneWidget,
+        );
         expect(find.text('Reconnect'), findsOneWidget);
         // Kelola never runs usermod itself.
         expect(pool.probes.whereType<WebLensProbe>(), hasLength(1));
@@ -1768,6 +1819,29 @@ void main() {
         await dispose(tester);
       });
 
+      testWidgets('a failing disconnect shows its error and still re-reads the lens',
+          (tester) async {
+        pool.lens = admLens();
+        await pumpLens(tester);
+        pool.disconnectError = StateError('pool closed under us');
+        final reconnect = find.text('Reconnect');
+        await tester.ensureVisible(reconnect);
+        await tester.tap(reconnect);
+        await frames(tester, 12);
+        expect(tester.takeException(), isNull);
+        expect(pool.disconnects, [host.id]);
+        expect(pool.probes.whereType<WebLensProbe>(), hasLength(2));
+        expect(find.textContaining('pool closed under us'), findsOneWidget);
+        // Not stuck: the action is usable again.
+        final again = find.text('Reconnect');
+        await tester.ensureVisible(again);
+        final button = tester.widget<TextButton>(
+          find.ancestor(of: again, matching: find.byType(TextButton)),
+        );
+        expect(button.onPressed, isNotNull);
+        await dispose(tester);
+      });
+
       testWidgets('read-only host shows the hint too', (tester) async {
         await repo.setReadOnly(host.id, true);
         pool.lens = admLens();
@@ -1802,6 +1876,7 @@ class _Pool extends SshSessionPool {
 
   final probes = <Probe<dynamic>>[];
   final disconnects = <String>[];
+  Object? disconnectError;
   WebLens? lens;
   String? stdout;
   Object? error;
@@ -1868,6 +1943,8 @@ class _Pool extends SshSessionPool {
   @override
   Future<void> disconnect(String hostId) async {
     disconnects.add(hostId);
+    final err = disconnectError;
+    if (err != null) throw err;
     await super.disconnect(hostId);
   }
 }

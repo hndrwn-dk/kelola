@@ -53,6 +53,9 @@ const webApacheEnvvars = '/etc/apache2/envvars';
 /// Older RHEL `apachectl` sources this as root.
 const webApacheSysconfig = '/etc/sysconfig/httpd';
 
+/// SUSE's `apache2ctl` sources this as root.
+const webApacheSuseSysconfig = '/etc/sysconfig/apache2';
+
 /// The main config files the includes are resolved from: each of the first
 /// two that exists (Debian `apache2.conf`; SUSE and Alpine `httpd.conf`), at
 /// least one; and the httpd family's.
@@ -71,7 +74,19 @@ const webApacheModuleDirs = [
 ];
 
 /// Why the config test was not granted ([webGrantConfigMarker]).
-enum WebConfigRefusalReason { owner, mode, cap, loop, missing, unreadable }
+/// [unsupported]: a config file uses a directive that loads and runs code
+/// at config-test time (nginx Perl, njs, Lua; Apache mod_perl), or Apache
+/// mod_macro (`<Macro>`, `Use`), whose expansion the include walk cannot
+/// follow.
+enum WebConfigRefusalReason {
+  owner,
+  mode,
+  cap,
+  loop,
+  missing,
+  unreadable,
+  unsupported,
+}
 
 /// The first config path that failed the host-side check, and why.
 class WebGrantConfigRefusal {
@@ -359,7 +374,9 @@ String buildWebGrantScript(
 ///   passed its own check), else `<--prefix>/conf`; with neither it fails
 ///   (nothing is assumed). Apache: `/etc/apache2` (its whole tree) and
 ///   `/etc/httpd` ([_httpdShell], plus [webApacheSysconfig]), each that
-///   exists (at least one must), plus [webApacheEnvvars];
+///   exists (at least one must), plus [webApacheEnvvars] and
+///   [webApacheSuseSysconfig] (each walked strictly as a file when it
+///   exists);
 /// - module directories ([webNginxModuleDirs], `--modules-path` from
 ///   `<bin> -V`, every `/usr/share/nginx/modules*`, [webApacheModuleDirs])
 ///   that exist; one missing behind a clean chain is skipped, since only
@@ -550,7 +567,10 @@ String _configTrustShell(
       ..writeln(
         '  if [ "\$kelola_r" = 0 ]; then kelola_no $deb missing; return 1; fi',
       )
-      ..writeln('  kelola_file "\$kelola_pre$webApacheEnvvars" opt || return 1');
+      ..writeln('  kelola_file "\$kelola_pre$webApacheEnvvars" opt || return 1')
+      ..writeln(
+        '  kelola_file "\$kelola_pre$webApacheSuseSysconfig" opt || return 1',
+      );
     for (final d in webApacheModuleDirs) {
       b.writeln('  kelola_root "\$kelola_pre$d" opt || return 1');
     }
@@ -667,13 +687,22 @@ String _configTrustShell(
 /// include-type directive (first token matched case-insensitively, comments
 /// skipped): `I <pattern>` for nginx `include` / Apache `Include`,
 /// `IncludeOptional`; `M <path>` for `load_module` / `LoadModule` /
-/// `LoadFile`; `R <path>` for Apache `ServerRoot`; `X` for one it cannot
+/// `LoadFile`; `R <path>` for Apache `ServerRoot`; `U` for a directive that
+/// loads code at config-test time (nginx `perl_modules`, `perl_require`,
+/// `perl_set`, `js_import`, `js_include`, `js_path`, `lua_package_path`,
+/// `lua_package_cpath`, `init_by_lua*`, `init_worker_by_lua*`; Apache
+/// `<Perl>`, `PerlLoadModule`, `PerlRequire`, `PerlModule`,
+/// `PerlPostConfigRequire`, `PerlConfigRequire`) or for Apache mod_macro
+/// (`<Macro>`, `Use`), whose expansion can include any file: these fail
+/// (`unsupported`); `X` for one it cannot
 /// evaluate (a value with `$`, a backslash, a newline, a space, `..`, `//`,
 /// or any character outside the plain path set plus `*?[]`; a wrong number
 /// of arguments; an unterminated quote). nginx is tokenized like nginx does
 /// (statements end at `;`, `{`, `}`, across lines; quotes; `#` comments at a
 /// token start), Apache line by line (continuation lines joined; `#`
-/// comments at a line start). Host text is only ever a quoted variable,
+/// comments at a line start; a quoted directive name is unquoted, as Apache
+/// does, and one holding `$` (Apache expands `${VAR}` before it reads the
+/// name) is `X`). Host text is only ever a quoted variable,
 /// checked again in the shell; nothing is evaluated.
 ///
 /// - An include pattern: relative ones resolve against the include base.
@@ -682,7 +711,8 @@ String _configTrustShell(
 ///   component, and every directory searched after it, is walked strictly
 ///   as a directory (so a writable directory that matches nothing yet still
 ///   fails), then searched with `find <dir> -maxdepth 1 -name <component>`
-///   (a match whose name holds a newline fails). Every resulting path is
+///   (a match whose name holds a newline fails, including one that ends in
+///   a newline, seen as an empty line). Every resulting path is
 ///   walked strictly: missing behind a clean chain the login can search is
 ///   skipped (only root could create it); a regular file is queued for
 ///   reading; a directory has every entry handled the same way (Apache
@@ -717,10 +747,14 @@ function unq(v,  f) {
   if (length(v) >= 2 && (f == "\"" || f == sq) && substr(v, length(v), 1) == f) return substr(v, 2, length(v) - 2)
   return v
 }
+function code(d) {
+  return d == "perl_modules" || d == "perl_require" || d == "perl_set" || d == "js_import" || d == "js_include" || d == "js_path" || d == "lua_package_path" || d == "lua_package_cpath" || index(d, "init_by_lua") == 1 || index(d, "init_worker_by_lua") == 1
+}
 function stmt(  d) {
   if (ntok > 0) {
     d = tolower(t[1])
-    if (d == "include") { if (ntok == 2) emit("I", t[2]); else print "X" }
+    if (code(d)) print "U"
+    else if (d == "include") { if (ntok == 2) emit("I", t[2]); else print "X" }
     else if (d == "load_module") { if (ntok == 2) emit("M", t[2]); else print "X" }
   }
   ntok = 0
@@ -730,7 +764,9 @@ function apache(s,  n, a, d, j) {
   sub(/[ \t]+$/, "", s)
   if (s == "" || substr(s, 1, 1) == "#") return
   n = split(s, a, /[ \t]+/)
-  d = tolower(a[1])
+  d = tolower(unq(a[1]))
+  if (index(d, "$") > 0) { print "X"; return }
+  if (d == "use" || d ~ /^<(macro|perl)(>|$)/ || d == "perlloadmodule" || d == "perlrequire" || d == "perlmodule" || d == "perlpostconfigrequire" || d == "perlconfigrequire") { print "U"; return }
   if (d == "include" || d == "includeoptional") { if (n == 2) emit("I", unq(a[2])); else print "X" }
   else if (d == "loadmodule") { if (n == 3) emit("M", unq(a[3])); else print "X" }
   else if (d == "loadfile") { if (n >= 2) { for (j = 2; j <= n; j++) emit("M", unq(a[j])) } else print "X" }
@@ -770,7 +806,7 @@ m == "a" {
 END {
   if (m == "a") { if (buf != "") apache(buf) }
   else if (q != "") print "X"
-  else { endtok(); if (ntok > 0) { d = tolower(t[1]); if (d == "include" || d == "load_module") print "X" } }
+  else { endtok(); if (ntok > 0) { d = tolower(t[1]); if (code(d)) print "U"; else if (d == "include" || d == "load_module") print "X" } }
 }
 '
 kelola_cnt() {
@@ -795,10 +831,13 @@ kelola_vopt() {
 kelola_ls() {
   kelola_hits=
   kelola_left=$((kelola_cap - kelola_n))
-  kelola_lst=$({ find "$1" -maxdepth 1 -name "$2" -print 2>/dev/null || echo x; } | head -n "$((kelola_left + 2))")
+  kelola_lst=$({ find "$1" -maxdepth 1 -name "$2" -print 2>/dev/null || echo x; } | head -n "$((kelola_left + 2))"; echo x)
+  kelola_lst=${kelola_lst%x}
+  [ -n "$kelola_lst" ] || return 0
+  kelola_lst=${kelola_lst%"$kelola_nl"}
   kelola_c=0
   while IFS= read -r kelola_e; do
-    [ -n "$kelola_e" ] || continue
+    if [ -z "$kelola_e" ]; then kelola_no "$1" unreadable; return 1; fi
     [ "$kelola_e" != "$1" ] || continue
     case "$kelola_e" in "$1"/*) ;; *) kelola_no "$1" unreadable; return 1 ;; esac
     case "${kelola_e#"$1"/}" in */*) kelola_no "$1" unreadable; return 1 ;; esac
@@ -907,6 +946,7 @@ kelola_read() {
       '') ;;
       'I '*) kelola_top=0; kelola_inc "$1" "${kelola_dl#I }" || return 1 ;;
       'M '*) kelola_top=0; kelola_mod "$1" "${kelola_dl#M }" || return 1 ;;
+      U) kelola_no "$1" unsupported; return 1 ;;
       'R '*)
         kelola_iv=${kelola_dl#R }
         if [ "$kelola_top" != 1 ]; then kelola_no "$1" unreadable; return 1; fi
@@ -1274,10 +1314,13 @@ WebGrantConfigRefusal? webGrantConfigRefusal(String stdout) {
   tail: switch (r.reason) {
     WebConfigRefusalReason.owner => ' is not root-owned.',
     WebConfigRefusalReason.mode => ' is writable by group or others.',
-    WebConfigRefusalReason.cap => ' too many config files to check.',
+    WebConfigRefusalReason.cap => ' has too many config files to check.',
     WebConfigRefusalReason.loop => ' is a symlink loop.',
     WebConfigRefusalReason.missing => ' is missing.',
     WebConfigRefusalReason.unreadable => ' could not be checked.',
+    WebConfigRefusalReason.unsupported =>
+      ' uses a directive that loads code at config-test time, which Kelola '
+          'cannot check.',
   },
 );
 
