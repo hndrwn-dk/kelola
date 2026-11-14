@@ -255,7 +255,8 @@ WebLens parseWebLens(
   );
 }
 
-/// Max `@certin` lines read; the probe prints at most this many.
+/// Max `@certin` lines read. The probe prints at most one more, so reaching
+/// that one means links were cut.
 const webMaxCertLinks = 1000;
 
 /// Max certs linked to one vhost.
@@ -266,7 +267,9 @@ const _maxCertsPerVhost = 256;
 /// `<VirtualHost>`), `<file>:<line>` (the `<VirtualHost` line, as `-S` prints
 /// it) or `vhost` (in a file whose path it would not print). A vhost gets the
 /// certs of its own `file:line`; a TLS vhost with none inherits the last
-/// global one. `unlinked` when a cert could not be tied to a vhost.
+/// global one, unless `unlinked`: a cert could not be tied to a vhost, so
+/// any vhost may be the one that owns it and no inheritance is guessed.
+/// Links that did match stay.
 ({List<WebVhost> vhosts, bool unlinked}) _linkApacheCerts(
   List<WebVhost> vhosts,
   _Section? sec, {
@@ -279,7 +282,7 @@ const _maxCertsPerVhost = 256;
   for (final m in sec?.meta ?? const <MapEntry<String, String>>[]) {
     if (m.key != 'certin') continue;
     if (++count > webMaxCertLinks) {
-      // Possibly cut by the probe's cap: the rest is unknown.
+      // Past the cap (the probe prints one more): the rest is unknown.
       unlinked = true;
       break;
     }
@@ -302,7 +305,7 @@ const _maxCertsPerVhost = 256;
   if (count == 0 && anyCert) unlinked = true;
   final locs = {for (final v in vhosts) v.sourceFile};
   if (own.keys.any((k) => !locs.contains(k))) unlinked = true;
-  final inherited = global;
+  final inherited = unlinked ? null : global;
   return (
     vhosts: [
       for (final v in vhosts)

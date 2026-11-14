@@ -19,7 +19,8 @@ import 'web_lens.dart';
 /// `ssl_certificate` at http level (directly in `http {}`, or at the top
 /// level of a file included there) is inherited by every TLS vhost that sets
 /// none of its own; the last one in the dump wins. A file whose context is a
-/// guess (matched by no include) never gives one.
+/// guess (matched by no include) never gives one, and its vhosts never
+/// inherit one.
 ///
 /// Bounded for hostile input: at most [nginxMaxDepth] nested contexts (deeper
 /// blocks are skipped and mark the dump truncated), [nginxMaxIncludes]
@@ -71,10 +72,18 @@ const _maxSectionDirectives = 1000;
 const _vhostDirectives = {'server_name', 'listen', 'root', 'ssl_certificate'};
 
 class _Block {
-  _Block(this.name, {required this.vhost, required this.sourceFile});
+  _Block(
+    this.name, {
+    required this.vhost,
+    required this.sourceFile,
+    this.guessed = false,
+  });
   final String name;
   final bool vhost;
   final String sourceFile;
+
+  /// Opened in a section whose context is a guess: never inherits.
+  final bool guessed;
   final serverNames = <String>[];
   final listen = <String>[];
   final certPaths = <String>[];
@@ -366,7 +375,12 @@ NginxDumpResult parseNginxDump(String dump) {
             words.length == 1 &&
             base.length + stack.length == 1 &&
             (base.isEmpty ? stack.first.name : base.first) == 'http';
-        final b = _Block(name, vhost: isVhost, sourceFile: currentFile);
+        final b = _Block(
+          name,
+          vhost: isVhost,
+          sourceFile: currentFile,
+          guessed: !baseKnown,
+        );
         stack.add(b);
         if (isVhost) vhosts.add(b);
       }
@@ -439,7 +453,10 @@ NginxDumpResult parseNginxDump(String dump) {
   return NginxDumpResult(
     vhosts: [
       for (final b in complete)
-        if (b.tls && b.certPaths.isEmpty && inheritedCert != null)
+        if (b.tls &&
+            b.certPaths.isEmpty &&
+            !b.guessed &&
+            inheritedCert != null)
           WebVhost(
             serverNames: List.unmodifiable(b.serverNames),
             listen: List.unmodifiable(b.listen),

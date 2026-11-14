@@ -105,6 +105,10 @@ enum WebFindingKind {
   http5xx,
   listens443WithoutCert,
   defaultVhostOnly,
+
+  /// Apache: a cert could not be tied to a vhost (fix 3). A fact: unknown is
+  /// not a warning.
+  certsUnattributed,
 }
 
 class WebFinding {
@@ -178,8 +182,9 @@ class WebLens {
 
   /// Apache (fix 3): a certificate was read that could not be tied to any
   /// `-S` vhost or to the server config (its `<VirtualHost>` line matched no
-  /// vhost, or the probe printed no links). Which vhost has it is unknown,
-  /// so no vhost is called one without a certificate.
+  /// vhost, the probe's link cap was reached, or it printed no links).
+  /// Which vhost has it is unknown, so no vhost is called one without a
+  /// certificate and none is given the global one; a fact says so.
   final bool vhostCertsUnlinked;
 
   /// Worst finding (facts never count). [HealthStatus.unknown] only when no
@@ -331,6 +336,16 @@ class WebLens {
           ),
         );
       }
+    }
+
+    if (vhostCertsUnlinked) {
+      facts.add(
+        const WebFinding(
+          kind: WebFindingKind.certsUnattributed,
+          level: WebFindingLevel.fact,
+          message: 'Some certificates could not be tied to a vhost.',
+        ),
+      );
     }
 
     if (vhosts.isNotEmpty &&

@@ -99,6 +99,7 @@ WebLens _lens({
   WebLogStat? errorLogStat,
   WebLogStat? accessLogStat,
   List<String>? loginGroups,
+  bool vhostCertsUnlinked = false,
   List<String> errorLogTail = const [
     '2026/11/10 01:31:42 [error] 3159#3159: *1 connect() failed (111: Connection refused) while connecting to upstream',
     '2026/11/10 01:31:48 [warn] 3176#3176: *2 an upstream response is buffered to a temporary file',
@@ -139,6 +140,7 @@ WebLens _lens({
     errorLogStat: errorLogStat,
     accessLogStat: accessLogStat,
     loginGroups: loginGroups,
+    vhostCertsUnlinked: vhostCertsUnlinked,
   );
 }
 
@@ -885,6 +887,29 @@ void main() {
       );
       final band = tester.widget<RiskBand>(find.byType(RiskBand).first);
       expect(band.status, HealthStatus.healthy);
+      await dispose(tester);
+    });
+
+    // Fix 3 round 2: certs that could not be tied to a vhost are shown.
+    testWidgets('unattributed certs render as a fact row', (tester) async {
+      final c = KelolaColors.dark;
+      pool.lens = _lens(
+        vhosts: const [_plain],
+        certs: const {},
+        vhostCertsUnlinked: true,
+      );
+      await pumpLens(tester);
+      final fact = find.text('Some certificates could not be tied to a vhost.');
+      expect(fact, findsOneWidget);
+      expect(tester.widget<Text>(fact).style?.color, c.muted);
+      expect(
+        find.ancestor(of: fact, matching: find.byType(RiskBand)),
+        findsNothing,
+      );
+      expect(
+        tester.widget<RiskBand>(find.byType(RiskBand).first).status,
+        HealthStatus.healthy,
+      );
       await dispose(tester);
     });
 

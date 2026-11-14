@@ -342,6 +342,36 @@ ssl_certificate /etc/ssl/certs/guess-nested.pem;
       expect(r.vhosts.single.inherited, isFalse);
     });
 
+    test('a vhost in a section of guessed context never inherits', () {
+      // A real http-level cert exists, but x.conf matches no include: its
+      // server {} is only guessed to sit in http.
+      final r = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http {
+  ssl_certificate /etc/ssl/certs/http.pem;
+  server { listen 443 ssl; server_name main.lab; }
+}
+# configuration file /etc/other/x.conf:
+server { listen 443 ssl; server_name guessed.lab; }
+''');
+      expect(r.vhosts.map((v) => v.serverNames.single), ['main.lab', 'guessed.lab']);
+      expect(r.vhosts[0].certPaths, ['/etc/ssl/certs/http.pem']);
+      expect(r.vhosts[0].inherited, isTrue);
+      expect(r.vhosts[1].certPaths, isEmpty);
+      expect(r.vhosts[1].inherited, isFalse);
+      // Included through an include inside a guessed section: still a guess.
+      final n = parseNginxDump('''
+# configuration file /etc/nginx/nginx.conf:
+http { ssl_certificate /etc/ssl/certs/http.pem; }
+# configuration file /etc/other/x.conf:
+include /etc/other/sites/*.conf;
+# configuration file /etc/other/sites/a.conf:
+server { listen 443 ssl; server_name nested.lab; }
+''');
+      expect(n.vhosts.single.inherited, isFalse);
+      expect(n.vhosts.single.certPaths, isEmpty);
+    });
+
     test('server-, stream- and location-level certs are not http level', () {
       final r = parseNginxDump('''
 # configuration file /etc/nginx/nginx.conf:

@@ -1412,11 +1412,86 @@ echo "subject=CN = site.example"''');
       expect(plain.inherited, isFalse);
       expect(l.vhostCertsUnlinked, isFalse);
       expect(no443(l), isEmpty);
+      expect(
+        l.findings.map((f) => f.kind),
+        isNot(contains(WebFindingKind.certsUnattributed)),
+      );
       // Both certs still reach the grant source.
       expect(l.certsByPath.keys, [
         '/etc/pki/tls/certs/global.crt',
         '/etc/pki/tls/certs/localhost.crt',
       ]);
+    });
+
+    test('unlinked: the global cert is never assigned by a guess', () {
+      final l = parseWebLens(
+        apacheOut([
+          '@certin=global /etc/pki/tls/certs/global.crt',
+          '@certin=/etc/httpd/conf.d/ssl.conf:56 /etc/pki/tls/certs/localhost.crt',
+          // other.conf's vhost starts at line 1, not 2: this cert is
+          // probably other.example's own, but that is not known.
+          '@certin=/etc/httpd/conf.d/other.conf:2 /etc/pki/tls/certs/other.crt',
+          ...cert('/etc/pki/tls/certs/global.crt'),
+          ...cert('/etc/pki/tls/certs/localhost.crt'),
+          ...cert('/etc/pki/tls/certs/other.crt'),
+          '@done=1',
+        ]),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(l.vhostCertsUnlinked, isTrue);
+      expect(l.vhosts.where((v) => v.inherited), isEmpty);
+      // A cert that did match stays linked.
+      expect(
+        named(l, 'example.com').certPaths,
+        ['/etc/pki/tls/certs/localhost.crt'],
+      );
+      // The vhost owning the unlinked cert is not shown inheriting the global.
+      expect(named(l, 'other.example').certPaths, isEmpty);
+      expect(named(l, 'other.example').certPath, isNull);
+      final fact = l.findings
+          .where((f) => f.kind == WebFindingKind.certsUnattributed)
+          .single;
+      expect(fact.level, WebFindingLevel.fact);
+      expect(fact.message, 'Some certificates could not be tied to a vhost.');
+      // Unknown is not a warning.
+      expect(no443(l), isEmpty);
+      // Every cert is still read for expiry.
+      expect(l.certsByPath, hasLength(3));
+    });
+
+    test('reaching the link cap is unlinked; one below is not', () {
+      List<String> links(int n) => [
+            for (var i = 0; i < n; i++) '@certin=global /etc/ssl/g$i.pem',
+          ];
+      final full = parseWebLens(
+        apacheOut([...links(webMaxCertLinks), '@done=1']),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(full.vhostCertsUnlinked, isFalse);
+      expect(
+        named(full, 'other.example').certPaths,
+        ['/etc/ssl/g${webMaxCertLinks - 1}.pem'],
+      );
+      expect(named(full, 'other.example').inherited, isTrue);
+      final over = parseWebLens(
+        apacheOut([...links(webMaxCertLinks + 1), '@done=1']),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(over.vhostCertsUnlinked, isTrue);
+      expect(over.vhosts.where((v) => v.inherited), isEmpty);
+      expect(
+        over.findings.map((f) => f.kind),
+        contains(WebFindingKind.certsUnattributed),
+      );
+      final many = parseWebLens(
+        apacheOut([...links(webMaxCertLinks * 3), '@done=1']),
+        id: ServiceId.apache,
+        now: now,
+      );
+      expect(many.vhostCertsUnlinked, isTrue);
     });
 
     test('the last global SSLCertificateFile wins', () {
@@ -1687,8 +1762,10 @@ echo "subject=CN = x"''');
           final argv = shell == 'busybox'
               ? ['busybox', 'sh', '-c', script]
               : ['dash', '-c', script];
-          final r = await Process.run('env', ['PATH=$path', ...argv]);
-          final out = r.stdout as String;
+          Future<String> runIt() async =>
+              (await Process.run('env', ['PATH=$path', ...argv])).stdout
+                  as String;
+          final out = await runIt();
           final site = '${conf.path}/sites-enabled/site.conf';
           expect(
             [
@@ -1723,14 +1800,97 @@ echo "subject=CN = x"''');
               lens.vhosts.firstWhere((x) => x.serverNames.first == n);
           expect(v('own.lab').certPaths, ['/etc/ssl/own.pem']);
           expect(v('own.lab').inherited, isFalse);
-          // The last global in read order (conf-enabled after apache2.conf).
-          expect(v('inherit.lab').certPaths, ['/etc/ssl/global.pem']);
-          expect(v('inherit.lab').inherited, isTrue);
           expect(v('plain.lab').certPaths, isEmpty);
-          // odd.conf has no cert of its own, and the hostile-named file's cert
-          // could not be linked: no vhost is called certless.
+          // The hostile-named file's cert could not be linked: which vhost
+          // holds it is unknown, so no vhost is given the global cert by a
+          // guess (odd.lab may be the one that owns it), and none is called
+          // certless; a fact says so.
           expect(lens.vhostCertsUnlinked, isTrue);
+          for (final n in ['inherit.lab', 'odd.lab']) {
+            expect(v(n).certPaths, isEmpty, reason: n);
+            expect(v(n).certPath, isNull, reason: n);
+            expect(v(n).inherited, isFalse, reason: n);
+          }
+          expect(lens.vhosts.where((x) => x.inherited), isEmpty);
+          expect(
+            lens.findings.map((f) => f.kind),
+            contains(WebFindingKind.certsUnattributed),
+          );
+          expect(
+            lens.findings.where(
+              (f) => f.kind == WebFindingKind.listens443WithoutCert,
+            ),
+            isEmpty,
+          );
           expect(lens.sectionErrors[WebLensSection.certs], isNull);
+
+          // Without the unlinkable file every cert is attributed: the last
+          // global in read order (conf-enabled after apache2.conf) is
+          // inherited by the TLS vhosts that set none.
+          File('${conf.path}/sites-enabled/x\n@certin=global .conf')
+              .deleteSync();
+          final linked =
+              parseWebLens(await runIt(), id: ServiceId.apache, now: now);
+          WebVhost lv(String n) =>
+              linked.vhosts.firstWhere((x) => x.serverNames.first == n);
+          expect(linked.vhostCertsUnlinked, isFalse);
+          expect(lv('own.lab').certPaths, ['/etc/ssl/own.pem']);
+          expect(lv('own.lab').inherited, isFalse);
+          for (final n in ['inherit.lab', 'odd.lab']) {
+            expect(lv(n).certPaths, ['/etc/ssl/global.pem'], reason: n);
+            expect(lv(n).inherited, isTrue, reason: n);
+          }
+          expect(lv('plain.lab').certPaths, isEmpty);
+          expect(
+            linked.findings.map((f) => f.kind),
+            isNot(contains(WebFindingKind.certsUnattributed)),
+          );
+        }, skip: Platform.isWindows);
+
+        test('$shell: more links than the cap is detected', () async {
+          if (shell == 'busybox' && bbDir == null) {
+            markTestSkipped('busybox is not installed here');
+            return;
+          }
+          if (shell == 'dash' && !hasDash) {
+            markTestSkipped('dash is not installed here');
+            return;
+          }
+          File('${conf.path}/sites-enabled/x\n@certin=global .conf')
+              .deleteSync();
+          write('conf-enabled/many.conf', [
+            for (var i = 0; i < webMaxCertLinks + 5; i++)
+              'SSLCertificateFile /etc/ssl/many/$i.pem',
+          ].join('\n'));
+          final script = const WebLensProbe(
+            id: ServiceId.apache,
+            binaries: {},
+          )
+              .command(ubuntu)
+              .replaceFirst("D='/etc/apache2'", "D='${conf.path}'")
+              .replaceFirst("B='apachectl'", "B='${dir.path}/apache2ctl'");
+          final path = shell == 'busybox'
+              ? '${dir.path}:$bbDir'
+              : '${dir.path}:/usr/bin:/bin';
+          final argv = shell == 'busybox'
+              ? ['busybox', 'sh', '-c', script]
+              : ['dash', '-c', script];
+          final r = await Process.run('env', ['PATH=$path', ...argv]);
+          final out = r.stdout as String;
+          // One past the cap, so the parser can tell there were more.
+          expect(
+            RegExp(r'^@certin=', multiLine: true).allMatches(out),
+            hasLength(webMaxCertLinks + 1),
+          );
+          final lens = parseWebLens(out, id: ServiceId.apache, now: now);
+          expect(lens.vhostCertsUnlinked, isTrue);
+          expect(lens.vhosts.where((x) => x.inherited), isEmpty);
+          expect(
+            lens.findings.map((f) => f.kind),
+            contains(WebFindingKind.certsUnattributed),
+          );
+          // openssl stays capped at 50.
+          expect(log.readAsLinesSync(), hasLength(WebLensProbe.maxCerts));
         }, skip: Platform.isWindows);
       }
     });

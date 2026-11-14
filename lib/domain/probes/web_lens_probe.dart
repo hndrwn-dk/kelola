@@ -205,7 +205,11 @@ class WebLensProbe extends Probe<WebLens> {
         // any <VirtualHost>), or the file and line of its `<VirtualHost`,
         // the `file:line` that -S prints for that vhost. A file path outside
         // the whitelist is never printed (`vhost`: not linkable). Every value
-        // is validated here; the parser checks again.
+        // is validated here; the parser checks again. A file in the enabled
+        // globs that is itself included from inside a <VirtualHost> is
+        // reported as global: the per-file awk cannot see the enclosing
+        // block. One line past the parser's cap is kept, so it can tell the
+        // links were cut.
         'L=\$(for f in ${apacheEnabledConfigGlobs(facts).join(' ')}; do',
         r'  [ -f "$f" ] && [ -r "$f" ] || continue',
         r'  g=$f; case "$g" in (/*) ;; (*) g= ;; esac',
@@ -218,7 +222,7 @@ class WebLensProbe extends Probe<WebLens> {
         r'''      if (v !~ "^/[-A-Za-z0-9._/+@]+$" || index(v, "..") != 0) next''',
         r'''      s = "global"; if (d > 0) s = (g == "" ? "vhost" : g ":" l)''',
         r'''      print "@certin=" s " " v }' < "$f" 2>/dev/null''',
-        'done | head -n $webMaxCertLinks)',
+        'done | head -n ${webMaxCertLinks + 1})',
         r'''[ -z "$L" ] || printf '%s\n' "$L"''',
         r'''printf '%s\n' "$L" | awk 'NF == 2 { print "sslcertificatefile", $2 }' | pick sslcertificatefile ''' '$maxCerts |',
       ] else

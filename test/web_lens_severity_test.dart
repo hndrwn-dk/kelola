@@ -250,7 +250,31 @@ void main() {
       statusCounts: const {200: 100},
       vhostCertsUnlinked: true,
     );
-    expect(levels(unlinked), [WebFindingLevel.failed]);
+    // Visible as a fact, never as a warning.
+    expect(levels(unlinked), [WebFindingLevel.failed, WebFindingLevel.fact]);
+    expect(unlinked.findings.last.kind, WebFindingKind.certsUnattributed);
+    expect(
+      unlinked.findings.last.message,
+      'Some certificates could not be tied to a vhost.',
+    );
+  });
+
+  test('unattributed certs are a fact only; overall stays healthy', () {
+    final l = WebLens(
+      id: ServiceId.apache,
+      readAt: now,
+      activeState: 'active',
+      configOk: true,
+      vhosts: const [
+        WebVhost(serverNames: ['a.example'], listen: ['*:443'], tls: true),
+      ],
+      statusCounts: const {200: 100},
+      vhostCertsUnlinked: true,
+    );
+    expect(levels(l), [WebFindingLevel.fact]);
+    expect(l.findings.single.kind, WebFindingKind.certsUnattributed);
+    expect(l.overall, HealthStatus.healthy);
+    expect(lens(id: ServiceId.apache).findings, isEmpty);
   });
 
   test('nginx TLS vhost with an inherited cert: no 443 warning', () {
