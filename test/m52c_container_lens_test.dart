@@ -505,20 +505,44 @@ void main() {
     });
 
     test('real visudo accepts the group', () {
-      const visudo = '/usr/sbin/visudo';
-      if (!File(visudo).existsSync()) {
-        expect(Platform.environment['CI'] == 'true', isFalse);
-        markTestSkipped('visudo is not installed here');
-        return;
-      }
+      // Like kelola_sudoers_spec_test: each classic visudo checks the files
+      // its own version can take; regex rules need 1.9.10 or later (CI has
+      // one as visudo.ws next to the distro's older visudo).
+      final ci = Platform.environment['CI'] == 'true';
+      final checked = <SudoFlavor>{};
       final dir = Directory.systemTemp.createTempSync('kelola_docker_sudo');
       addTearDown(() => dir.deleteSync(recursive: true));
-      for (final sudo in [regex, noRegex]) {
-        final file = File('${dir.path}/kelola-${sudo.patch}')
-          ..writeAsStringSync(spec(sudo).content);
-        final r = Process.runSync(visudo, ['-c', '-f', file.path]);
-        expect(r.exitCode, 0, reason: '${r.stdout}${r.stderr}');
+      for (final path in const ['/usr/sbin/visudo', '/usr/sbin/visudo.ws']) {
+        if (!File(path).existsSync()) continue;
+        final v = Process.runSync(path, ['--version']);
+        final out = '${v.stdout}${v.stderr}';
+        final m = RegExp(
+          r'^visudo(?:\.ws)? version (\d+)\.(\d+)\.(\d+)',
+        ).firstMatch(out);
+        // sudo-rs never takes regex rules: only the exact lines.
+        final regexOk =
+            m != null &&
+            ClassicSudo(
+              int.parse(m[1]!),
+              int.parse(m[2]!),
+              int.parse(m[3]!),
+            ).supportsArgRegex;
+        if (m == null && !out.startsWith('visudo-rs')) continue;
+        for (final sudo in [noRegex, if (regexOk) regex]) {
+          final file = File('${dir.path}/kelola-${sudo.patch}')
+            ..writeAsStringSync(spec(sudo).content);
+          final r = Process.runSync(path, ['-c', '-f', file.path]);
+          expect(r.exitCode, 0, reason: '$path: ${r.stdout}${r.stderr}');
+          checked.add(sudo);
+        }
       }
+      if (checked.isEmpty) {
+        expect(ci, isFalse, reason: 'CI must have a classic visudo');
+        markTestSkipped('no classic visudo here');
+        return;
+      }
+      // CI must check the regex rules too, as the main sudoers test does.
+      if (ci) expect(checked, contains(regex));
     });
   });
 
