@@ -3190,8 +3190,65 @@ cp "\$src" "\$dst"''');
           );
         });
 
-        test('$shell: the real /etc/nginx and /etc/apache2 here keep them', () async {
+        // The machine's own trees are not ours to assert on: a CI image may
+        // loosen a system directory the stock config reaches, and then a
+        // refusal is the gate working. So the verdict, whichever it is, is
+        // checked against the filesystem.
+        test("$shell: the gate's verdict on the real /etc/nginx and /etc/apache2 here matches the filesystem", () async {
           if (!await go(shell)) return;
+
+          /// `(uid, mode bits)` of [path] itself (a link is not followed),
+          /// or null when it cannot be read.
+          (int, int)? lstat(String path) {
+            for (final args in [
+              ['-c', '%u %a', '--', path],
+              ['-f', '%u %Lp', '--', path],
+            ]) {
+              final r = Process.runSync('stat', args);
+              if (r.exitCode != 0) continue;
+              final w = (r.stdout as String).trim().split(' ');
+              final uid = w.length == 2 ? int.tryParse(w[0]) : null;
+              final mode = w.length == 2 ? int.tryParse(w[1], radix: 8) : null;
+              if (uid != null && mode != null) return (uid, mode);
+            }
+            return null;
+          }
+
+          bool writable(int mode) => mode & 0x12 != 0; // 022
+
+          /// The first hop to [path] the binary rule refuses (`/`, each
+          /// directory, each symlink, the file), or null when all are clean.
+          String? dirtyHop(String path) {
+            final slash = lstat('/');
+            if (slash == null || slash.$1 != 0 || writable(slash.$2)) return '/';
+            var cur = '';
+            final rest = path.split('/').where((c) => c.isNotEmpty).toList();
+            var hops = 0;
+            while (rest.isNotEmpty) {
+              final c = rest.removeAt(0);
+              if (c == '.') continue;
+              if (c == '..') {
+                final i = cur.lastIndexOf('/');
+                cur = i <= 0 ? '' : cur.substring(0, i);
+                continue;
+              }
+              final cand = '$cur/$c';
+              final st = lstat(cand);
+              if (st == null) return '$cand (missing)';
+              if (FileSystemEntity.isLinkSync(cand)) {
+                if (st.$1 != 0) return cand;
+                if (++hops > webTrustMaxHops) return '$cand (loop)';
+                final t = Link(cand).targetSync();
+                if (t.startsWith('/')) cur = '';
+                rest.insertAll(0, t.split('/').where((c) => c.isNotEmpty));
+              } else {
+                if (st.$1 != 0 || writable(st.$2)) return cand;
+                cur = cand;
+              }
+            }
+            return null;
+          }
+
           var ran = 0;
           for (final (id, bin, root) in [
             (ServiceId.nginx, '/usr/sbin/nginx', '/etc/nginx'),
@@ -3207,16 +3264,116 @@ cp "\$src" "\$dst"''');
                   ? {'apachectl': bin}
                   : {'nginx': bin},
             )!;
+            // Only the config test lines: a refusal leaves nothing to add.
+            expect(g.lines.where(configLine), hasLength(2));
+            expect(g.lines, hasLength(2));
             // Production locations and owners: no prefix, no stub.
             final sw = Stopwatch()..start();
             if (target.existsSync()) target.deleteSync();
+            if (log.existsSync()) log.deleteSync();
             final r = await run(buildWebGrantScript(g), shell);
             final took = sw.elapsedMilliseconds;
+            final out = r.stdout as String;
+            final why = '$shell $root: exit ${r.exitCode}\n$out${r.stderr}';
             printOnFailure('$shell $root: ${took}ms');
-            expectKept(r, g);
             // Stock trees stay fast (about 1 s for Debian Apache here).
             expect(took, lessThan(20000));
             ran++;
+
+            if (r.exitCode == 0) {
+              // Kept: both lines installed, no refusal.
+              // ignore: avoid_print
+              print('real-tree gate, $shell $root: kept');
+              expectKept(r, g);
+              continue;
+            }
+
+            // Refused: nothing was read or written, whatever the reason.
+            expect(target.existsSync(), isFalse, reason: why);
+            expect(calls(), isEmpty, reason: why);
+            expect(out, isNot(contains(webGrantOkMarker)), reason: why);
+
+            if (r.exitCode == 5) {
+              // The server binary itself failed its own check.
+              final m = RegExp(
+                '^$webGrantUntrustedMarker (\\S+)\$',
+                multiLine: true,
+              ).allMatches(out).toList();
+              expect(m, hasLength(1), reason: why);
+              expect(out, isNot(contains(webGrantConfigMarker)), reason: why);
+              expect(utf8.decode(base64Decode(m.single.group(1)!)), bin);
+              final hop = dirtyHop(bin);
+              // ignore: avoid_print
+              print(
+                'real-tree gate, $shell $root: binary $bin refused; '
+                'filesystem says ${hop ?? 'every hop is clean'}',
+              );
+              expect(
+                hop,
+                isNotNull,
+                reason: '$bin was refused, but every hop to it is root-owned '
+                    'and not group- or other-writable\n$why',
+              );
+              continue;
+            }
+
+            // Config test lines dropped: one well-formed marker, and the
+            // exit status for "every line left out".
+            expect(r.exitCode, webGrantNothingExit, reason: why);
+            expect(out, isNot(contains(webGrantUntrustedMarker)), reason: why);
+            final m = RegExp(
+              '^$webGrantConfigMarker ([A-Za-z0-9+/=]+) ([a-z]+)\$',
+              multiLine: true,
+            ).allMatches(out).toList();
+            expect(m, hasLength(1), reason: why);
+            expect(
+              webGrantConfigMarker.allMatches(out),
+              hasLength(1),
+              reason: why,
+            );
+            final path = utf8.decode(base64Decode(m.single.group(1)!));
+            final reason = WebConfigRefusalReason.values
+                .where((v) => v.name == m.single.group(2))
+                .firstOrNull;
+            expect(reason, isNotNull, reason: why);
+            expect(path, startsWith('/'), reason: why);
+            expect(path, isNot(contains('\n')), reason: why);
+            // ignore: avoid_print
+            print(
+              'real-tree gate, $shell $root: dropped, $path ${reason!.name}',
+            );
+            // The probe reports the same refusal as its error.
+            Object? thrown;
+            try {
+              WebSudoersGrantProbe(g).parse(out, r.stderr as String, r.exitCode);
+            } catch (e) {
+              thrown = e;
+            }
+            expect(thrown, isA<WebGrantRefusedException>(), reason: why);
+            final refusal = (thrown! as WebGrantRefusedException).config;
+            expect(refusal?.reason, reason, reason: why);
+            if (isGrantableWebPath(path)) expect(refusal?.path, path);
+
+            // owner / mode are facts the filesystem can confirm.
+            if (reason == WebConfigRefusalReason.owner ||
+                reason == WebConfigRefusalReason.mode) {
+              final st = lstat(path);
+              expect(st, isNotNull, reason: 'cannot stat $path\n$why');
+              final link = FileSystemEntity.isLinkSync(path);
+              final detail =
+                  '$path: uid ${st!.$1}, mode ${st.$2.toRadixString(8)}, '
+                  '${link ? 'a symlink' : 'not a symlink'}\n$why';
+              if (reason == WebConfigRefusalReason.owner) {
+                expect(st.$1, isNot(0), reason: 'refused as owner, but $detail');
+              } else {
+                expect(link, isFalse, reason: 'refused as mode, but $detail');
+                expect(
+                  writable(st.$2),
+                  isTrue,
+                  reason: 'refused as mode, but $detail',
+                );
+              }
+            }
           }
           if (ran == 0) markTestSkipped('no real nginx or Apache here');
         });
