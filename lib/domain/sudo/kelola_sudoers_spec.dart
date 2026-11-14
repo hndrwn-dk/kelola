@@ -16,7 +16,8 @@ enum KelolaSudoersGroup {
   processes,
 
   /// M52c: read Docker container lists, state and logs. Never `exec`, `run`,
-  /// `cp` or a mutate verb: root `docker exec` is root on the host.
+  /// `cp`, `inspect` or a mutate verb: root `docker exec` is root on the
+  /// host, and `inspect` shows container env secrets.
   containers,
 }
 
@@ -423,10 +424,10 @@ const _containerCommands = [
 /// name rule; see `isSafeContainerName`).
 const kelolaDockerNameRegex = '[A-Za-z0-9][A-Za-z0-9_.-]*';
 
-/// M52c: container lens reads: state and the last 60 / 2000 log lines of one
-/// named container. Never `exec`.
+/// M52c: container lens reads: the last 60 / 2000 log lines of one named
+/// container. Never `exec`, and never `inspect`: it shows the container's
+/// environment, which often holds credentials.
 const _containerRegexCommands = [
-  '/usr/bin/docker ^inspect --type container $kelolaDockerNameRegex\$',
   '/usr/bin/docker ^logs --tail (60|2000) $kelolaDockerNameRegex\$',
 ];
 

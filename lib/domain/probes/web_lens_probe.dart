@@ -306,8 +306,9 @@ class WebLensProbe extends Probe<WebLens> {
   /// M52c §3: the lens for a service in Docker container [container].
   ///
   /// The name is the only host value used, and only if it is a safe Docker
-  /// name; it is single-quoted. State comes from `docker inspect`, plain or
-  /// through the exact `sudo -n` argv the Containers sudo group allows.
+  /// name; it is single-quoted. State comes from `docker ps`, plain or
+  /// through the exact `sudo -n` argv the Containers sudo group allows;
+  /// never `docker inspect`, which shows the container's environment.
   /// `docker exec` runs only without sudo (`@docker=plain`) and only on a
   /// running container: anyone allowed `docker exec` as root has root. The
   /// scripts it runs are constants. Certificates are read with `cat` in the
@@ -326,13 +327,16 @@ class WebLensProbe extends Probe<WebLens> {
         'D=; s=; echo @docker=denied'
       else ...[
         'C=${shellSingleQuote(c)}',
-        r'if j=$(docker inspect --type container "$C" 2>/dev/null); then D=plain',
-        r'elif j=$(sudo -n docker inspect --type container "$C" 2>/dev/null); then D=sudo',
+        // `docker ps`, never `inspect`: inspect shows the container's env
+        // (often credentials). The same argv the Containers sudo group and
+        // detection use. Only the State word of the line whose Names is
+        // exactly this container is kept; a label's escaped quotes cannot
+        // match.
+        r'''if j=$(docker ps -a --no-trunc --format '{{json .}}' 2>/dev/null); then D=plain''',
+        r'''elif j=$(sudo -n docker ps -a --no-trunc --format '{{json .}}' 2>/dev/null); then D=sudo''',
         'else j=; D=; fi',
         r'echo "@docker=${D:-denied}"',
-        // State.Status is the first "Status" key of the inspect JSON; only
-        // that word is printed (the JSON also holds the container's env).
-        r'''s=$(printf '%s\n' "$j" | sed -n 's/^[[:space:]]*"Status":[[:space:]]*"\([a-z]*\)",\{0,1\}$/\1/p' | head -n 1)''',
+        r'''s=$(printf '%s\n' "$j" | grep -F "\"Names\":\"$C\"" | sed -n 's/.*"State":"\([a-z]*\)".*/\1/p' | head -n 1)''',
         r'out "$s"',
       ],
       r'dk() { if [ "$D" = sudo ]; then sudo -n docker "$@"; else docker "$@"; fi; }',

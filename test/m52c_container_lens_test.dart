@@ -418,7 +418,9 @@ void main() {
         '/usr/bin/docker ps -a --format {{json .}}',
         '/usr/bin/docker ps -a --no-trunc --format {{json .}}',
       ]);
-      expect(spec(regex).commands, hasLength(5));
+      expect(spec(regex).commands, hasLength(4));
+      // inspect shows container env (credentials): never through sudo.
+      expect(spec(regex).commands.join('\n'), isNot(contains('inspect')));
     });
 
     test('no rule can exec, run, copy or change anything', () {
@@ -462,7 +464,6 @@ void main() {
         'info',
         'ps -a --format {{json .}}',
         'ps -a --no-trunc --format {{json .}}',
-        'inspect --type container lamp-web',
         'logs --tail 60 lamp-web',
         'logs --tail 2000 infra-cache-1',
       ]) {
@@ -470,6 +471,7 @@ void main() {
       }
       for (final bad in [
         'exec lamp-web sh',
+        'inspect --type container lamp-web',
         'inspect lamp-web',
         'inspect --type container lamp-web other',
         'inspect --type container -f {{.Config.Env}} lamp-web',
@@ -495,7 +497,11 @@ void main() {
         binaries: const {},
         container: 'lamp-web',
       ).command(_ubuntu);
-      expect(lens, contains(r'sudo -n docker inspect --type container "$C"'));
+      expect(
+        lens,
+        contains("sudo -n docker ps -a --no-trunc --format '{{json .}}'"),
+      );
+      expect(lens, isNot(contains('inspect')));
     });
 
     test('real visudo accepts the group', () {
@@ -537,7 +543,8 @@ void main() {
 [ "$access" = none ] && exit 1
 [ "$access" = sudo ] && [ -z "\$VIA_SUDO" ] && exit 1
 case "\$1" in
-  inspect) printf '[\\n  {\\n    "Id": "abc",\\n    "State": {\\n        "Status": "$status",\\n        "Health": {\\n            "Status": "healthy"\\n        }\\n    }\\n  }\\n]\\n' ;;
+  ps) echo '{"Labels":"x=\\\\"Names\\\\":\\\\"lamp-web\\\\",\\\\"State\\\\":\\\\"exited\\\\"","Names":"lamp-web-2","State":"exited"}'
+      echo '{"Command":"docker-php-entrypoint apache2-foreground","Names":"lamp-web","State":"$status","Status":"Up 5 minutes"}' ;;
   exec) shift 2; exec "\$@" ;;
   logs) echo '10.0.0.9 - - [14/Nov/2026:19:00:00 +0000] "GET / HTTP/1.1" 200 45'
         echo '10.0.0.9 - - [14/Nov/2026:19:00:01 +0000] "GET /x HTTP/1.1" 404 9'
