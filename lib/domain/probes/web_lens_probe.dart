@@ -3,6 +3,7 @@ import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/services/apache_vhosts_parser.dart';
+import 'package:kelola/domain/services/container_services.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/web_lens.dart';
 import 'package:kelola/domain/services/web_lens_parser.dart';
@@ -71,6 +72,39 @@ String webSudoRefusedCondition(String rcVar, String outVar) =>
     "|^sorry, user .* (is not allowed to execute|may not run sudo)"
     "|^[^ ]+ is not in the sudoers'; }";
 
+/// Shell: prints the value of directive `$1` (whole first token, any case),
+/// without `;` or surrounding quotes, only if it is a safe absolute path;
+/// unique, at most `$2`. Constant text.
+const _pickFn = [
+  'pick() {',
+  r'''  awk -v k="$1" -v m="$2" -v q="'" 'tolower($1) == k {''',
+  r'''    v = $2; sub(/;$/, "", v); f = substr(v, 1, 1)''',
+  r'''    if ((f == "\"" || f == q) && length(v) > 1 && substr(v, length(v), 1) == f) v = substr(v, 2, length(v) - 2)''',
+  r'''    if (v ~ "^/[-A-Za-z0-9._/+@]+$" && index(v, "..") == 0 && !(v in s)) { s[v] = 1; print v; if (++c >= m + 0) exit }''',
+  "  }'",
+  '}',
+];
+
+/// M52c: Apache config files read for `SSLCertificateFile` inside a
+/// container, enabled config only (Debian php:apache, RHEL, the httpd
+/// image). Constant text, globbed by the container's shell.
+const _containerApacheConfigs =
+    '/etc/apache2/apache2.conf /etc/apache2/sites-enabled/*.conf '
+    '/etc/apache2/conf-enabled/*.conf /etc/apache2/mods-enabled/*.conf '
+    '/etc/httpd/conf/*.conf /etc/httpd/conf.d/*.conf '
+    '/usr/local/apache2/conf/httpd.conf';
+
+/// M52c §3: the script `docker exec` runs inside the container for the config
+/// test (`-t`) or dump (`-T` nginx, `-S` Apache). Constant text: the first
+/// config-test binary on the container's PATH runs [flag]; none prints
+/// `kelola-nobin`.
+String containerWebScript(ServiceId id, String flag) {
+  final names = webConfigTestBinaryNames(id).join(' ');
+  return 'for b in $names; do '
+      'if command -v "\$b" >/dev/null 2>&1; then exec "\$b" $flag; fi; '
+      'done; echo kelola-nobin; exit 127';
+}
+
 /// M52 §5a: one read-only exec behind the nginx / Apache lens.
 ///
 /// The host is untrusted. [binaries] and [unit] came from its output, so each
@@ -89,10 +123,19 @@ String webSudoRefusedCondition(String rcVar, String outVar) =>
 ///
 /// Host output is printed with a `|` prefix; see [parseWebLens].
 class WebLensProbe extends Probe<WebLens> {
-  const WebLensProbe({required this.id, required this.binaries, this.unit});
+  const WebLensProbe({
+    required this.id,
+    required this.binaries,
+    this.unit,
+    this.container,
+  });
 
   /// [ServiceId.nginx] or [ServiceId.apache]; anything else reads as nginx.
   final ServiceId id;
+
+  /// M52c: the Docker container that runs the service, as detected. Used
+  /// only if [isSafeContainerName]; otherwise the read reports no access.
+  final String? container;
 
   /// Binary name -> absolute path, as detected on the host.
   final Map<String, String> binaries;
@@ -106,7 +149,16 @@ class WebLensProbe extends Probe<WebLens> {
   static const maxCerts = 50;
 
   @override
-  String get auditTitle => _apache ? 'Read Apache' : 'Read nginx';
+  String get auditTitle {
+    final base = _apache ? 'Read Apache' : 'Read nginx';
+    final c = _safeContainer;
+    return c == null ? base : '$base ($c)';
+  }
+
+  String? get _safeContainer {
+    final c = container;
+    return c != null && isSafeContainerName(c) ? c : null;
+  }
 
   @override
   bool get needsSudo => false;
@@ -141,6 +193,7 @@ class WebLensProbe extends Probe<WebLens> {
 
   @override
   String command(HostFacts facts) {
+    if (container != null) return _containerCommand();
     final bin = _bin(webConfigTestBinaryNames(id));
     final logs = _apache
         ? apacheDefaultLogs(facts)
@@ -152,16 +205,7 @@ class WebLensProbe extends Probe<WebLens> {
       webSbinPathLine,
       'export LC_ALL=C',
       r'try() { "$@" 2>/dev/null || sudo -n "$@" 2>/dev/null; }',
-      // Prints the value of directive $1 (whole first token, any case),
-      // without `;` or surrounding quotes, only if it is a safe absolute path;
-      // unique, at most $2.
-      'pick() {',
-      r'''  awk -v k="$1" -v m="$2" -v q="'" 'tolower($1) == k {''',
-      r'''    v = $2; sub(/;$/, "", v); f = substr(v, 1, 1)''',
-      r'''    if ((f == "\"" || f == q) && length(v) > 1 && substr(v, length(v), 1) == f) v = substr(v, 2, length(v) - 2)''',
-      r'''    if (v ~ "^/[-A-Za-z0-9._/+@]+$" && index(v, "..") == 0 && !(v in s)) { s[v] = 1; print v; if (++c >= m + 0) exit }''',
-      "  }'",
-      '}',
+      ..._pickFn,
       // Host output gets a `|` prefix so it can never look like a marker.
       webOutShellFn,
       'B=${shellSingleQuote(bin)}',
@@ -253,6 +297,81 @@ class WebLensProbe extends Probe<WebLens> {
       r'echo "@path=$a"',
       _logStatLine('a'),
       r'if o=$(try "$T" -n 2000 "$a" </dev/null); then echo @read=ok;',
+      r'''  [ -z "$o" ] || out "$(printf '%s\n' "$o" | awk '{print $9}' | sort | uniq -c)"''',
+      r'else echo @read=fail; fi',
+      'true',
+    ].join('\n');
+  }
+
+  /// M52c §3: the lens for a service in Docker container [container].
+  ///
+  /// The name is the only host value used, and only if it is a safe Docker
+  /// name; it is single-quoted. State comes from `docker inspect`, plain or
+  /// through the exact `sudo -n` argv the Containers sudo group allows.
+  /// `docker exec` runs only without sudo (`@docker=plain`) and only on a
+  /// running container: anyone allowed `docker exec` as root has root. The
+  /// scripts it runs are constants. Certificates are read with `cat` in the
+  /// container and parsed by the host's openssl. Logs are `docker logs`:
+  /// stderr is the error log, stdout the access log.
+  String _containerCommand() {
+    final c = _safeContainer;
+    final dump = _apache ? '-S' : '-T';
+    return [
+      webSbinPathLine,
+      'export LC_ALL=C',
+      ..._pickFn,
+      webOutShellFn,
+      'echo ---ACTIVE---',
+      if (c == null)
+        'D=; s=; echo @docker=denied'
+      else ...[
+        'C=${shellSingleQuote(c)}',
+        r'if j=$(docker inspect --type container "$C" 2>/dev/null); then D=plain',
+        r'elif j=$(sudo -n docker inspect --type container "$C" 2>/dev/null); then D=sudo',
+        'else j=; D=; fi',
+        r'echo "@docker=${D:-denied}"',
+        // State.Status is the first "Status" key of the inspect JSON; only
+        // that word is printed (the JSON also holds the container's env).
+        r'''s=$(printf '%s\n' "$j" | sed -n 's/^[[:space:]]*"Status":[[:space:]]*"\([a-z]*\)",\{0,1\}$/\1/p' | head -n 1)''',
+        r'out "$s"',
+      ],
+      r'dk() { if [ "$D" = sudo ]; then sudo -n docker "$@"; else docker "$@"; fi; }',
+      // Config reads: plain docker and a running container only.
+      r'x=no; [ "$D" = plain ] && [ "$s" = running ] && x=yes',
+      'echo ---CONFTEST---',
+      r'if [ "$x" = yes ]; then',
+      '  o=\$(docker exec "\$C" sh -c ${shellSingleQuote(containerWebScript(id, '-t'))} </dev/null 2>&1); r=\$?',
+      r'''  case "$o" in *kelola-nobin*) r=nobin; o= ;; esac''',
+      r'''  case "$r" in 126|127) r=noshell; o= ;; esac''',
+      r'''  out "$o"; echo "@rc=$r"''',
+      r'elif [ "$D" = plain ]; then echo @rc=notrunning',
+      r'elif [ "$D" = sudo ]; then echo @rc=needsgroup',
+      'else echo @rc=nodocker; fi',
+      'echo ---DUMP---',
+      r'if [ "$x" = yes ]; then',
+      '  d=\$(docker exec "\$C" sh -c ${shellSingleQuote(containerWebScript(id, dump))} </dev/null 2>/dev/null)',
+      r'''  case "$d" in *kelola-nobin*) d= ;; esac''',
+      r'  out "$d"',
+      'fi',
+      'echo ---CERTS---',
+      r'if [ "$x" = yes ]; then',
+      r'  O=$(command -v openssl 2>/dev/null); case "$O" in /*) ;; *) O=openssl ;; esac',
+      if (_apache)
+        '  docker exec "\$C" sh -c ${shellSingleQuote('cat $_containerApacheConfigs 2>/dev/null')} </dev/null 2>/dev/null | pick sslcertificatefile ${WebLensProbe.maxCerts} |'
+      else
+        '  printf \'%s\\n\' "\$d" | pick ssl_certificate ${WebLensProbe.maxCerts} |',
+      r'  while IFS= read -r p; do',
+      r'    echo "@cert=$p"',
+      r'    if o=$(docker exec "$C" cat -- "$p" </dev/null 2>/dev/null | "$O" x509 -noout -enddate -subject -ext subjectAltName 2>/dev/null); then',
+      r'      echo @read=ok; out "$o"',
+      r'    else echo @read=fail; fi',
+      r'  done',
+      r'  echo @done=1',
+      'fi',
+      'echo ---ERRLOG---',
+      r'if [ -n "$D" ] && o=$(dk logs --tail 60 "$C" 2>&1 >/dev/null </dev/null); then echo @read=ok; out "$o"; else echo @read=fail; fi',
+      'echo ---ACCESS---',
+      r'if [ -n "$D" ] && o=$(dk logs --tail 2000 "$C" 2>/dev/null </dev/null); then echo @read=ok;',
       r'''  [ -z "$o" ] || out "$(printf '%s\n' "$o" | awk '{print $9}' | sort | uniq -c)"''',
       r'else echo @read=fail; fi',
       'true',

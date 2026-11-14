@@ -31,6 +31,26 @@ enum _Sec { tools, active, conftest, dump, certs, errlog, access }
 const webConfigTestNoSudo =
     'Config test needs sudo -n; not granted for this lens';
 
+/// M52c: the login cannot reach Docker, with or without `sudo -n`.
+const webDockerDenied =
+    'Docker needs sudo: Enable Kelola sudo (Containers) for state and logs';
+
+/// M52c: Docker is reached through `sudo -n`, where `docker exec` is never
+/// allowed.
+const webDockerNeedsGroup =
+    'Config test and vhosts need Docker without sudo (the docker group)';
+
+/// M52c: why a container lens did not read the config, from `@rc`; null when
+/// the config test ran.
+String? _containerSkipCopy(String? rc, String label) => switch (rc) {
+  'nodocker' => webDockerDenied,
+  'needsgroup' => webDockerNeedsGroup,
+  'notrunning' => 'Container is not running; config not read',
+  'nobin' => 'No $label config test binary in the container',
+  'noshell' => 'The container has no shell; config not read',
+  _ => null,
+};
+
 /// Matches the shell-side whitelist for cert and log paths (spec §7b).
 final _safePath = RegExp(r'^/[A-Za-z0-9._/+@-]+$');
 
@@ -117,8 +137,15 @@ WebLens parseWebLens(
 
   // ACTIVE
   final activeState = _activeState(sections[_Sec.active]?.data);
+  // M52c: a container lens says how it reached Docker.
+  final docker = sections[_Sec.active]?.metaValue('docker');
+  final inContainer = docker != null;
   if (activeState == null) {
-    errors[WebLensSection.active] = 'Could not read the $label service state';
+    errors[WebLensSection.active] = docker == 'denied'
+        ? webDockerDenied
+        : inContainer
+        ? 'Could not read the container state'
+        : 'Could not read the $label service state';
   }
 
   // CONFTEST
@@ -127,9 +154,12 @@ WebLens parseWebLens(
   var noSudo = false;
   final ct = sections[_Sec.conftest];
   final rc = ct?.metaValue('rc');
-  if (rc == '0') {
+  final containerSkip = inContainer ? _containerSkipCopy(rc, label) : null;
+  if (containerSkip != null) {
+    errors[WebLensSection.configTest] = containerSkip;
+  } else if (rc == '0') {
     configOk = true;
-  } else if (rc == 'nosudo') {
+  } else if (rc == 'nosudo' && !inContainer) {
     noSudo = true;
     errors[WebLensSection.configTest] = webConfigTestNoSudo;
   } else if (rc != null && _isInt(rc)) {
@@ -153,9 +183,11 @@ WebLens parseWebLens(
         SudoHintContext.webServices(service: service),
       );
     }
-    errors[WebLensSection.dump] = configOk == false
-        ? 'Config test failed; no config dump'
-        : 'Could not read the config dump';
+    errors[WebLensSection.dump] =
+        containerSkip ??
+        (configOk == false
+            ? 'Config test failed; no config dump'
+            : 'Could not read the config dump');
   } else if (id == ServiceId.apache) {
     vhosts = parseApacheVhosts(dumpText);
     configFiles = _apacheConfigFiles(vhosts);
@@ -174,7 +206,7 @@ WebLens parseWebLens(
   final certSec = sections[_Sec.certs];
   if (certSec == null || certSec.metaValue('done') == null) {
     // Missing, or cut before the loop finished.
-    errors[WebLensSection.certs] = 'Could not read certificates';
+    errors[WebLensSection.certs] = containerSkip ?? 'Could not read certificates';
   }
   certs.addAll(_certs(certSec));
   if (certSec != null) {
@@ -215,8 +247,11 @@ WebLens parseWebLens(
       ? errorLogTail.sublist(errorLogTail.length - _maxLines)
       : errorLogTail;
   if (!el.ok) {
-    errors[WebLensSection.errorLog] =
-        'Could not read error log: no access with or without sudo -n';
+    errors[WebLensSection.errorLog] = docker == 'denied'
+        ? webDockerDenied
+        : inContainer
+        ? 'Could not read the container log (docker logs)'
+        : 'Could not read error log: no access with or without sudo -n';
   }
 
   // ACCESS
@@ -229,8 +264,11 @@ WebLens parseWebLens(
       statusCounts[b.$1] = (statusCounts[b.$1] ?? 0) + b.$2;
     }
   } else {
-    errors[WebLensSection.access] =
-        'Could not read access log: no access with or without sudo -n';
+    errors[WebLensSection.access] = docker == 'denied'
+        ? webDockerDenied
+        : inContainer
+        ? 'Could not read the container log (docker logs)'
+        : 'Could not read access log: no access with or without sudo -n';
   }
 
   return WebLens(
@@ -435,6 +473,8 @@ const _knownStates = {
   'active', 'reloading', 'refreshing', 'inactive', 'failed', 'activating',
   'deactivating', 'maintenance', //
   'started', 'stopped', 'crashed', 'starting', 'stopping', 'hotplugged',
+  // M52c: Docker State.Status.
+  'running', 'restarting', 'exited', 'created', 'paused', 'dead', 'removing',
 };
 
 ({bool ok, String? path, List<String> lines}) _log(_Section? s) {

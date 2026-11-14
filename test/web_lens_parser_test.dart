@@ -677,14 +677,15 @@ void main() {
     });
   });
 
-  test('webServices hint points at the lens grant, not Enable', () {
+  test('webServices hint points at the one Enable Kelola sudo tap', () {
     final hint = kelolaSudoHint(
       user: 'deploy',
       context: SudoHintContext.webServices(service: 'nginx'),
     );
-    expect(hint.body, contains('Grant read access for this lens'));
+    expect(hint.body, contains('Enable Kelola sudo'));
     expect(hint.body, contains('/etc/sudoers.d/kelola-web'));
-    expect(hint.body, isNot(contains('Use Enable')));
+    expect(hint.body, isNot(contains('does not cover')));
+    expect(hint.body, isNot(contains('Grant read access')));
     expect(hint.snippet, contains('deploy ALL=(root) NOPASSWD: <nginx> -T'));
     expect(hint.snippet, isNot(contains('*')));
     final apache = kelolaSudoHint(

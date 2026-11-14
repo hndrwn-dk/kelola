@@ -1038,23 +1038,24 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     required bool force,
   }) async {
     try {
-      if (!force) {
-        final cached = await _readStackCache();
-        if (cached != null &&
-            !StackSection.isStale(cached, DateTime.now())) {
-          return;
-        }
+      final cached = await _readStackCache();
+      if (!force &&
+          cached != null &&
+          !StackSection.isStale(cached, DateTime.now())) {
+        return;
       }
       if (!mounted) {
         return;
       }
-      final detection = await runHostProbe(
+      // M52c: sudo for docker only on a user's pull-to-refresh; an
+      // automatic read that could not list containers keeps the last list.
+      final detection = (await runHostProbe(
         ref: ref,
         context: context,
         host: host,
-        probe: const ServiceDetectProbe(),
+        probe: ServiceDetectProbe(dockerSudo: force),
         facts: facts,
-      );
+      )).keepingContainersOf(cached);
       if (!mounted) {
         return;
       }

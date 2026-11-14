@@ -898,7 +898,10 @@ echo "subject=CN = shop.example.com"''');
         ]) {
           now['all/$name/${h.$1}'] = spec(
             h.$2,
-            KelolaSudoersGroup.values.toSet(),
+            // M52c's Containers group is pinned in its own test.
+            KelolaSudoersGroup.values
+                .where((g) => g != KelolaSudoersGroup.containers)
+                .toSet(),
             sudo,
           );
         }
@@ -906,6 +909,7 @@ echo "subject=CN = shop.example.com"''');
       expect(now.keys.toSet(), snap.keys.toSet());
       // Every group appears in the snapshot.
       for (final g in KelolaSudoersGroup.values) {
+        if (g == KelolaSudoersGroup.containers) continue;
         expect(snap.keys.any((k) => k.startsWith('${g.name}/')), isTrue);
       }
       now.forEach((k, v) => expect(v, snap[k], reason: k));

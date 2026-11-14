@@ -5,8 +5,13 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/service_detection.dart';
 
-/// Tile meta: `1.24.0 · running`, `stopped`, `installed`.
+/// Tile meta: `1.24.0 · running`, `stopped`, `installed`; a container
+/// service (M52c) names its container: `lamp-web · running`.
 String stackTileMeta(DetectedService s) {
+  final container = s.container;
+  if (container != null) {
+    return '$container · ${s.state.name}';
+  }
   final version = s.version?.trim() ?? '';
   return version.isEmpty ? s.state.name : '$version · ${s.state.name}';
 }
