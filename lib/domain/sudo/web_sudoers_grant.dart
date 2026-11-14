@@ -37,15 +37,38 @@ const webConfigTrustMaxEntries = 2000;
 
 /// Config roots, module directories and Apache's `envvars` (sourced by
 /// `apachectl` as root), checked with their whole trees. nginx's root is the
-/// directory of `--conf-path` from `nginx -V`, else this one.
-const webNginxDefaultConfigRoot = '/etc/nginx';
+/// directory of `--conf-path` from `nginx -V`, else `<--prefix>/conf`; with
+/// neither, nothing is assumed and the config test is refused. A
+/// `--modules-path` from `nginx -V` is checked like [webNginxModuleDirs].
 const webNginxModuleDirs = ['/usr/lib/nginx/modules', '/usr/lib64/nginx/modules'];
 
 /// Every match of `/usr/share/nginx/modules*` is checked as well.
 const webNginxShareModulesGlob = '/usr/share/nginx/modules';
+
+/// The Debian-family root (its whole tree) and the httpd-family root (see
+/// [_httpdShell]).
 const webApacheConfigRoots = ['/etc/apache2', '/etc/httpd'];
 const webApacheEnvvars = '/etc/apache2/envvars';
-const webApacheModuleDirs = ['/usr/lib/apache2/modules', '/usr/lib64/httpd/modules'];
+
+/// Older RHEL `apachectl` sources this as root.
+const webApacheSysconfig = '/etc/sysconfig/httpd';
+
+/// The main config files the includes are resolved from: each of the first
+/// two that exists (Debian `apache2.conf`; SUSE and Alpine `httpd.conf`), at
+/// least one; and the httpd family's.
+const webApacheMainConfigs = ['/etc/apache2/apache2.conf', '/etc/apache2/httpd.conf'];
+const webHttpdMainConfig = '/etc/httpd/conf/httpd.conf';
+const webApacheModuleDirs = [
+  '/usr/lib/apache2/modules',
+  '/usr/lib64/httpd/modules',
+  // Alpine.
+  '/usr/lib/apache2',
+  // SUSE.
+  '/usr/lib64/apache2',
+  '/usr/lib64/apache2-prefork',
+  '/usr/lib64/apache2-worker',
+  '/usr/lib64/apache2-event',
+];
 
 /// Why the config test was not granted ([webGrantConfigMarker]).
 enum WebConfigRefusalReason { owner, mode, cap, loop, missing, unreadable }
@@ -333,13 +356,19 @@ String buildWebGrantScript(
 /// Checked, each through `kelola_walk` (`/` and every hop to it) and then as
 /// a tree:
 /// - nginx: the directory of `--conf-path` from `<bin> -V` (the binary has
-///   passed its own check), else [webNginxDefaultConfigRoot]; Apache: each
-///   of [webApacheConfigRoots] that exists (at least one must), plus
-///   [webApacheEnvvars];
-/// - module directories ([webNginxModuleDirs], every
-///   `/usr/share/nginx/modules*`, [webApacheModuleDirs]) that exist; one
-///   missing behind a clean chain is skipped, since only root could create
-///   it;
+///   passed its own check), else `<--prefix>/conf`; with neither it fails
+///   (nothing is assumed). Apache: `/etc/apache2` (its whole tree) and
+///   `/etc/httpd` ([_httpdShell], plus [webApacheSysconfig]), each that
+///   exists (at least one must), plus [webApacheEnvvars];
+/// - module directories ([webNginxModuleDirs], `--modules-path` from
+///   `<bin> -V`, every `/usr/share/nginx/modules*`, [webApacheModuleDirs])
+///   that exist; one missing behind a clean chain is skipped, since only
+///   root could create it;
+/// - every file the server reads as config, found by resolving its include
+///   directives on the host from the main config file ([_includeShell]):
+///   nginx's conf path; Apache's [webApacheMainConfigs] (each that exists,
+///   at least one) and [webHttpdMainConfig]. This does not depend on the
+///   app having a dump;
 /// - [configFiles] (from the dump), each walked as a file: one that is not a
 ///   plain path ([isGrantableWebPath]) cannot be checked, so it fails.
 ///
@@ -479,10 +508,14 @@ String _configTrustShell(
     )
     ..writeln('  return 1')
     ..writeln('}')
+    ..write(_includeShell)
+    ..write(_httpdShell)
     ..writeln('kelola_cfg() {')
     ..writeln('  kelola_n=0')
     ..writeln('  kelola_seen=')
     ..writeln('  kelola_q=')
+    ..writeln('  kelola_dseen=')
+    ..writeln('  kelola_pseen=')
     ..writeln('  kelola_at=')
     ..writeln('  kelola_why=');
 
@@ -497,25 +530,56 @@ String _configTrustShell(
   }
 
   if (id == ServiceId.apache) {
-    b.writeln('  kelola_r=0');
-    b.writeln(
-      '  for kelola_m in '
-      '${webApacheConfigRoots.map((r) => '"\$kelola_pre$r"').join(' ')}; do',
-    );
+    final deb = '"\$kelola_pre${webApacheConfigRoots[0]}"';
+    final rhel = '"\$kelola_pre${webApacheConfigRoots[1]}"';
     b
-      ..writeln(r'    if [ -e "$kelola_m" ] || [ -L "$kelola_m" ]; then')
-      ..writeln(r'      kelola_r=1')
-      ..writeln(r'      kelola_root "$kelola_m" req || return 1')
-      ..writeln('    fi')
-      ..writeln('  done')
+      ..writeln('  kelola_r=0')
+      // Debian family: the whole tree.
+      ..writeln('  if [ -e $deb ] || [ -L $deb ]; then')
+      ..writeln('    kelola_r=1')
+      ..writeln('    kelola_root $deb req || return 1')
+      ..writeln('  fi')
+      // httpd family: its config trees and top-level entries only.
+      ..writeln('  if [ -e $rhel ] || [ -L $rhel ]; then')
+      ..writeln('    kelola_r=1')
+      ..writeln('    kelola_httpd $rhel || return 1')
       ..writeln(
-        '  if [ "\$kelola_r" = 0 ]; then kelola_no '
-        '"\$kelola_pre${webApacheConfigRoots.first}" missing; return 1; fi',
+        '    kelola_file "\$kelola_pre$webApacheSysconfig" opt || return 1',
+      )
+      ..writeln('  fi')
+      ..writeln(
+        '  if [ "\$kelola_r" = 0 ]; then kelola_no $deb missing; return 1; fi',
       )
       ..writeln('  kelola_file "\$kelola_pre$webApacheEnvvars" opt || return 1');
     for (final d in webApacheModuleDirs) {
       b.writeln('  kelola_root "\$kelola_pre$d" opt || return 1');
     }
+    // Includes, from each main config file; relative paths against the
+    // config root (the ServerRoot), or a ServerRoot the main file sets.
+    b
+      ..writeln('  kelola_mode=a')
+      ..writeln('  if [ -e $deb ] || [ -L $deb ]; then')
+      ..writeln('    kelola_r=0')
+      ..writeln(
+        '    for kelola_mf in '
+        '${webApacheMainConfigs.map((f) => '"\$kelola_pre$f"').join(' ')}; do',
+      )
+      ..writeln(r'      if [ -e "$kelola_mf" ] || [ -L "$kelola_mf" ]; then')
+      ..writeln('        kelola_r=1')
+      ..writeln('        kelola_bfs "\$kelola_mf" $deb $deb || return 1')
+      ..writeln('      fi')
+      ..writeln('    done')
+      ..writeln(
+        '    if [ "\$kelola_r" = 0 ]; then kelola_no '
+        '"\$kelola_pre${webApacheMainConfigs.first}" unreadable; return 1; fi',
+      )
+      ..writeln('  fi')
+      ..writeln('  if [ -e $rhel ] || [ -L $rhel ]; then')
+      ..writeln(
+        '    kelola_bfs "\$kelola_pre$webHttpdMainConfig" $rhel $rhel '
+        '|| return 1',
+      )
+      ..writeln('  fi');
   } else {
     b
       ..writeln('  kelola_bin=${decoded(bin)}')
@@ -525,22 +589,38 @@ String _configTrustShell(
         r'  if ! kelola_v=$("$kelola_bin" -V 2>&1); then '
         r'kelola_no "$kelola_bin" unreadable; return 1; fi',
       )
-      ..writeln('  kelola_croot=\$kelola_pre$webNginxDefaultConfigRoot')
-      ..writeln(r'  case "$kelola_v" in')
-      ..writeln(r'    *" --conf-path="*)')
-      ..writeln(r'      kelola_cp=${kelola_v#*" --conf-path="}')
-      ..writeln(r'      kelola_cp=${kelola_cp%%" "*}')
-      ..writeln(r'      kelola_cp=${kelola_cp%%"$kelola_nl"*}')
-      ..writeln(r'      case "$kelola_cp" in')
       ..writeln(
-        r'        *[!A-Za-z0-9._/+@-]*|*..*|*//*) '
-        r'kelola_no "$kelola_bin" unreadable; return 1 ;;',
+        r'  kelola_vopt conf-path || { kelola_no "$kelola_bin" unreadable; '
+        'return 1; }',
       )
-      ..writeln(r'        /?*/*) kelola_croot=${kelola_cp%/*} ;;')
-      ..writeln(r'        *) kelola_no "$kelola_bin" unreadable; return 1 ;;')
-      ..writeln('      esac ;;')
+      ..writeln(r'  kelola_conf=$kelola_o')
+      ..writeln(
+        r'  kelola_vopt prefix || { kelola_no "$kelola_bin" unreadable; '
+        'return 1; }',
+      )
+      ..writeln(r'  kelola_pfx=${kelola_o%/}')
+      // No --conf-path: nginx's own default, <prefix>/conf/nginx.conf.
+      // Neither: nothing is assumed.
+      ..writeln(r'  if [ -z "$kelola_conf" ]; then')
+      ..writeln(
+        r'    if [ -z "$kelola_o" ]; then kelola_no "$kelola_bin" unreadable; '
+        'return 1; fi',
+      )
+      ..writeln(r'    kelola_conf=$kelola_pfx/conf/nginx.conf')
+      ..writeln('  fi')
+      ..writeln(r'  case "$kelola_conf" in')
+      ..writeln(r'    /?*/*) kelola_croot=${kelola_conf%/*} ;;')
+      ..writeln(r'    *) kelola_no "$kelola_bin" unreadable; return 1 ;;')
       ..writeln('  esac')
-      ..writeln(r'  kelola_root "$kelola_croot" req || return 1');
+      ..writeln(r'  kelola_root "$kelola_croot" req || return 1')
+      ..writeln(
+        r'  kelola_vopt modules-path || { kelola_no "$kelola_bin" unreadable; '
+        'return 1; }',
+      )
+      ..writeln(
+        r'  if [ -n "$kelola_o" ]; then kelola_root "${kelola_o%/}" opt || '
+        'return 1; fi',
+      );
     for (final d in webNginxModuleDirs) {
       b.writeln('  kelola_root "\$kelola_pre$d" opt || return 1');
     }
@@ -549,7 +629,14 @@ String _configTrustShell(
         '  for kelola_m in "\$kelola_pre"$webNginxShareModulesGlob*; do',
       )
       ..writeln(r'    kelola_root "$kelola_m" opt || return 1')
-      ..writeln('  done');
+      ..writeln('  done')
+      // Includes, from the main config file: `include` relative to its
+      // directory, `load_module` relative to the prefix (none: refused).
+      ..writeln('  kelola_mode=n')
+      ..writeln(
+        r'  kelola_bfs "$kelola_conf" "$kelola_croot" "$kelola_pfx" || '
+        'return 1',
+      );
   }
   if (bad == null && files.length <= webConfigTrustMaxEntries) {
     for (final f in files) {
@@ -567,6 +654,341 @@ String _configTrustShell(
     );
   return b.toString();
 }
+
+/// Shell (part of [_configTrustShell]) that resolves the server's includes
+/// on the host, as the login, from the main config file:
+/// `kelola_bfs MAIN INCLUDE_BASE MODULE_BASE`, with `kelola_mode` `n`
+/// (nginx) or `a` (Apache).
+///
+/// Breadth-first over the config files, each visited once (so an include
+/// loop ends), every one walked strictly (`kelola_walk`) and read with a
+/// plain `awk` (never sudo): a file the login cannot read cannot be
+/// followed, so it fails (`unreadable`). The awk program prints one line per
+/// include-type directive (first token matched case-insensitively, comments
+/// skipped): `I <pattern>` for nginx `include` / Apache `Include`,
+/// `IncludeOptional`; `M <path>` for `load_module` / `LoadModule` /
+/// `LoadFile`; `R <path>` for Apache `ServerRoot`; `X` for one it cannot
+/// evaluate (a value with `$`, a backslash, a newline, a space, `..`, `//`,
+/// or any character outside the plain path set plus `*?[]`; a wrong number
+/// of arguments; an unterminated quote). nginx is tokenized like nginx does
+/// (statements end at `;`, `{`, `}`, across lines; quotes; `#` comments at a
+/// token start), Apache line by line (continuation lines joined; `#`
+/// comments at a line start). Host text is only ever a quoted variable,
+/// checked again in the shell; nothing is evaluated.
+///
+/// - An include pattern: relative ones resolve against the include base.
+///   Without a glob character it names one path. With one, it is expanded
+///   level by level without `eval`: the directory before the first glob
+///   component, and every directory searched after it, is walked strictly
+///   as a directory (so a writable directory that matches nothing yet still
+///   fails), then searched with `find <dir> -maxdepth 1 -name <component>`
+///   (a match whose name holds a newline fails). Every resulting path is
+///   walked strictly: missing behind a clean chain the login can search is
+///   skipped (only root could create it); a regular file is queued for
+///   reading; a directory has every entry handled the same way (Apache
+///   reads a whole directory).
+/// - A module path (absolute, or relative to the module base: nginx's
+///   prefix, Apache's ServerRoot; nginx without a prefix fails): walked
+///   strictly as a file; missing fails.
+/// - `ServerRoot` (Apache) is honoured only in the main file, before its
+///   first include or module directive; anywhere else it fails.
+///
+/// Every step counts toward the shared [webConfigTrustMaxEntries] cap.
+const _includeShell = r'''
+kelola_mode=
+kelola_ib=
+kelola_mb=
+kelola_fq=
+kelola_pq=
+kelola_fseen=
+kelola_dseen=
+kelola_pseen=
+kelola_hits=
+kelola_mainr=
+kelola_o=
+kelola_awk='
+function endtok() { if (intok) { ntok++; t[ntok] = tok; tok = ""; intok = 0 } }
+function emit(k, v) {
+  if (v ~ ok && index(v, "..") == 0 && index(v, "//") == 0) print k " " v
+  else print "X"
+}
+function unq(v,  f) {
+  f = substr(v, 1, 1)
+  if (length(v) >= 2 && (f == "\"" || f == sq) && substr(v, length(v), 1) == f) return substr(v, 2, length(v) - 2)
+  return v
+}
+function stmt(  d) {
+  if (ntok > 0) {
+    d = tolower(t[1])
+    if (d == "include") { if (ntok == 2) emit("I", t[2]); else print "X" }
+    else if (d == "load_module") { if (ntok == 2) emit("M", t[2]); else print "X" }
+  }
+  ntok = 0
+}
+function apache(s,  n, a, d, j) {
+  sub(/^[ \t]+/, "", s)
+  sub(/[ \t]+$/, "", s)
+  if (s == "" || substr(s, 1, 1) == "#") return
+  n = split(s, a, /[ \t]+/)
+  d = tolower(a[1])
+  if (d == "include" || d == "includeoptional") { if (n == 2) emit("I", unq(a[2])); else print "X" }
+  else if (d == "loadmodule") { if (n == 3) emit("M", unq(a[3])); else print "X" }
+  else if (d == "loadfile") { if (n >= 2) { for (j = 2; j <= n; j++) emit("M", unq(a[j])) } else print "X" }
+  else if (d == "serverroot") { if (n == 2) emit("R", unq(a[2])); else print "X" }
+}
+BEGIN { sq = sprintf("%c", 39); ok = "^[]A-Za-z0-9._/+@*?[-]+$"; ntok = 0; tok = ""; intok = 0; q = ""; buf = "" }
+m == "a" {
+  s = $0
+  sub(/\r$/, "", s)
+  if (s ~ /\\$/) { buf = buf substr(s, 1, length(s) - 1); next }
+  apache(buf s)
+  buf = ""
+  next
+}
+{
+  s = $0
+  n = length(s)
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (q != "") {
+      if (c == "\\") { tok = tok c substr(s, i + 1, 1); i++ }
+      else if (c == q) q = ""
+      else tok = tok c
+      continue
+    }
+    if (c == "\\") { tok = tok c substr(s, i + 1, 1); i++; intok = 1; continue }
+    if (!intok && c == "#") break
+    if (!intok && (c == "\"" || c == sq)) { q = c; intok = 1; continue }
+    if (c == " " || c == "\t" || c == "\r") { endtok(); continue }
+    if (c == ";" || c == "{" || c == "}") { endtok(); stmt(); continue }
+    tok = tok c
+    intok = 1
+  }
+  if (q != "") tok = tok "\n"
+  else endtok()
+}
+END {
+  if (m == "a") { if (buf != "") apache(buf) }
+  else if (q != "") print "X"
+  else { endtok(); if (ntok > 0) { d = tolower(t[1]); if (d == "include" || d == "load_module") print "X" } }
+}
+'
+kelola_cnt() {
+  if [ "$kelola_n" -ge "$kelola_cap" ]; then kelola_no "$1" cap; return 1; fi
+  kelola_n=$((kelola_n + 1))
+}
+kelola_absent() {
+  [ "$kelola_why" = missing ] || return 1
+  if [ -x "${cur:-/}" ]; then return 0; fi
+  kelola_no "$1" unreadable
+  return 1
+}
+kelola_vopt() {
+  kelola_o=
+  case "$kelola_v" in *" --$1="*) ;; *) return 0 ;; esac
+  kelola_o=${kelola_v#*" --$1="}
+  kelola_o=${kelola_o%%" "*}
+  kelola_o=${kelola_o%%"$kelola_nl"*}
+  case "$kelola_o" in /*) ;; *) return 1 ;; esac
+  case "$kelola_o" in *[!A-Za-z0-9._/+@-]*|*..*|*//*) return 1 ;; esac
+}
+kelola_ls() {
+  kelola_hits=
+  kelola_left=$((kelola_cap - kelola_n))
+  kelola_lst=$({ find "$1" -maxdepth 1 -name "$2" -print 2>/dev/null || echo x; } | head -n "$((kelola_left + 2))")
+  kelola_c=0
+  while IFS= read -r kelola_e; do
+    [ -n "$kelola_e" ] || continue
+    [ "$kelola_e" != "$1" ] || continue
+    case "$kelola_e" in "$1"/*) ;; *) kelola_no "$1" unreadable; return 1 ;; esac
+    case "${kelola_e#"$1"/}" in */*) kelola_no "$1" unreadable; return 1 ;; esac
+    kelola_c=$((kelola_c + 1))
+    if [ "$kelola_c" -gt "$kelola_left" ]; then kelola_no "$1" cap; return 1; fi
+    kelola_hits=$kelola_hits$kelola_e$kelola_nl
+  done <<KELOLA_END
+$kelola_lst
+KELOLA_END
+}
+kelola_ipath() {
+  case "$kelola_nl$kelola_pseen" in *"$kelola_nl$1$kelola_nl"*) return 0 ;; esac
+  kelola_pseen=$kelola_pseen$1$kelola_nl
+  kelola_cnt "$1" || return 1
+  if ! kelola_walk "$1"; then
+    kelola_absent "$1" || return 1
+    return 0
+  fi
+  if [ -d "$cur" ]; then
+    case "$kelola_nl$kelola_dseen" in *"$kelola_nl$cur$kelola_nl"*) return 0 ;; esac
+    kelola_dseen=$kelola_dseen$cur$kelola_nl
+    kelola_ls "$cur" '*' || return 1
+    kelola_pq=$kelola_pq$kelola_hits
+  elif [ -f "$cur" ]; then
+    kelola_fq=$kelola_fq$cur$kelola_nl
+  else
+    kelola_no "$1" unreadable
+    return 1
+  fi
+}
+kelola_glob() {
+  kelola_gr=${1#/}
+  kelola_gd=
+  while :; do
+    if [ -z "$kelola_gr" ]; then kelola_no "$1" unreadable; return 1; fi
+    case "$kelola_gr" in
+      */*) kelola_gc=${kelola_gr%%/*}; kelola_gn=${kelola_gr#*/} ;;
+      *) kelola_gc=$kelola_gr; kelola_gn= ;;
+    esac
+    case "$kelola_gc" in *[][*?]*) break ;; esac
+    kelola_gd=$kelola_gd/$kelola_gc
+    kelola_gr=$kelola_gn
+  done
+  if [ -z "$kelola_gd" ]; then kelola_no "$1" unreadable; return 1; fi
+  kelola_gl=$kelola_gd$kelola_nl
+  while :; do
+    case "$kelola_gr" in
+      */*) kelola_gc=${kelola_gr%%/*}; kelola_gr=${kelola_gr#*/} ;;
+      *) kelola_gc=$kelola_gr; kelola_gr= ;;
+    esac
+    kelola_gx=
+    while [ -n "$kelola_gl" ]; do
+      kelola_gp=${kelola_gl%%"$kelola_nl"*}
+      kelola_gl=${kelola_gl#*"$kelola_nl"}
+      kelola_cnt "$kelola_gp" || return 1
+      if ! kelola_walk "$kelola_gp"; then
+        kelola_absent "$kelola_gp" || return 1
+        continue
+      fi
+      [ -d "$cur" ] || continue
+      case "$kelola_gc" in
+        *[][*?]*)
+          kelola_ls "$cur" "$kelola_gc" || return 1
+          kelola_gx=$kelola_gx$kelola_hits ;;
+        *) kelola_gx=$kelola_gx$cur/$kelola_gc$kelola_nl ;;
+      esac
+    done
+    if [ -z "$kelola_gr" ]; then
+      kelola_pq=$kelola_pq$kelola_gx
+      return 0
+    fi
+    kelola_gl=$kelola_gx
+  done
+}
+kelola_inc() {
+  kelola_iv=$2
+  case "$kelola_iv" in ''|*[!]A-Za-z0-9._/+@*?[-]*|*..*|*//*) kelola_no "$1" unreadable; return 1 ;; esac
+  case "$kelola_iv" in /*) ;; *) kelola_iv=$kelola_ib/$kelola_iv ;; esac
+  kelola_iv=${kelola_iv%/}
+  case "$kelola_iv" in
+    *[][*?]*) kelola_glob "$kelola_iv" || return 1 ;;
+    *) kelola_pq=$kelola_pq$kelola_iv$kelola_nl ;;
+  esac
+}
+kelola_mod() {
+  kelola_iv=$2
+  case "$kelola_iv" in ''|*[!A-Za-z0-9._/+@-]*|*..*|*//*) kelola_no "$1" unreadable; return 1 ;; esac
+  case "$kelola_iv" in
+    /*) ;;
+    *)
+      if [ -z "$kelola_mb" ]; then kelola_no "$1" unreadable; return 1; fi
+      kelola_iv=$kelola_mb/$kelola_iv ;;
+  esac
+  kelola_cnt "$kelola_iv" || return 1
+  kelola_walk "$kelola_iv" || return 1
+  if [ ! -f "$cur" ]; then kelola_no "$kelola_iv" unreadable; return 1; fi
+}
+kelola_read() {
+  if [ ! -f "$1" ] || [ ! -r "$1" ]; then kelola_no "$1" unreadable; return 1; fi
+  kelola_out=$(awk -v m="$kelola_mode" "$kelola_awk" < "$1" && echo x) || { kelola_no "$1" unreadable; return 1; }
+  kelola_out=${kelola_out%x}
+  kelola_top=0
+  if [ "$1" = "$kelola_mainr" ]; then kelola_top=1; fi
+  while IFS= read -r kelola_dl; do
+    case "$kelola_dl" in
+      '') ;;
+      'I '*) kelola_top=0; kelola_inc "$1" "${kelola_dl#I }" || return 1 ;;
+      'M '*) kelola_top=0; kelola_mod "$1" "${kelola_dl#M }" || return 1 ;;
+      'R '*)
+        kelola_iv=${kelola_dl#R }
+        if [ "$kelola_top" != 1 ]; then kelola_no "$1" unreadable; return 1; fi
+        case "$kelola_iv" in /*) ;; *) kelola_no "$1" unreadable; return 1 ;; esac
+        case "$kelola_iv" in *[!A-Za-z0-9._/+@-]*|*..*|*//*) kelola_no "$1" unreadable; return 1 ;; esac
+        kelola_ib=${kelola_iv%/}
+        kelola_mb=$kelola_ib ;;
+      *) kelola_no "$1" unreadable; return 1 ;;
+    esac
+  done <<KELOLA_END
+$kelola_out
+KELOLA_END
+}
+kelola_bfs() {
+  kelola_ib=$2
+  kelola_mb=$3
+  kelola_fq=
+  kelola_pq=
+  kelola_fseen=
+  kelola_pseen=
+  kelola_cnt "$1" || return 1
+  if ! kelola_walk "$1"; then
+    if [ "$kelola_why" = missing ]; then kelola_no "$1" unreadable; fi
+    return 1
+  fi
+  kelola_mainr=$cur
+  kelola_fq=$cur$kelola_nl
+  while [ -n "$kelola_fq" ] || [ -n "$kelola_pq" ]; do
+    if [ -n "$kelola_pq" ]; then
+      kelola_p=${kelola_pq%%"$kelola_nl"*}
+      kelola_pq=${kelola_pq#*"$kelola_nl"}
+      kelola_ipath "$kelola_p" || return 1
+      continue
+    fi
+    kelola_f=${kelola_fq%%"$kelola_nl"*}
+    kelola_fq=${kelola_fq#*"$kelola_nl"}
+    case "$kelola_nl$kelola_fseen" in *"$kelola_nl$kelola_f$kelola_nl"*) continue ;; esac
+    kelola_fseen=$kelola_fseen$kelola_f$kelola_nl
+    kelola_read "$kelola_f" || return 1
+  done
+}
+''';
+
+/// Shell (part of [_configTrustShell]): `kelola_httpd <root>` checks the
+/// httpd family's `/etc/httpd`, whose stock `state`, `run` and `logs` link
+/// to directories that are not config (`state` is apache's own 0700
+/// directory), so its whole tree can never pass:
+/// - the root walked strictly; every top-level entry (not followed) owned
+///   by root, and a top-level file or directory not group- or
+///   other-writable;
+/// - `conf`, `conf.d`, `conf.modules.d` and every other top-level directory
+///   scanned as config trees (links followed, as the tree rule does);
+/// - `modules` (a link) scanned as a module directory;
+/// - any other top-level link (`state`, `run`, `logs`): owner only, its
+///   target not scanned. What the server reads through one is reached by the
+///   include resolver ([_includeShell]) and checked there.
+const _httpdShell = r'''
+kelola_httpd() {
+  kelola_walk "$1" || return 1
+  if [ ! -d "$cur" ]; then kelola_no "$1" unreadable; return 1; fi
+  kelola_hr=$cur
+  kelola_ls "$kelola_hr" '*' || return 1
+  kelola_hl=$kelola_hits
+  while [ -n "$kelola_hl" ]; do
+    kelola_he=${kelola_hl%%"$kelola_nl"*}
+    kelola_hl=${kelola_hl#*"$kelola_nl"}
+    kelola_cnt "$kelola_he" || return 1
+    kelola_link_ok "$kelola_he" || { kelola_no "$kelola_he" owner; return 1; }
+    if [ -L "$kelola_he" ]; then
+      case "${kelola_he##*/}" in
+        conf|conf.d|conf.modules.d) kelola_root "$kelola_he" req || return 1 ;;
+        modules) kelola_root "$kelola_he" opt || return 1 ;;
+      esac
+    elif [ -d "$kelola_he" ]; then
+      kelola_root "$kelola_he" req || return 1
+    elif ! kelola_ok "$kelola_he"; then
+      kelola_bad "$kelola_he"
+      return 1
+    fi
+  done
+}
+''';
 
 List<String> _distinctPaths(List<String?> linePaths) {
   final out = <String>[];
@@ -852,7 +1274,7 @@ WebGrantConfigRefusal? webGrantConfigRefusal(String stdout) {
   tail: switch (r.reason) {
     WebConfigRefusalReason.owner => ' is not root-owned.',
     WebConfigRefusalReason.mode => ' is writable by group or others.',
-    WebConfigRefusalReason.cap => ' has too many config files to check.',
+    WebConfigRefusalReason.cap => ' too many config files to check.',
     WebConfigRefusalReason.loop => ' is a symlink loop.',
     WebConfigRefusalReason.missing => ' is missing.',
     WebConfigRefusalReason.unreadable => ' could not be checked.',

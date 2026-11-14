@@ -723,15 +723,25 @@ echo "subject=CN = shop.example.com"''');
         '/etc/apache2',
         '/etc/httpd',
         '/etc/apache2/envvars',
+        '/etc/apache2/apache2.conf',
+        '/etc/apache2/httpd.conf',
+        '/etc/httpd/conf/httpd.conf',
+        '/etc/sysconfig/httpd',
         '/usr/lib/apache2/modules',
         '/usr/lib64/httpd/modules',
+        '/usr/lib/apache2',
+        '/usr/lib64/apache2',
+        '/usr/lib64/apache2-prefork',
+        '/usr/lib64/apache2-worker',
+        '/usr/lib64/apache2-event',
       ]) {
         expect(apache, contains('"\$kelola_pre$p"'), reason: p);
       }
       expect(apache, isNot(contains(' -V ')));
+      // Includes are resolved on the host from the main config file.
+      expect(apache, contains('kelola_bfs "'));
       final nginx = buildWebGrantScript(grant());
       for (final p in [
-        '/etc/nginx',
         '/usr/lib/nginx/modules',
         '/usr/lib64/nginx/modules',
       ]) {
@@ -739,7 +749,17 @@ echo "subject=CN = shop.example.com"''');
       }
       expect(nginx, contains('"\$kelola_pre"/usr/share/nginx/modules*'));
       expect(nginx, contains('"\$kelola_bin" -V'));
+      expect(nginx, contains('kelola_vopt conf-path'));
+      expect(nginx, contains('kelola_vopt prefix'));
+      expect(nginx, contains('kelola_vopt modules-path'));
+      expect(nginx, contains('kelola_bfs "'));
+      // No assumed config root: only what `nginx -V` names.
+      expect(nginx, isNot(contains('/etc/nginx')));
       expect(nginx, isNot(contains('/etc/apache2')));
+      // Host-named patterns are never evaluated by the shell.
+      for (final s in [apache, nginx]) {
+        expect(s, isNot(contains('eval ')));
+      }
     });
 
     test('dump-named config files travel encoded; an unsafe one or too many fail closed', () {
@@ -1287,8 +1307,7 @@ cp "\$src" "\$dst"''');
       final copies = {
         'owner': 'Config test not granted: $p is not root-owned.',
         'mode': 'Config test not granted: $p is writable by group or others.',
-        'cap': 'Config test not granted: $p has too many config files to '
-            'check.',
+        'cap': 'Config test not granted: $p too many config files to check.',
         'loop': 'Config test not granted: $p is a symlink loop.',
         'missing': 'Config test not granted: $p is missing.',
         'unreadable': 'Config test not granted: $p could not be checked.',
@@ -2060,35 +2079,93 @@ cp "\$src" "\$dst"''');
 
       /// A Debian-like nginx tree under the test root, and a stub nginx
       /// whose `-V` names it.
-      ({String stub, Directory conf}) nginxTree() {
+      /// A stub nginx whose `-V` prints [args] after the usual noise.
+      String nginxStub(String args) => file(
+        '${sub('sbin').path}/nginx',
+        mode: '755',
+        body: '#!/bin/sh\n'
+            '[ "\$1" = -V ] || exit 1\n'
+            'echo "nginx version: nginx/1.24.0 (Ubuntu)" >&2\n'
+            "echo \"configure arguments: --with-cc-opt='-g -O2' "
+            '$args --http-log-path=/var/log/nginx/access.log" >&2\n',
+      ).path;
+
+      ({String stub, Directory conf}) nginxTree({
+        String nginxConf = 'events {}\n',
+        String? extraArgs,
+      }) {
         final conf = sub('etc/nginx');
-        file('${conf.path}/nginx.conf', body: 'events {}\n');
+        file('${conf.path}/nginx.conf', body: nginxConf);
         file('${conf.path}/mime.types');
         sub('etc/nginx/conf.d');
         sub('etc/nginx/sites-available');
         file('${sub('etc/nginx/sites-enabled').path}/default');
         sub('etc/nginx/modules-enabled');
-        final stub = file(
-          '${sub('sbin').path}/nginx',
-          mode: '755',
-          body: '#!/bin/sh\n'
-              '[ "\$1" = -V ] || exit 1\n'
-              'echo "nginx version: nginx/1.24.0 (Ubuntu)" >&2\n'
-              "echo \"configure arguments: --with-cc-opt='-g -O2' "
-              '--prefix=/usr/share/nginx --conf-path=${conf.path}/nginx.conf '
-              '--http-log-path=/var/log/nginx/access.log" >&2\n',
+        final stub = nginxStub(
+          '--prefix=${root.path}/usr/share/nginx '
+          '--conf-path=${conf.path}/nginx.conf${extraArgs ?? ''}',
         );
-        return (stub: stub.path, conf: conf);
+        return (stub: stub, conf: conf);
       }
 
-      ({String stub, Directory conf}) apacheTree({String envvars = '644'}) {
+      /// Makes [path] untrusted: owned by `nobody` as root, else (the
+      /// runner owns it and counts as trusted) group-writable. Returns the
+      /// reason the gate should give.
+      WebConfigRefusalReason untrust(String path) {
+        if (isRoot) {
+          Process.runSync('chown', ['nobody', path]);
+          return WebConfigRefusalReason.owner;
+        }
+        Process.runSync('chmod', ['g+w', path]);
+        return WebConfigRefusalReason.mode;
+      }
+
+      ({String stub, Directory conf}) apacheTree({
+        String envvars = '644',
+        String apacheConf = '',
+      }) {
         final conf = sub('etc/apache2');
-        file('${conf.path}/apache2.conf');
+        file('${conf.path}/apache2.conf', body: apacheConf);
         file('${conf.path}/envvars', mode: envvars, body: 'export X=1\n');
         file('${sub('etc/apache2/sites-enabled').path}/000-default.conf');
         file('${sub('etc/apache2/mods-enabled').path}/ssl.load');
         final stub = file('${sub('sbin').path}/apachectl', mode: '755');
         return (stub: stub.path, conf: conf);
+      }
+
+      /// A stock RHEL/Rocky `/etc/httpd`: `state`, `run` and `logs` link to
+      /// directories that are not config (`state` is apache's own 0700
+      /// directory), `modules` to the module directory.
+      ({String stub, Directory conf, Directory state}) httpdTree() {
+        final conf = sub('etc/httpd');
+        file(
+          '${sub('etc/httpd/conf').path}/httpd.conf',
+          body: 'ServerRoot "${conf.path}"\n'
+              'Include conf.modules.d/*.conf\n'
+              'IncludeOptional conf.d/*.conf\n',
+        );
+        file('${conf.path}/conf/magic');
+        file(
+          '${sub('etc/httpd/conf.modules.d').path}/00-base.conf',
+          body: 'LoadModule mime_module modules/mod_mime.so\n',
+        );
+        file('${sub('etc/httpd/conf.d').path}/ssl.conf', body: 'Listen 443\n');
+        file('${sub('usr/lib64/httpd/modules').path}/mod_mime.so');
+        Link('${conf.path}/modules').createSync('../../usr/lib64/httpd/modules');
+        final state = sub('var/lib/httpd', mode: '700');
+        if (isRoot) {
+          Process.runSync('chown', ['nobody', state.path]);
+        } else {
+          // Not root: stand in for "not root-owned" with a mode the tree
+          // rule would refuse.
+          Process.runSync('chmod', ['777', state.path]);
+        }
+        Link('${conf.path}/state').createSync(state.path);
+        Link('${conf.path}/run').createSync(sub('run/httpd', mode: '777').path);
+        Link('${conf.path}/logs').createSync('../../var/log/httpd');
+        sub('var/log/httpd', mode: '777');
+        final stub = file('${sub('sbin').path}/apachectl', mode: '755');
+        return (stub: stub.path, conf: conf, state: state);
       }
 
       late Map<String, String> tools;
@@ -2476,6 +2553,412 @@ cp "\$src" "\$dst"''');
             path: hidden.path,
             reason: WebConfigRefusalReason.owner,
           );
+        });
+
+        // Round 2: includes are resolved on the host, from the main config
+        // file, whether or not the app has a dump.
+
+        test('$shell: an include outside the root holding load_module, with no dump, drops them', () async {
+          if (!await go(shell)) return;
+          final x = sub('srv/x');
+          final mod = file('${sub('srv/mods').path}/ngx_x.so');
+          final inc = file(
+            '${x.path}/inc.conf',
+            body: 'load_module ${mod.path};\n',
+          );
+          final t = nginxTree(
+            nginxConf: 'include ${inc.path};\nevents {}\n',
+          );
+          final g = grant(ServiceId.nginx, certPath: cert());
+          expect(g.configFiles, isEmpty);
+          final why = untrust(inc.path);
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: inc.path,
+            reason: why,
+          );
+          // Clean again: kept.
+          Process.runSync('chmod', ['644', inc.path]);
+          if (isRoot) Process.runSync('chown', ['root', inc.path]);
+          target.deleteSync();
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+        });
+
+        test('$shell: an empty include glob in a login-writable directory drops them', () async {
+          if (!await go(shell)) return;
+          final u = sub('srv/x/u');
+          final why = untrust(u.path);
+          final t = nginxTree(
+            nginxConf: 'events {}\nhttp { include ${u.path}/*.conf; }\n',
+          );
+          final g = grant(ServiceId.nginx, certPath: cert());
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: u.path,
+            reason: why,
+          );
+        });
+
+        test('$shell: the same glob in a root-owned directory keeps them', () async {
+          if (!await go(shell)) return;
+          final u = sub('srv/x/u');
+          final t = nginxTree(
+            nginxConf: 'events {}\nhttp { include ${u.path}/*.conf; }\n',
+          );
+          final g = grant(ServiceId.nginx, certPath: cert());
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+          // And with a clean match in it.
+          file('${u.path}/a.conf', body: 'server { listen 80; }\n');
+          target.deleteSync();
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+        });
+
+        test('$shell: a nested include chain reaching a writable directory drops them', () async {
+          if (!await go(shell)) return;
+          final w = sub('srv/w');
+          final two = file(
+            '${sub('srv/b').path}/two.conf',
+            body: '# level two\nupstream u { server 127.0.0.1; }\n'
+                'include ${w.path}/*.conf;\n',
+          );
+          final one = file(
+            '${sub('srv/a').path}/one.conf',
+            // Several directives on one line, a quoted pattern, a comment.
+            body: 'map \$a \$b { default 1; } include "${two.path}"; # x\n',
+          );
+          final t = nginxTree(
+            nginxConf: 'events {}\nhttp {\n  include ${one.path};\n}\n',
+          );
+          final g = grant(ServiceId.nginx, certPath: cert());
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+          final why = untrust(w.path);
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: w.path,
+            reason: why,
+          );
+        });
+
+        test('$shell: a load_module path in a writable directory drops them', () async {
+          if (!await go(shell)) return;
+          final mods = sub('srv/mods');
+          final so = file('${mods.path}/ngx_evil.so');
+          final t = nginxTree(
+            nginxConf: 'load_module ${so.path};\nevents {}\n',
+          );
+          final g = grant(ServiceId.nginx, certPath: cert());
+          final why = untrust(mods.path);
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: mods.path,
+            reason: why,
+          );
+          // A load_module path that does not exist: missing.
+          file(
+            '${t.conf.path}/nginx.conf',
+            body: 'load_module ${root.path}/srv/none/ngx.so;\nevents {}\n',
+          );
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: '${root.path}/srv/none',
+            reason: WebConfigRefusalReason.missing,
+          );
+        });
+
+        test('$shell: an Apache Include outside the root holding LoadModule drops them', () async {
+          if (!await go(shell)) return;
+          final x = sub('srv/x');
+          final so = file('${sub('srv/mods').path}/mod_evil.so');
+          final inc = file(
+            '${x.path}/evil.conf',
+            body: 'LoadModule evil_module ${so.path}\n',
+          );
+          final t = apacheTree(apacheConf: 'Include ${x.path}/*.conf\n');
+          final g = grant(ServiceId.apache, certPath: cert());
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+          final why = untrust(inc.path);
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: inc.path,
+            reason: why,
+          );
+          // The file clean, the module it loads in a writable directory.
+          Process.runSync('chmod', ['644', inc.path]);
+          if (isRoot) Process.runSync('chown', ['root', inc.path]);
+          final why2 = untrust('${root.path}/srv/mods');
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: '${root.path}/srv/mods',
+            reason: why2,
+          );
+        });
+
+        test('$shell: Apache IncludeOptional and LoadModule resolve against ServerRoot', () async {
+          if (!await go(shell)) return;
+          final t = apacheTree(
+            apacheConf: '# Global\n'
+                'IncludeOptional mods-enabled/*.load\n'
+                '  includeoptional "conf-enabled/*.conf"\n',
+          );
+          file(
+            '${sub('etc/apache2/modules').path}/mod_ssl.so',
+          );
+          file(
+            '${t.conf.path}/mods-enabled/ssl.load',
+            body: '# Depends: setenvif\nLoadModule ssl_module modules/mod_ssl.so\n',
+          );
+          final evil = file('${sub('srv/w').path}/evil.conf');
+          file(
+            '${sub('etc/apache2/conf-enabled').path}/a.conf',
+            body: '<IfModule ssl_module>\n  Include ${evil.path}\n</IfModule>\n',
+          );
+          final g = grant(ServiceId.apache, certPath: cert());
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+          // Only reachable through the relative IncludeOptional.
+          final why = untrust(evil.path);
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: evil.path,
+            reason: why,
+          );
+        });
+
+        test('$shell: an included file the login cannot read drops them', () async {
+          if (!await go(shell)) return;
+          final secret = file('${sub('srv/x').path}/secret.conf', mode: '000');
+          final t = nginxTree(
+            nginxConf: 'events {}\ninclude ${secret.path};\n',
+          );
+          final g = grant(ServiceId.nginx, certPath: cert());
+          // Root reads anything: run as nobody, with the file root's 0600.
+          if (isRoot) Process.runSync('chmod', ['600', secret.path]);
+          expectDropped(
+            await run(
+              scriptFor(g, t.stub),
+              shell,
+              asUser: isRoot ? 'nobody' : null,
+            ),
+            g,
+            path: secret.path,
+            reason: WebConfigRefusalReason.unreadable,
+          );
+        });
+
+        test('$shell: an include pattern with \$ or a backslash drops them', () async {
+          if (!await go(shell)) return;
+          for (final body in [
+            'events {}\ninclude ${root.path}/srv/\$host/*.conf;\n',
+            'events {}\ninclude ${root.path}/srv/a\\b.conf;\n',
+            'events {}\ninclude "${root.path}/srv/a b.conf";\n',
+            'events {}\nload_module \${root}/m.so;\n',
+          ]) {
+            final t = nginxTree(nginxConf: body);
+            final g = grant(ServiceId.nginx, certPath: cert());
+            if (target.existsSync()) target.deleteSync();
+            expectDropped(
+              await run(scriptFor(g, t.stub), shell),
+              g,
+              path: '${t.conf.path}/nginx.conf',
+              reason: WebConfigRefusalReason.unreadable,
+            );
+          }
+          final t = apacheTree(
+            apacheConf: 'Include \${APACHE_CONFDIR}/x.conf\n',
+          );
+          final g = grant(ServiceId.apache, certPath: cert());
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: '${t.conf.path}/apache2.conf',
+            reason: WebConfigRefusalReason.unreadable,
+          );
+        });
+
+        test('$shell: an include loop terminates and passes on a clean tree', () async {
+          if (!await go(shell)) return;
+          final d = sub('srv/loop');
+          file('${d.path}/a.conf', body: 'include ${d.path}/b.conf;\n');
+          file('${d.path}/b.conf', body: 'include ${d.path}/*.conf;\n');
+          final t = nginxTree(
+            nginxConf: 'events {}\ninclude ${d.path}/a.conf;\n'
+                'include ${root.path}/etc/nginx/nginx.conf;\n',
+          );
+          final g = grant(ServiceId.nginx, certPath: cert());
+          final sw = Stopwatch()..start();
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+          expect(sw.elapsed, lessThan(const Duration(seconds: 30)));
+        });
+
+        test('$shell: nginx without --conf-path reads <prefix>/conf/nginx.conf; neither: refused', () async {
+          if (!await go(shell)) return;
+          final pfx = sub('opt/nginx');
+          final w = sub('srv/w');
+          final so = file('${sub('opt/nginx/modules').path}/ngx_m.so');
+          file(
+            '${sub('opt/nginx/conf').path}/nginx.conf',
+            // A relative load_module resolves against the prefix.
+            body: 'load_module modules/${so.uri.pathSegments.last};\n'
+                'events {}\ninclude ${w.path}/*.conf;\n',
+          );
+          final stub = nginxStub('--prefix=${pfx.path}/');
+          final g = grant(ServiceId.nginx, certPath: cert());
+          expectKept(await run(scriptFor(g, stub), shell), g);
+          // The file it read: its include of a writable directory counts.
+          final why = untrust(w.path);
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, stub), shell),
+            g,
+            path: w.path,
+            reason: why,
+          );
+          // Neither --conf-path nor --prefix: not assumed, refused.
+          final bare = nginxStub('--with-http_ssl_module');
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, bare), shell),
+            g,
+            path: bare,
+            reason: WebConfigRefusalReason.unreadable,
+          );
+        });
+
+        test('$shell: a writable --modules-path or Apache module directory drops them', () async {
+          if (!await go(shell)) return;
+          final mods = sub('opt/mods');
+          file('${mods.path}/ngx_x.so');
+          final t = nginxTree(extraArgs: ' --modules-path=${mods.path}');
+          final g = grant(ServiceId.nginx, certPath: cert());
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+          final why = untrust(mods.path);
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: mods.path,
+            reason: why,
+          );
+          for (final d in [
+            'usr/lib/apache2',
+            'usr/lib64/apache2',
+            'usr/lib64/apache2-prefork',
+            'usr/lib64/apache2-worker',
+            'usr/lib64/apache2-event',
+          ]) {
+            final a = apacheTree();
+            final m = sub(d);
+            final ga = grant(ServiceId.apache, certPath: cert());
+            final whyA = untrust(m.path);
+            if (target.existsSync()) target.deleteSync();
+            expectDropped(
+              await run(scriptFor(ga, a.stub), shell),
+              ga,
+              path: m.path,
+              reason: whyA,
+            );
+            Process.runSync('rm', ['-rf', m.path]);
+          }
+        });
+
+        test('$shell: a stock RHEL /etc/httpd keeps them; a writable conf.d or sysconfig drops them', () async {
+          if (!await go(shell)) return;
+          final t = httpdTree();
+          final g = grant(ServiceId.apache, certPath: cert());
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+          // older RHEL apachectl sources /etc/sysconfig/httpd as root.
+          final sys = file('${sub('etc/sysconfig').path}/httpd');
+          target.deleteSync();
+          expectKept(await run(scriptFor(g, t.stub), shell), g);
+          Process.runSync('chmod', ['664', sys.path]);
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: sys.path,
+            reason: WebConfigRefusalReason.mode,
+          );
+          Process.runSync('chmod', ['644', sys.path]);
+          Process.runSync('chmod', ['775', '${t.conf.path}/conf.d']);
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: '${t.conf.path}/conf.d',
+            reason: WebConfigRefusalReason.mode,
+          );
+          // Through the include: a module path in a writable directory.
+          Process.runSync('chmod', ['755', '${t.conf.path}/conf.d']);
+          final whyM = untrust('${root.path}/usr/lib64/httpd/modules');
+          target.deleteSync();
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: '${root.path}/usr/lib64/httpd/modules',
+            reason: whyM,
+          );
+        });
+
+        test('$shell: a user-owned top-level link in /etc/httpd drops them', () async {
+          if (!isRoot) {
+            markTestSkipped('needs root to own a link as another user');
+            return;
+          }
+          if (!await go(shell)) return;
+          final t = httpdTree();
+          final link = Link('${t.conf.path}/extra')..createSync('/tmp');
+          Process.runSync('chown', ['-h', 'nobody', link.path]);
+          final g = grant(ServiceId.apache, certPath: cert());
+          expectDropped(
+            await run(scriptFor(g, t.stub), shell),
+            g,
+            path: link.path,
+            reason: WebConfigRefusalReason.owner,
+          );
+        });
+
+        test('$shell: the real /etc/nginx and /etc/apache2 here keep them', () async {
+          if (!await go(shell)) return;
+          var ran = 0;
+          for (final (id, bin, root) in [
+            (ServiceId.nginx, '/usr/sbin/nginx', '/etc/nginx'),
+            (ServiceId.apache, '/usr/sbin/apachectl', '/etc/apache2'),
+          ]) {
+            if (!File(bin).existsSync() || !Directory(root).existsSync()) {
+              continue;
+            }
+            final g = WebSudoersGrant.tryCreate(
+              user: 'hendr',
+              id: id,
+              binaries: id == ServiceId.apache
+                  ? {'apachectl': bin}
+                  : {'nginx': bin},
+            )!;
+            // Production locations and owners: no prefix, no stub.
+            final sw = Stopwatch()..start();
+            if (target.existsSync()) target.deleteSync();
+            final r = await run(buildWebGrantScript(g), shell);
+            final took = sw.elapsedMilliseconds;
+            printOnFailure('$shell $root: ${took}ms');
+            expectKept(r, g);
+            // Stock trees stay fast (about 1 s for Debian Apache here).
+            expect(took, lessThan(20000));
+            ran++;
+          }
+          if (ran == 0) markTestSkipped('no real nginx or Apache here');
         });
       }
     });

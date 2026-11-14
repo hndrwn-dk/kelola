@@ -414,6 +414,10 @@ void main() {
         }
         gated++;
         expect(script, contains('if kelola_cfg; then KELOLA_CFG=1; else'));
+        // Round 2: the gate resolves the server's includes on the host,
+        // from its main config file, with or without a dump.
+        expect(script, contains('kelola_bfs "'));
+        expect(script, isNot(contains('eval ')));
         for (final i in config) {
           final v = i == 0 ? 'LINE' : 'LINE$i';
           expect(g.linePaths[i], isNull);
