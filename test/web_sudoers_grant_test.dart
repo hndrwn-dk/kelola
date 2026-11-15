@@ -389,6 +389,31 @@ void main() {
       expect(g.user, 'hendr');
       expect(g.lines, hasLength(2));
     });
+
+    test('onlyLines keeps the chosen lines, their paths and config files', () {
+      final g = WebSudoersGrant.tryCreate(
+        user: 'hendr',
+        id: ServiceId.nginx,
+        binaries: _nginxBins,
+        toolPaths: _tools,
+        certPaths: const ['/etc/ssl/certs/a.pem'],
+        errorLog: '/var/log/nginx/error.log',
+        configFiles: const ['/etc/nginx/nginx.conf'],
+      )!;
+      expect(identical(g.onlyLines(g.lines.toSet()), g), isTrue);
+      expect(g.onlyLines(const {}), isNull);
+
+      final binOnly = g.onlyLines(g.lines.take(2).toSet())!;
+      expect(binOnly.lines, g.lines.take(2));
+      expect(binOnly.linePaths, [null, null]);
+      expect(binOnly.configFiles, ['/etc/nginx/nginx.conf']);
+
+      final logOnly = g.onlyLines({g.lines.last})!;
+      expect(logOnly.lines, [g.lines.last]);
+      expect(logOnly.linePaths, ['/var/log/nginx/error.log']);
+      expect(logOnly.configFiles, isEmpty);
+      expect(logOnly.configTestBinary, isNull);
+    });
   });
 
   group('lines match the probes', () {

@@ -144,6 +144,15 @@ Future<bool> runEnableKelolaSudoFlow({
             '${webServices.map((s) => descriptorFor(s.id).label).join(' and ')} '
             'lens to $kelolaWebSudoersPath.';
 
+  // The exact lens lines the preview shows; anything else the host names
+  // later is shown again before it is written.
+  final previewed = <ServiceId, List<String>>{
+    for (final s in webServices)
+      s.id:
+          webReadGrantFor(host: host, service: s, facts: resolved)?.lines ??
+          const [],
+  };
+
   final reviewed = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -154,14 +163,7 @@ Future<bool> runEnableKelolaSudoFlow({
       groups: groups,
       sudo: sudo,
       fileExists: fileExists,
-      webLines: [
-        for (final s in webServices)
-          ...?webReadGrantFor(
-            host: host,
-            service: s,
-            facts: resolved,
-          )?.lines,
-      ],
+      webLines: [for (final s in webServices) ...?previewed[s.id]],
     ),
   );
   if (reviewed != true || !context.mounted) {
@@ -278,7 +280,8 @@ Future<bool> runEnableKelolaSudoFlow({
             host: host,
             facts: resolved,
             service: service,
-            password: pass,
+            previewed: previewed[service.id] ?? const [],
+            password: password.read,
           ),
         );
       }
@@ -352,15 +355,19 @@ Future<List<DetectedService>> _hostWebLensServices(
 /// the password the user already gave, through the same `WebSudoersGrant`
 /// and host-side checks as the old per-lens grant. Certificate and log
 /// paths come from the config dump, which may need the first lines, so the
-/// lens is read again once and a second round adds what it found. Returns
-/// what the host left out; a failure here never undoes the main file.
+/// lens is read again once and a second round adds what it found. Only
+/// [previewed] lines and lines the user adds in [confirmExtraWebLensLines]
+/// are written. [password] is read before each write; null (cleared) stops.
+/// Returns what the host left out; a failure here never undoes the main
+/// file.
 Future<List<GrantNote>> _installWebLensRules({
   required BuildContext context,
   required WidgetRef ref,
   required Host host,
   required HostFacts facts,
   required DetectedService service,
-  required String password,
+  required List<String> previewed,
+  required String? Function() password,
 }) async {
   final notes = <GrantNote>[];
   Future<WebLens?> read() async {
@@ -381,17 +388,36 @@ Future<List<GrantNote>> _installWebLensRules({
     }
   }
 
+  final approved = <String>{...previewed};
+  final declined = <String>{};
   final installed = <String>{};
   for (var round = 0; round < 2 && context.mounted; round++) {
     final lens = await read();
     if (!context.mounted) break;
-    final grant = webReadGrantFor(
+    final full = webReadGrantFor(
       host: host,
       service: service,
       facts: facts,
       lens: lens,
     );
+    if (full == null) break;
+    final extra = [
+      for (final l in full.lines)
+        if (!approved.contains(l) && !declined.contains(l)) l,
+    ];
+    if (extra.isNotEmpty) {
+      final ok = await confirmExtraWebLensLines(
+        context: context,
+        service: service,
+        lines: extra,
+      );
+      if (!context.mounted) break;
+      (ok ? approved : declined).addAll(extra);
+    }
+    final grant = full.onlyLines(approved);
     if (grant == null || grant.lines.every(installed.contains)) break;
+    final pass = password();
+    if (pass == null || pass.isEmpty) break;
     try {
       final r = await runHostProbe(
         ref: ref,
@@ -399,7 +425,7 @@ Future<List<GrantNote>> _installWebLensRules({
         host: host,
         facts: facts,
         probe: WebSudoersGrantProbe(grant),
-        stdinBytes: utf8.encode('$password\n'),
+        stdinBytes: utf8.encode('$pass\n'),
       );
       notes
         ..clear()
@@ -422,6 +448,88 @@ Future<List<GrantNote>> _installWebLensRules({
     if (lens != null) break;
   }
   return notes;
+}
+
+/// Title of the sheet that shows lens lines found after the preview.
+String webExtraLinesTitle(DetectedService service) =>
+    'Add ${descriptorFor(service.id).label} certificate and log lines?';
+
+/// Body of that sheet.
+const webExtraLinesBody =
+    'The server config names these files. Each line lets this login read '
+    'that file as root without a password. Kelola writes them only if you '
+    'add them here; skipped lines are not written.';
+
+/// Shows [lines] (exact, mono) for [kelolaWebSudoersPath], found after the
+/// preview, and returns true only when the user taps Add lines. Uses the
+/// password already given; never asks again.
+Future<bool> confirmExtraWebLensLines({
+  required BuildContext context,
+  required DetectedService service,
+  required List<String> lines,
+}) async {
+  final ok = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    isDismissible: false,
+    enableDrag: false,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) {
+      final c = ctx.kc;
+      return KelolaSheet(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 20, 14, 0),
+          child: RiskBand(
+            risk: RiskLevel.mutate,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  webExtraLinesTitle(service),
+                  style: KelolaType.display(color: c.text, size: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  webExtraLinesBody,
+                  style: KelolaType.body(color: c.muted, size: 13),
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      '$kelolaWebSudoersPath\n${lines.join('\n')}',
+                      style: KelolaType.mono(color: c.text, size: 11),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: const Text('Skip'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        child: const Text('Add lines'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+  return ok == true;
 }
 
 /// Confirms and installs one service action. See [UnitSudoersGrant].
@@ -453,8 +561,8 @@ Future<bool> _runUnitGrantFlow({
 
 /// M52c: the one-tap preview cannot list certificate and log lines yet.
 const webOneTapCertsLaterNote =
-    'Certificate and log lines for each lens are added in the same tap once '
-    'the config can be read, with the same checks. Lines already in '
+    'Certificate and log lines for each lens are shown for one more tap once '
+    'the config can be read, and pass the same checks. Lines already in '
     '$kelolaWebSudoersPath are kept; remove stale ones on the host by hand.';
 
 /// The web grant sheet's trade-off line (fix 1: enforced on the host).

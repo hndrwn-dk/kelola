@@ -283,6 +283,25 @@ class WebSudoersGrant {
     );
   }
 
+  /// This grant with only the lines in [keep], in order, or null when none
+  /// is left. [configFiles] stay only while a config test line does.
+  WebSudoersGrant? onlyLines(Set<String> keep) {
+    final idx = [
+      for (var i = 0; i < lines.length; i++)
+        if (keep.contains(lines[i])) i,
+    ];
+    if (idx.isEmpty) return null;
+    if (idx.length == lines.length) return this;
+    final paths = [for (final i in idx) linePaths[i]];
+    return WebSudoersGrant._(
+      id: id,
+      user: user,
+      lines: List.unmodifiable([for (final i in idx) lines[i]]),
+      linePaths: List.unmodifiable(paths),
+      configFiles: paths.contains(null) ? configFiles : const [],
+    );
+  }
+
   /// The server binary of the config test lines, or null without them.
   String? get configTestBinary {
     for (var i = 0; i < lines.length; i++) {

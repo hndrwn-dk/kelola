@@ -1228,7 +1228,10 @@ void main() {
         await frames(tester, 12);
       }
 
-      /// Preview -> confirm -> password.
+      Finder addLines() => find.widgetWithText(FilledButton, 'Add lines');
+
+      /// Preview -> confirm -> password, then Add lines when the lens names
+      /// certificate or log lines the preview did not show.
       Future<void> applyOneTap(WidgetTester tester) async {
         await tester.tap(find.widgetWithText(FilledButton, 'Review and apply'));
         await frames(tester, 8);
@@ -1236,6 +1239,20 @@ void main() {
         await frames(tester, 8);
         await enterPassword(tester);
         // Install, then each lens read and grant.
+        await frames(tester, 40);
+        if (addLines().evaluate().isNotEmpty) {
+          await tester.tap(addLines());
+          await frames(tester, 40);
+        }
+      }
+
+      /// Preview -> confirm -> password, stopping wherever the flow is then.
+      Future<void> applyUntilExtra(WidgetTester tester) async {
+        await tester.tap(find.widgetWithText(FilledButton, 'Review and apply'));
+        await frames(tester, 8);
+        await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+        await frames(tester, 8);
+        await enterPassword(tester);
         await frames(tester, 40);
       }
 
@@ -1328,19 +1345,118 @@ void main() {
         await pumpLens(tester);
         expect(enableRow(), findsOneWidget);
         expect(tester.widget<ServiceRow>(enableRow()).risk, RiskLevel.mutate);
-        await oneTap(tester);
+        await openOneTap(tester);
+        await applyUntilExtra(tester);
         const p = 'hendra ALL=(root) NOPASSWD: ';
+        const extra = [
+          '$p/usr/bin/openssl x509 -noout -enddate -subject -ext '
+              'subjectAltName -in /etc/ssl/certs/shop.crt',
+          '$p/usr/bin/tail -n 60 /var/log/nginx/error.log',
+          '$p/usr/bin/tail -n 2000 /var/log/nginx/access.log',
+        ];
+        // The lines the preview did not list are shown, exact, before any
+        // lens line is written.
+        expect(find.text(webExtraLinesTitle(_nginx)), findsOneWidget);
+        expect(
+          find.text('$kelolaWebSudoersPath\n${extra.join('\n')}'),
+          findsOneWidget,
+        );
+        expect(pool.probes.whereType<WebSudoersGrantProbe>(), isEmpty);
+        await tester.tap(addLines());
+        await frames(tester, 40);
         expect(
           pool.probes.whereType<WebSudoersGrantProbe>().single.grant.lines,
-          [
-            '$p/usr/sbin/nginx -t',
-            '$p/usr/sbin/nginx -T',
-            '$p/usr/bin/openssl x509 -noout -enddate -subject -ext '
-                'subjectAltName -in /etc/ssl/certs/shop.crt',
-            '$p/usr/bin/tail -n 60 /var/log/nginx/error.log',
-            '$p/usr/bin/tail -n 2000 /var/log/nginx/access.log',
-          ],
+          ['$p/usr/sbin/nginx -t', '$p/usr/sbin/nginx -T', ...extra],
         );
+        expect(pool.stdin, utf8.encode('s3cret\n'));
+        await dispose(tester);
+      });
+
+      testWidgets('skipping the extra lens lines writes only the previewed ones',
+          (tester) async {
+        pool.lens = WebLens(
+          id: ServiceId.nginx,
+          readAt: DateTime.now().toUtc(),
+          activeState: 'active',
+          configOk: true,
+          vhosts: const [_shop],
+          certsByPath: const {
+            '/etc/ssl/certs/shop.crt': WebCert(path: '/etc/ssl/certs/shop.crt'),
+          },
+          sectionErrors: const {
+            WebLensSection.certs: 'Could not read 1 of 1 certificates',
+          },
+          toolPaths: const {
+            'openssl': '/usr/bin/openssl',
+            'tail': '/usr/bin/tail',
+          },
+          errorLogPath: '/root/.ssh/id_ed25519',
+          accessLogPath: '/var/log/nginx/access.log',
+        );
+        await pumpLens(tester);
+        await openOneTap(tester);
+        await applyUntilExtra(tester);
+        expect(find.text(webExtraLinesTitle(_nginx)), findsOneWidget);
+        expect(
+          find.textContaining('tail -n 60 /root/.ssh/id_ed25519'),
+          findsOneWidget,
+        );
+        expect(pool.probes.whereType<WebSudoersGrantProbe>(), isEmpty);
+        await tester.tap(find.widgetWithText(OutlinedButton, 'Skip'));
+        await frames(tester, 40);
+        const p = 'hendra ALL=(root) NOPASSWD: ';
+        final lines = [
+          for (final g in pool.probes.whereType<WebSudoersGrantProbe>())
+            ...g.grant.lines,
+        ];
+        expect(lines, ['$p/usr/sbin/nginx -t', '$p/usr/sbin/nginx -T']);
+        await dispose(tester);
+      });
+
+      testWidgets('lines found on the second read are shown before they are written',
+          (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        await pumpLens(tester);
+        await openOneTap(tester);
+        // The first lens lines make the dump readable on the next read.
+        pool.onGrant = () {
+          pool.error = null;
+          pool.lens = WebLens(
+            id: ServiceId.nginx,
+            readAt: DateTime.now().toUtc(),
+            activeState: 'active',
+            configOk: true,
+            vhosts: const [_shop],
+            certsByPath: const {
+              '/etc/ssl/certs/shop.crt':
+                  WebCert(path: '/etc/ssl/certs/shop.crt'),
+            },
+            toolPaths: const {
+              'openssl': '/usr/bin/openssl',
+              'tail': '/usr/bin/tail',
+            },
+            errorLogPath: '/srv/app/error.log',
+            accessLogPath: '/var/log/nginx/access.log',
+          );
+        };
+        await applyUntilExtra(tester);
+        const p = 'hendra ALL=(root) NOPASSWD: ';
+        final first = pool.probes.whereType<WebSudoersGrantProbe>().single;
+        expect(
+          first.grant.lines,
+          ['$p/usr/sbin/nginx -t', '$p/usr/sbin/nginx -T'],
+        );
+        expect(find.text(webExtraLinesTitle(_nginx)), findsOneWidget);
+        expect(
+          find.textContaining('$p/usr/bin/tail -n 60 /srv/app/error.log'),
+          findsOneWidget,
+        );
+        await tester.tap(find.widgetWithText(OutlinedButton, 'Skip'));
+        await frames(tester, 40);
+        // Nothing beyond the previewed lines went in.
+        expect(pool.probes.whereType<WebSudoersGrantProbe>(), hasLength(1));
         await dispose(tester);
       });
 
@@ -1871,6 +1987,9 @@ class _Pool extends SshSessionPool {
   /// When set, lens reads wait for it.
   Completer<void>? lensGate;
 
+  /// Called on each lens grant write.
+  void Function()? onGrant;
+
   @override
   Future<T> execute<T>(
     Host host,
@@ -1907,6 +2026,7 @@ class _Pool extends SshSessionPool {
     }
     if (probe is WebSudoersGrantProbe) {
       stdin = stdinBytes;
+      onGrant?.call();
       final out = grantStdout;
       // The probe's own parse, on the host output the script would print.
       return probe.parse(
