@@ -134,3 +134,6 @@ String unitListMeta(ServiceUnit unit) {
   }
   return bits.join(' · ');
 }
+
+/// `1 unit failed`, `3 units failed`: dashboard banner and incident object.
+String failedUnitsLabel(int n) => n == 1 ? '1 unit failed' : '$n units failed';

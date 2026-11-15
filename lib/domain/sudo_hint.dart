@@ -371,13 +371,13 @@ SudoHint _webServicesHint({required String user, String? service}) {
     body:
         'This host\'s sudo asks for a password, so Kelola could not read the '
         '$label configuration. Kelola never prompts for a sudo password. '
-        'Use Grant read access for this lens: it adds exact read-only lines '
-        '(config test, config dump, each certificate, the error and access '
-        'logs) to $kelolaWebSudoersPath. Enable Kelola sudo does not cover lens '
-        'reads.',
+        'Use Enable Kelola sudo: the same one tap that covers packages and '
+        'firewall also adds exact read-only lines for this lens (config '
+        'test, config dump, each certificate, the error and access logs) to '
+        '$kelolaWebSudoersPath.',
     snippet:
         '# path: $kelolaWebSudoersPath  mode: 0440\n'
-        '# Use "Grant read access for this lens" on the $label lens.\n'
+        '# Use "Enable Kelola sudo"; it adds the $label lens lines.\n'
         '# It writes exact lines only, never a wildcard, for example:\n'
         '# $user ALL=(root) NOPASSWD: $bin -t\n'
         '# $user ALL=(root) NOPASSWD: $bin $dump\n'

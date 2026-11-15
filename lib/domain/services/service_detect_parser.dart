@@ -1,9 +1,12 @@
+import 'dart:convert';
+
+import 'package:kelola/domain/services/container_services.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/service_detection.dart';
 
 /// Parses the batched `ServiceDetectProbe` output (`---UNITS---`, `---BIN---`,
-/// `---VERSION---`, `---PORTS---`). Junk or missing sections yield empty
-/// results; this never throws.
+/// `---VERSION---`, `---PORTS---`, `---CONTAINERS---`). Junk or missing
+/// sections yield empty results; this never throws.
 ServiceDetection parseServiceDetection(String stdout, {required DateTime now}) {
   final units = _parseUnits(_section(stdout, 'UNITS') ?? '');
   final bins = _parseBinaries(_section(stdout, 'BIN') ?? '');
@@ -56,12 +59,66 @@ ServiceDetection parseServiceDetection(String stdout, {required DateTime now}) {
     );
   }
 
+  final containers = _section(stdout, 'CONTAINERS') ?? '';
+  services.addAll(_parseContainers(containers));
+
   return ServiceDetection(
     services: services,
     listeningPorts: ports,
     readAt: now,
+    containersSkipped: RegExp(
+      r'^@docker=skipped$',
+      multiLine: true,
+    ).hasMatch(containers),
   );
 }
+
+/// M52c §1: `|`-prefixed `docker ps --format '{{json .}}'` lines. A line that
+/// is not a JSON object, names no catalog service or has an unsafe name is
+/// skipped. Catalog order, then container name.
+List<DetectedService> _parseContainers(String text) {
+  final out = <DetectedService>[];
+  final seen = <String>{};
+  for (final raw in text.split('\n')) {
+    if (!raw.startsWith('|')) {
+      continue;
+    }
+    Object? j;
+    try {
+      j = jsonDecode(raw.substring(1).trim());
+    } on FormatException {
+      continue;
+    }
+    if (j is! Map) {
+      continue;
+    }
+    final name = _str(j['Names']).split(',').first.trim();
+    final image = _str(j['Image']).trim();
+    if (!isSafeContainerName(name) || image.isEmpty || !seen.add(name)) {
+      continue;
+    }
+    final id = serviceIdForContainer(image: image, command: _str(j['Command']));
+    if (id == null) {
+      continue;
+    }
+    out.add(
+      DetectedService(
+        id: id,
+        state: containerServiceState(_str(j['State'])),
+        version: containerServiceVersion(id, image),
+        container: name,
+        image: image.length > 256 ? image.substring(0, 256) : image,
+      ),
+    );
+  }
+  out.sort((a, b) {
+    final byId = a.id.index.compareTo(b.id.index);
+    return byId != 0 ? byId : a.container!.compareTo(b.container!);
+  });
+  return out;
+}
+
+String _str(Object? v) => v is String ? v : '';
 
 class _Unit {
   const _Unit(this.name, this.state);

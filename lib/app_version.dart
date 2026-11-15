@@ -13,7 +13,7 @@ const kelolaAppVersion = String.fromEnvironment(
 /// `scripts/build_play_aab.sh` injects the same value via `KELOLA_BUILD`.
 const kelolaVersionCode = String.fromEnvironment(
   'KELOLA_BUILD',
-  defaultValue: '123',
+  defaultValue: '126',
 );
 
 /// Flutter SDK line from README. Keep in lockstep; not read from the device.

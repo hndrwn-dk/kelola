@@ -372,7 +372,8 @@ class WebLens {
   }
 }
 
-const _runningStates = {'active', 'refreshing', 'started'};
+/// `running` is Docker's State.Status (M52c container lens).
+const _runningStates = {'active', 'refreshing', 'started', 'running'};
 
 /// systemd on the way up or mid-reload: no finding either way.
 const _transitionalStates = {'activating', 'reloading'};

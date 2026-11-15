@@ -1,3 +1,4 @@
+import 'package:kelola/domain/services/container_services.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 
 /// `installed` = binary found, no unit seen.
@@ -10,10 +11,21 @@ class DetectedService {
     this.unit,
     this.version,
     this.binaries = const {},
+    this.container,
+    this.image,
   });
 
   final ServiceId id;
   final ServiceState state;
+
+  /// M52c: the Docker container that runs it (its name, validated by
+  /// `isSafeContainerName`); null for a host service.
+  final String? container;
+
+  /// M52c: the container's image as `docker ps` printed it; display only.
+  final String? image;
+
+  bool get inContainer => container != null;
 
   /// `nginx.service` / `nginx`.
   final String? unit;
@@ -30,6 +42,8 @@ class DetectedService {
     if (unit != null) 'unit': unit,
     if (version != null) 'version': version,
     if (binaries.isNotEmpty) 'bin': binaries,
+    if (container != null) 'ctr': container,
+    if (image != null) 'img': image,
   };
 
   /// Null when the id or state is unknown (e.g. written by a newer app).
@@ -43,6 +57,12 @@ class DetectedService {
       return null;
     }
     final bin = j['bin'];
+    final ctr = j['ctr'];
+    // A cached name is re-checked: the cache is a file on the phone, and the
+    // name reaches a docker command.
+    if (ctr != null && (ctr is! String || !isSafeContainerName(ctr))) {
+      return null;
+    }
     return DetectedService(
       id: id,
       state: state,
@@ -54,6 +74,8 @@ class DetectedService {
             if (e.key is String && e.value is String)
               e.key as String: e.value as String,
       },
+      container: ctr as String?,
+      image: j['img'] is String ? j['img'] as String : null,
     );
   }
 }
@@ -64,9 +86,30 @@ class ServiceDetection {
     required this.services,
     required this.listeningPorts,
     required this.readAt,
+    this.containersSkipped = false,
   });
 
   final List<DetectedService> services;
+
+  /// M52c: plain `docker` failed and sudo was not tried (an automatic read),
+  /// so the container list is unknown, not empty. Not persisted.
+  final bool containersSkipped;
+
+  /// This read, keeping [previous]'s container services when this read
+  /// skipped them.
+  ServiceDetection keepingContainersOf(ServiceDetection? previous) {
+    if (!containersSkipped || previous == null) return this;
+    return ServiceDetection(
+      services: [
+        ...services,
+        for (final s in previous.services)
+          if (s.inContainer) s,
+      ],
+      listeningPorts: listeningPorts,
+      readAt: readAt,
+      containersSkipped: true,
+    );
+  }
 
   /// "Listening on this host"; not attributed to a service.
   final List<int> listeningPorts;

@@ -15,6 +15,7 @@ import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/service_detection.dart';
 import 'package:kelola/domain/services/web_lens.dart';
 import 'package:kelola/domain/services/web_lens_parser.dart';
+import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/domain/units/service_unit.dart';
@@ -79,6 +80,20 @@ String vhostEmptyCopy(VhostFilter f) => switch (f) {
   VhostFilter.expiring => 'No vhosts expiring in $webCertExpiringDays days.',
   VhostFilter.noTls => 'No vhosts without TLS.',
 };
+
+/// Errors shown under VHOSTS (dump, then certs), skipping any text already
+/// shown: a container lens that did not read the config (stopped, no Docker
+/// access, no shell) gives the same reason for the config test, the dump and
+/// the certs, and it is shown once, under the band.
+List<String> vhostSectionErrors(WebLens l) {
+  final shown = <String>{
+    ?l.sectionErrors[WebLensSection.configTest],
+  };
+  return [
+    for (final s in const [WebLensSection.dump, WebLensSection.certs])
+      if (l.sectionErrors[s] case final e? when shown.add(e)) e,
+  ];
+}
 
 /// Vhosts stat: `unknown` when the dump could not be read at all.
 String webVhostsValue(WebLens l) {
@@ -230,6 +245,16 @@ String? webReloadDisabledReason({
   return null;
 }
 
+/// Lens title: `nginx 1.24.0`; a container service (M52c) names its
+/// container instead of a version: `Apache httpd · lamp-web`.
+String webLensTitle(DetectedService service) {
+  final label = descriptorFor(service.id).label;
+  final container = service.container;
+  if (container != null) return '$label · $container';
+  final version = service.version?.trim() ?? '';
+  return version.isEmpty ? label : '$label $version';
+}
+
 /// The reload probe for [service], or null when its unit or config-test
 /// binary is missing or unsafe.
 ConfigTestedReloadProbe? webReloadProbeFor(DetectedService service) {
@@ -263,7 +288,12 @@ String webReadOnlySudoBody(String label) =>
     'grant read access, or add the exact lines yourself.';
 
 /// Label of the lens read grant action (spec §7b).
-const webReadGrantLabel = 'Grant read access for this lens';
+const webEnableSudoLabel = 'Enable Kelola sudo';
+
+/// M52c: the lens's one-tap row says what the tap covers.
+const webEnableSudoDetail =
+    'One tap for every feature that needs sudo: this lens\'s exact read '
+    'lines, packages, firewall and the rest.';
 
 /// The `kelola-web` grant for [service] (spec §7b), or null when no line can
 /// be granted or host [facts] are not known yet (the install probe needs
@@ -469,10 +499,6 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
   /// Host output of the last failed reload, shown in mono under [_error].
   String _reloadOutput = '';
 
-  /// Why the host left out the config test lines of the last read grant
-  /// (fix 1), shown with the grant until a grant adds them.
-  WebGrantConfigRefusal? _configRefusal;
-
   @override
   void initState() {
     super.initState();
@@ -514,6 +540,7 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
           id: widget.service.id,
           binaries: widget.service.binaries,
           unit: widget.service.unit,
+          container: widget.service.container,
         ),
         facts: facts,
       );
@@ -582,11 +609,7 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     if (reread && mounted) await _load();
   }
 
-  String get _title {
-    final label = descriptorFor(widget.service.id).label;
-    final version = widget.service.version?.trim() ?? '';
-    return version.isEmpty ? label : '$label $version';
-  }
+  String get _title => webLensTitle(widget.service);
 
   @override
   Widget build(BuildContext context) {
@@ -652,7 +675,7 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
         body: webReadOnlySudoBody(descriptorFor(widget.service.id).label),
         snippet: [
           for (final l in stock.snippet.split('\n'))
-            if (!l.contains('Grant read access')) l,
+            if (!l.contains('Enable Kelola sudo')) l,
         ].join('\n'),
       );
     }
@@ -665,71 +688,57 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
         sudo &&
         hint.kind == SudoHintKind.webServices &&
         hint.binary != webOpenRcReloadBinary;
-    final error = KelolaError(
-      message: message,
-      sudoUser: host?.username,
-      onEnableSudo: unitGrant ? () => _grantUnit(hint) : null,
-    );
     final facts = _facts;
-    if (!readGrant || facts == null) return error;
-    final lens = _lens;
-    // A loaded lens offers the same grant in ACTIONS; show it once.
-    if (lens != null &&
-        webLensReadGrantOffer(
+    // M52c: lens reads are part of the one Enable Kelola sudo tap, when a
+    // line can be granted at all.
+    final grantable =
+        readGrant &&
+        facts != null &&
+        webReadGrantFor(
               host: host,
               service: widget.service,
               facts: facts,
-              lens: lens,
-            ).grant !=
-            null) {
-      return error;
-    }
-    final grant = webReadGrantFor(
-      host: host,
-      service: widget.service,
-      facts: facts,
-      lens: lens,
+              lens: _lens,
+            ) !=
+            null;
+    final error = KelolaError(
+      message: message,
+      sudoUser: host?.username,
+      onEnableSudo: unitGrant
+          ? () => _grantUnit(hint)
+          : grantable
+          ? _enableSudo
+          : null,
     );
-    final c = context.kc;
+    if (!readGrant || facts == null || grantable) return error;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         error,
         const SizedBox(height: 8),
-        if (grant == null)
-          Text(
-            webReadGrantBlockedCopy(host, widget.service),
-            style: KelolaType.body(color: c.muted, size: 12),
-          )
-        else
-          ServiceRow(
-            risk: RiskLevel.mutate,
-            name: webReadGrantLabel,
-            meta: kelolaWebSudoersPath,
-            detail: lens == null
-                ? 'Config test and dump; cert and log rules follow once the '
-                      'lens loads.'
-                : 'Exact read-only sudo rules for this lens.',
-            onTap: _busy ? null : () => _grantRead(grant),
-          ),
-        // With a lens, ACTIONS shows it instead.
-        if (lens == null && _configRefusal != null) ...[
-          const SizedBox(height: 6),
-          _configRefusalNote(context, _configRefusal!),
-        ],
+        Text(
+          webReadGrantBlockedCopy(host, widget.service),
+          style: KelolaType.body(color: context.kc.muted, size: 12),
+        ),
       ],
     );
   }
 
-  /// Fix 1: which config path kept the config test out, and why; the path
-  /// is host text, in mono.
-  Widget _configRefusalNote(BuildContext context, WebGrantConfigRefusal r) =>
-      grantNotesText(
-        context,
-        notes: webGrantNotes(config: r),
-        style: KelolaType.body(color: context.kc.muted, size: 12),
-      );
+  /// M52c: the one-tap Enable Kelola sudo, this lens's read lines included;
+  /// then the lens is read again.
+  Future<void> _enableSudo() async {
+    final host = _host;
+    if (host == null || _busy) return;
+    final ok = await runEnableKelolaSudoFlow(
+      context: context,
+      ref: ref,
+      host: host,
+      facts: _facts,
+      webService: widget.service,
+    );
+    if (ok && mounted) await _load();
+  }
 
   /// PR #17: the reload leg was refused on systemd. The flow offers the one
   /// `systemctl reload <unit>` rule (or Enable on regex-tier hosts, whose
@@ -745,27 +754,6 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
       hint: hint,
     );
     if (ok && mounted) setState(() => _error = null);
-  }
-
-  /// Spec §7b: shows [grant]'s exact lines, installs them, then re-reads.
-  Future<void> _grantRead(WebSudoersGrant grant) async {
-    final host = _host;
-    final facts = _facts;
-    if (host == null || facts == null || _busy) return;
-    WebGrantConfigRefusal? refused;
-    final ok = await runWebGrantFlow(
-      context: context,
-      ref: ref,
-      host: host,
-      facts: facts,
-      grant: grant,
-      certsLater: _lens == null,
-      onConfigRefused: (r) => refused = r,
-    );
-    if ((ok || refused != null) && mounted) {
-      setState(() => _configRefusal = refused);
-    }
-    if (ok && mounted) await _load();
   }
 
   /// Fix 2: group changes apply to new logins, so drop the pooled client
@@ -908,7 +896,8 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
   List<Widget> _bottomRows(BuildContext context, WebLens l) {
     final c = context.kc;
     final host = _host;
-    if (host == null) return const [];
+    // M52c: no reload or host read grant inside a container yet.
+    if (host == null || widget.service.inContainer) return const [];
     final probe = webReloadProbeFor(widget.service);
     final reason = webReloadDisabledReason(
       host: host,
@@ -933,10 +922,10 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
       if (grant != null) ...[
         ServiceRow(
           risk: RiskLevel.mutate,
-          name: webReadGrantLabel,
-          meta: kelolaWebSudoersPath,
-          detail: 'Exact read-only sudo rules for the sections that failed.',
-          onTap: _busy ? null : () => _grantRead(grant),
+          name: webEnableSudoLabel,
+          meta: kelolaSudoersPath,
+          detail: webEnableSudoDetail,
+          onTap: _busy ? null : _enableSudo,
         ),
         const SizedBox(height: 6),
       ],
@@ -944,11 +933,6 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Text(gap, style: KelolaType.body(color: c.muted, size: 12)),
-        ),
-      if (_configRefusal != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: _configRefusalNote(context, _configRefusal!),
         ),
       ServiceRow(
         risk: RiskLevel.mutate,
@@ -1058,8 +1042,7 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     final shown = filterVhosts(l, _filter, now);
     return [
       Text('VHOSTS', style: _slabStyle(c)),
-      for (final s in const [WebLensSection.dump, WebLensSection.certs])
-        if (l.sectionErrors[s] != null) _sectionError(c, l.sectionErrors[s]!),
+      for (final e in vhostSectionErrors(l)) _sectionError(c, e),
       const SizedBox(height: 8),
       Wrap(
         spacing: 5,

@@ -10,7 +10,12 @@ import 'package:kelola/domain/services/service_detection.dart';
 /// Every command fragment comes from [kServiceCatalog] constants; nothing
 /// host-derived is interpolated.
 class ServiceDetectProbe extends Probe<ServiceDetection> {
-  const ServiceDetectProbe();
+  const ServiceDetectProbe({this.dockerSudo = false});
+
+  /// M52c: when plain `docker` fails, also try `sudo -n docker`. Only on a
+  /// user's pull-to-refresh: the automatic read on every dashboard open must
+  /// not write a sudo failure to the host's auth log each time.
+  final bool dockerSudo;
 
   @override
   String get auditTitle => 'Detected services';
@@ -34,6 +39,20 @@ class ServiceDetectProbe extends Probe<ServiceDetection> {
       // No -p: the owning process needs root, and guessing it from a port
       // would be fabrication.
       "ss -Hltn 2>/dev/null | awk '{print \$4}'",
+      // M52c §1: Docker containers, plain; with [dockerSudo] also the exact
+      // `sudo -n` argv the Containers sudo group allows. Last section:
+      // container text cannot form a marker (`---` is broken up) and every
+      // line gets `|`.
+      'echo ---CONTAINERS---',
+      'if command -v docker >/dev/null 2>&1; then',
+      "  c=\$(docker ps -a --no-trunc --format '{{json .}}' 2>/dev/null) ||",
+      if (dockerSudo) ...[
+        "    c=\$(sudo -n docker ps -a --no-trunc --format '{{json .}}' 2>/dev/null) ||",
+        '    { c=; echo @docker=denied; }',
+      ] else
+        '    { c=; echo @docker=skipped; }',
+      r'''  [ -z "$c" ] || printf '%s\n' "$c" | sed 's/---/-- -/g; s/^/|/' ''',
+      'fi',
       'true',
     ].join('\n');
   }

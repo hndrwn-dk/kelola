@@ -8,7 +8,18 @@ import 'package:kelola/domain/sudo/sudo_flavor.dart';
 const kelolaSudoersPath = '/etc/sudoers.d/kelola';
 const kelolaSudoersMode = '0440';
 
-enum KelolaSudoersGroup { packages, firewall, hostPower, services, processes }
+enum KelolaSudoersGroup {
+  packages,
+  firewall,
+  hostPower,
+  services,
+  processes,
+
+  /// M52c: read Docker container lists, state and logs. Never `exec`, `run`,
+  /// `cp`, `inspect` or a mutate verb: root `docker exec` is root on the
+  /// host, and `inspect` shows container env secrets.
+  containers,
+}
 
 class KelolaSudoersSpec {
   const KelolaSudoersSpec({
@@ -84,6 +95,12 @@ KelolaSudoersSpec buildKelolaSudoersSpec({
   if (regex && groups.contains(KelolaSudoersGroup.processes)) {
     cmds.addAll(_processRegexCommands);
   }
+  if (groups.contains(KelolaSudoersGroup.containers)) {
+    cmds.addAll(_containerCommands);
+    if (regex) {
+      cmds.addAll(_containerRegexCommands);
+    }
+  }
   return KelolaSudoersSpec(user: user, groups: groups, commands: cmds);
 }
 
@@ -105,6 +122,9 @@ Set<KelolaSudoersGroup> defaultKelolaSudoersGroups(
       out.add(KelolaSudoersGroup.services);
     }
     out.add(KelolaSudoersGroup.processes);
+  }
+  if (facts.runtimes.contains('docker')) {
+    out.add(KelolaSudoersGroup.containers);
   }
   return out;
 }
@@ -392,6 +412,25 @@ bool isSudoersSafeUnitName(String name) {
 /// `kill` truncate to 32 bits, so with no cap 4294967297 reaches PID 1 and
 /// 4294967295 reaches every process. Written without `{2,7}`, since a comma
 /// ends a sudoers command.
+/// M52c: the exact argv the Containers screen and service detection fall
+/// back to (`sudo -n docker …`). Read only.
+const _containerCommands = [
+  '/usr/bin/docker info',
+  '/usr/bin/docker ps -a --format {{json .}}',
+  '/usr/bin/docker ps -a --no-trunc --format {{json .}}',
+];
+
+/// One Docker container name, as written in a sudoers rule (Docker's own
+/// name rule; see `isSafeContainerName`).
+const kelolaDockerNameRegex = '[A-Za-z0-9][A-Za-z0-9_.-]*';
+
+/// M52c: container lens reads: the last 60 / 2000 log lines of one named
+/// container. Never `exec`, and never `inspect`: it shows the container's
+/// environment, which often holds credentials.
+const _containerRegexCommands = [
+  '/usr/bin/docker ^logs --tail (60|2000) $kelolaDockerNameRegex\$',
+];
+
 const _processRegexCommands = [
   r'/usr/bin/kill ^-s (TERM|KILL) '
       r'([2-9]|[1-9][0-9][0-9]?[0-9]?[0-9]?[0-9]?[0-9]?)$',
