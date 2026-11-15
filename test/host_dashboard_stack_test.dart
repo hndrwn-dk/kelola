@@ -66,6 +66,7 @@ Future<void> _pumpSection(
   ServiceDetection? detection, {
   DateTime? now,
   void Function(DetectedService)? onOpen,
+  VoidCallback? onOpenContainers,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -76,6 +77,7 @@ Future<void> _pumpSection(
             detection: detection,
             now: now ?? _readAt.add(const Duration(minutes: 2)),
             onOpen: onOpen ?? (_) {},
+            onOpenContainers: onOpenContainers ?? () {},
           ),
         ),
       ),
@@ -143,6 +145,58 @@ void main() {
 
       await tester.tap(find.text('Apache httpd'));
       expect(opened?.id, ServiceId.apache);
+    });
+
+    testWidgets('stopped containers share one Stopped tile; running, failed '
+        'and host services keep theirs', (tester) async {
+      var containersOpened = 0;
+      DetectedService ctr(String name, ServiceState state) => DetectedService(
+        id: ServiceId.apache,
+        state: state,
+        container: name,
+      );
+      await _pumpSection(
+        tester,
+        _detection([
+          ctr('lamp-web', ServiceState.running),
+          ctr('web-apache', ServiceState.stopped),
+          ctr('flappy', ServiceState.failed),
+          ctr('old-web', ServiceState.stopped),
+          _apache,
+        ]),
+        onOpenContainers: () => containersOpened++,
+      );
+      final tiles = tester.widgetList<ToolTile>(find.byType(ToolTile)).toList();
+      expect([for (final t in tiles) t.meta], [
+        'lamp-web · running',
+        'flappy · failed',
+        'stopped',
+        '2 containers',
+      ]);
+      expect(tiles.last.label, 'Stopped');
+      expect(tiles[1].status, HealthStatus.failed);
+      expect(find.text('web-apache · stopped'), findsNothing);
+
+      await tester.tap(find.text('Stopped'));
+      expect(containersOpened, 1);
+    });
+
+    testWidgets('only stopped containers: STACK shows the Stopped tile',
+        (tester) async {
+      await _pumpSection(
+        tester,
+        _detection(const [
+          DetectedService(
+            id: ServiceId.nginx,
+            state: ServiceState.stopped,
+            container: 'edge',
+          ),
+        ]),
+      );
+      expect(find.text('STACK'), findsOneWidget);
+      final tile = tester.widget<ToolTile>(find.byType(ToolTile));
+      expect(tile.label, 'Stopped');
+      expect(tile.meta, '1 container');
     });
 
     testWidgets('service without lens (postgres in M52) not shown',

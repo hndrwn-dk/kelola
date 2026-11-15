@@ -52,6 +52,7 @@ import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
 import 'package:kelola/domain/snippets/snippet.dart';
 import 'package:kelola/domain/snippets/snippet_scope.dart';
 import 'package:kelola/domain/tunnels/active_tunnel.dart';
+import 'package:kelola/domain/units/unit_list_view.dart';
 import 'package:kelola/presentation/widgets/confirm_host_action.dart';
 import 'package:kelola/presentation/widgets/confirm_remove_host.dart';
 import 'package:kelola/presentation/widgets/coreos_notice_sheet.dart';
@@ -483,7 +484,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
               ServiceRow(
                 risk: RiskLevel.read,
                 status: HealthStatus.failed,
-                name: '${dash.failedUnitCount} units failed',
+                name: failedUnitsLabel(dash.failedUnitCount),
                 meta: dash.failedUnitNames.isEmpty
                     ? 'open incident'
                     : dash.failedUnitNames.join(' · '),
@@ -639,6 +640,8 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
               onOpen: (service) => _open(
                 (id) => WebLensScreen(hostId: id, service: service),
               ),
+              onOpenContainers: () =>
+                  _open((id) => ContainersScreen(hostId: id)),
             ),
             const SizedBox(height: 14),
             Text(

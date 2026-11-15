@@ -6,6 +6,7 @@ import 'package:kelola/domain/journal/journal_entry.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/units/lockout.dart';
 import 'package:kelola/domain/units/service_unit.dart';
+import 'package:kelola/domain/units/unit_list_view.dart';
 
 enum IncidentObjectKind { unit, container, disk }
 
@@ -87,7 +88,7 @@ IncidentSheetView buildIncidentSheet({
     broken.add(
       IncidentObject(
         kind: IncidentObjectKind.unit,
-        name: '${host.failedUnitCount} units failed',
+        name: failedUnitsLabel(host.failedUnitCount!),
         summary: 'not in cache — look up',
       ),
     );

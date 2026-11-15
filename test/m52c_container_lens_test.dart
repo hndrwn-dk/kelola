@@ -330,7 +330,28 @@ void main() {
           l.sectionErrors[WebLensSection.dump],
           'Container is not running; config not read',
         );
+        // Shown once, under the band: VHOSTS does not repeat it.
+        expect(vhostSectionErrors(l), isEmpty);
       }
+    });
+
+    test('VHOSTS keeps errors that differ from the config test', () {
+      final l = parse('''
+---ACTIVE---
+|active
+---CONFTEST---
+@rc=0
+---DUMP---
+---CERTS---
+---ERRLOG---
+@read=ok
+---ACCESS---
+@read=ok
+''');
+      expect(vhostSectionErrors(l), [
+        'Could not read the config dump',
+        'Could not read certificates',
+      ]);
     });
 
     test('docker through sudo: state and logs, config explains the group', () {

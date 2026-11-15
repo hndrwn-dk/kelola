@@ -16,14 +16,25 @@ String stackTileMeta(DetectedService s) {
   return version.isEmpty ? s.state.name : '$version · ${s.state.name}';
 }
 
+/// M52c: a container service that gets no tile of its own: stopped (exited,
+/// created, paused, dead). Running and failed (restarting) containers keep
+/// theirs; host services always do.
+bool isCollapsedStackService(DetectedService s) =>
+    s.inContainer && s.state == ServiceState.stopped;
+
+/// Meta of the one tile that stands for the stopped containers.
+String stoppedContainersMeta(int n) => n == 1 ? '1 container' : '$n containers';
+
 /// M52 §3: the dashboard STACK section. One [ToolTile] per detected service
-/// that has a lens, 3 per row. Hidden when there is nothing to show.
+/// that has a lens, 3 per row. Stopped container services (M52c) share one
+/// "Stopped" tile that opens Containers. Hidden when there is nothing to show.
 class StackSection extends StatelessWidget {
   const StackSection({
     super.key,
     required this.detection,
     required this.now,
     required this.onOpen,
+    required this.onOpenContainers,
   });
 
   /// Last detection read (cached or fresh). Null: never read.
@@ -33,6 +44,9 @@ class StackSection extends StatelessWidget {
   final DateTime now;
   final void Function(DetectedService) onOpen;
 
+  /// The "Stopped" tile: opens the Containers screen.
+  final VoidCallback onOpenContainers;
+
   /// The 15-minute rule ([Host.attentionFreshFor]).
   static bool isStale(ServiceDetection d, DateTime now) =>
       now.toUtc().difference(d.readAt.toUtc()) > Host.attentionFreshFor;
@@ -40,20 +54,37 @@ class StackSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = detection;
-    final shown = [
+    final withLens = [
       if (d != null)
         for (final s in d.services)
           if (hasLens(s.id)) s,
     ];
-    if (d == null || shown.isEmpty) {
+    final stopped = withLens.where(isCollapsedStackService).length;
+    final tiles = <Widget>[
+      for (final s in withLens)
+        if (!isCollapsedStackService(s))
+          ToolTile(
+            label: descriptorFor(s.id).label,
+            meta: stackTileMeta(s),
+            status: s.state == ServiceState.failed ? HealthStatus.failed : null,
+            onTap: () => onOpen(s),
+          ),
+      if (stopped > 0)
+        ToolTile(
+          label: 'Stopped',
+          meta: stoppedContainersMeta(stopped),
+          onTap: onOpenContainers,
+        ),
+    ];
+    if (d == null || tiles.isEmpty) {
       return const SizedBox.shrink();
     }
     final c = context.kc;
     final label = KelolaType.mono(color: c.dim, size: 8.5, letterSpacing: 0.9);
     final stale = isStale(d, now);
     final rows = <Widget>[];
-    for (var i = 0; i < shown.length; i += 3) {
-      final chunk = shown.skip(i).take(3).toList();
+    for (var i = 0; i < tiles.length; i += 3) {
+      final chunk = tiles.skip(i).take(3).toList();
       if (rows.isNotEmpty) {
         rows.add(const SizedBox(height: 7));
       }
@@ -63,16 +94,7 @@ class StackSection extends StatelessWidget {
             for (var j = 0; j < 3; j++) ...[
               if (j > 0) const SizedBox(width: 7),
               Expanded(
-                child: j < chunk.length
-                    ? ToolTile(
-                        label: descriptorFor(chunk[j].id).label,
-                        meta: stackTileMeta(chunk[j]),
-                        status: chunk[j].state == ServiceState.failed
-                            ? HealthStatus.failed
-                            : null,
-                        onTap: () => onOpen(chunk[j]),
-                      )
-                    : const SizedBox.shrink(),
+                child: j < chunk.length ? chunk[j] : const SizedBox.shrink(),
               ),
             ],
           ],

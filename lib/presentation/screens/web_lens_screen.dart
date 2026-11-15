@@ -81,6 +81,20 @@ String vhostEmptyCopy(VhostFilter f) => switch (f) {
   VhostFilter.noTls => 'No vhosts without TLS.',
 };
 
+/// Errors shown under VHOSTS (dump, then certs), skipping any text already
+/// shown: a container lens that did not read the config (stopped, no Docker
+/// access, no shell) gives the same reason for the config test, the dump and
+/// the certs, and it is shown once, under the band.
+List<String> vhostSectionErrors(WebLens l) {
+  final shown = <String>{
+    ?l.sectionErrors[WebLensSection.configTest],
+  };
+  return [
+    for (final s in const [WebLensSection.dump, WebLensSection.certs])
+      if (l.sectionErrors[s] case final e? when shown.add(e)) e,
+  ];
+}
+
 /// Vhosts stat: `unknown` when the dump could not be read at all.
 String webVhostsValue(WebLens l) {
   if (l.vhosts.isEmpty && l.sectionErrors.containsKey(WebLensSection.dump)) {
@@ -1028,8 +1042,7 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     final shown = filterVhosts(l, _filter, now);
     return [
       Text('VHOSTS', style: _slabStyle(c)),
-      for (final s in const [WebLensSection.dump, WebLensSection.certs])
-        if (l.sectionErrors[s] != null) _sectionError(c, l.sectionErrors[s]!),
+      for (final e in vhostSectionErrors(l)) _sectionError(c, e),
       const SizedBox(height: 8),
       Wrap(
         spacing: 5,

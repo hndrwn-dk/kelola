@@ -170,4 +170,9 @@ void main() {
       'failed · exited',
     );
   });
+
+  test('failedUnitsLabel: singular and plural', () {
+    expect(failedUnitsLabel(1), '1 unit failed');
+    expect(failedUnitsLabel(3), '3 units failed');
+  });
 }
