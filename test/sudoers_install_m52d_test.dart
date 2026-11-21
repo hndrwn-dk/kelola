@@ -252,14 +252,14 @@ esac''');
       );
       final r = await run();
       expect(r.exitCode, 0, reason: '${r.stdout}${r.stderr}');
-      final result = SudoersInstallProbe(
-        spec: KelolaSudoersSpec(
-          user: user,
-          groups: const {},
-          commands: const ['/usr/sbin/reboot ""'],
-        ),
-        groupsLabel: 'x',
-      ).parse(r.stdout as String, r.stderr as String, r.exitCode);
+      // The folded lines follow the expected content; verify still passes.
+      final result = parseSudoersInstallOutput(
+        stdout: r.stdout as String,
+        stderr: r.stderr as String,
+        exitCode: r.exitCode,
+        expectedContent: content,
+      );
+      expect(result.ok, isTrue, reason: result.errorSummary);
       expect(
         result.unitsRetired,
         isFalse,
