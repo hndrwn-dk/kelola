@@ -281,14 +281,18 @@ void main() {
     }
   });
 
-  test('drop_caches hint cannot be made passwordless', () {
+  test('drop_caches hint is the one exact sysctl line, never a shell', () {
     final hint = kelolaSudoHint(
       user: 'hendra',
       context: const SudoHintContext.dropCaches(),
     );
     expectNoBareSudoersBinaries(hint.snippet);
-    expect(hint.snippet.toLowerCase(), contains('cannot be passwordless'));
-    expect(hint.snippet, isNot(contains('NOPASSWD:')));
+    expect(
+      hint.snippet,
+      contains('hendra ALL=(root) NOPASSWD: $kelolaDropCachesCommand\n'),
+    );
+    expect(hint.snippet, isNot(contains('sh -c')));
+    expect(hint.body, contains('Enable Kelola sudo'));
   });
 
   test('footer sudo sentence reuses the title and names mutate failure', () {

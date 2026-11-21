@@ -828,13 +828,13 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
               ServiceRow(
                 risk: RiskLevel.mutate,
                 name: 'Flush caches',
-                meta: 'mutate · sudo -n drop_caches',
+                meta: 'mutate · sudo -n sysctl',
                 onTap: () => _hostVerb(
                   host,
                   HostVerb.dropCaches,
                   title: 'Flush page cache?',
                   body:
-                      'Runs sync and writes 3 to drop_caches on ${host.alias}. Needs sudo -n.',
+                      'Runs sync, then sysctl vm.drop_caches=3 on ${host.alias}. Needs sudo -n.',
                   confirm: 'Flush',
                   risk: RiskLevel.mutate,
                 ),

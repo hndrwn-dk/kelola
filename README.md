@@ -68,7 +68,7 @@ One hardware key per phone, reused for every host. That is intentional.
 | Public key in `~/.ssh/authorized_keys` | One line from the enrollment screen |
 | A non-root sudoer | Kelola will not log in as `root` |
 | Passwordless sudo (optional) | Required for mutate actions. Kelola can set up scoped `NOPASSWD` rules in `/etc/sudoers.d/kelola` for you; it asks for the sudo password once for that and does not store it |
-| `systemd-journal` group (optional) | Sudo-free log reads, later milestone |
+| `systemd-journal` group (optional) | Sudo-free log reads. Enable Kelola sudo adds the login to it with the same password |
 
 From the phone, use the host's **LAN or public IP**. `10.0.2.2` is emulator-only.
 

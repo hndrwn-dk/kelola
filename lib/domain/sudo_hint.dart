@@ -36,7 +36,7 @@ enum SudoHintKind {
   firewall,
 
   /// M52 lens reads (config test, config dump, certificate and log reads).
-  /// Granted per lens in `/etc/sudoers.d/kelola-web`, never by Enable.
+  /// Granted in `/etc/sudoers.d/kelola-web` by the same Enable Kelola sudo tap.
   webServices,
 }
 
@@ -191,16 +191,11 @@ SudoHint kelolaSudoHint({
 }) {
   switch (context.kind) {
     case SudoHintKind.dropCaches:
-      return SudoHint(
-        body:
-            'This probe runs a shell (sudo -n sh -c). Passwordless access to a '
-            'shell is full root, so Kelola will not suggest a sudoers line. '
-            '$sudoNeedsNoSudoCopy',
-        snippet:
-            'This probe cannot be passwordless.\n'
-            'Passwordless access to a shell would be full root with no password.\n'
-            '# For other commands, use visudo so a syntax error cannot lock sudo:\n'
-            '# $visudoKelolaCommand\n',
+      // M52d: one exact sysctl line, never a shell.
+      return _binaryHint(
+        user: user,
+        spec: kelolaDropCachesCommand,
+        bodyLead: 'Flush caches',
       );
     case SudoHintKind.systemd:
       final unit = context.unit ?? 'UNIT.service';

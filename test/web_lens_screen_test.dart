@@ -23,6 +23,7 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/config_tested_reload_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
+import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
 import 'package:kelola/domain/probes/sudoers_install_probe.dart';
 import 'package:kelola/domain/sudo/sudoers_install_script.dart';
@@ -30,8 +31,8 @@ import 'package:kelola/domain/probes/web_lens_probe.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/service_detection.dart';
 import 'package:kelola/domain/services/web_lens.dart';
+import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo/sudo_flavor.dart';
-import 'package:kelola/domain/sudo/unit_sudoers_grant.dart';
 import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/screens/web_lens_screen.dart';
@@ -1319,6 +1320,85 @@ void main() {
         await dispose(tester);
       });
 
+      testWidgets(
+          'M52d: a journal that needs sudo: the tap adds the login to systemd-journal and logs in again',
+          (tester) async {
+        final denied = _facts().copyWith(journalReadable: false);
+        await repo.saveFacts(host.id, denied);
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        pool.journalGroup = JournalGroupOutcome.added;
+        pool.relearnedFacts = _facts();
+        await pumpLens(tester);
+        await openOneTap(tester);
+        expect(
+          find.textContaining('usermod -aG $kelolaJournalGroup hendra'),
+          findsOneWidget,
+        );
+        // No journalctl rule: the group replaces it.
+        expect(find.textContaining('journalctl'), findsNothing);
+        await tester.tap(find.widgetWithText(FilledButton, 'Review and apply'));
+        await frames(tester, 8);
+        expect(
+          find.textContaining('Adds hendra to the $kelolaJournalGroup group'),
+          findsOneWidget,
+        );
+        await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+        await frames(tester, 8);
+        await enterPassword(tester);
+        await frames(tester, 40);
+        final install = pool.probes.whereType<SudoersInstallProbe>().single;
+        expect(install.journalGroup, isTrue);
+        expect(install.user, 'hendra');
+        expect(pool.execDrops, [host.id]);
+        // Tunnels and the terminal keep their connections.
+        expect(pool.disconnects, isEmpty);
+        final saved = await repo.facts(host.id);
+        expect(saved!.effectiveJournalAccess, JournalAccess.plain);
+        await dispose(tester);
+      });
+
+      testWidgets('M52d: a failed group add says what to run, in mono',
+          (tester) async {
+        await repo.saveFacts(
+          host.id,
+          _facts().copyWith(journalReadable: false),
+        );
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        pool.journalGroup = JournalGroupOutcome.failed;
+        await pumpLens(tester);
+        await openOneTap(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Review and apply'));
+        await frames(tester, 8);
+        await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+        await frames(tester, 8);
+        await enterPassword(tester);
+        await frames(tester, 40);
+        expect(pool.execDrops, isEmpty);
+        expect(
+          find.textContaining(
+            'could not add hendra to $kelolaJournalGroup',
+            findRichText: true,
+          ),
+          findsOneWidget,
+        );
+        await dispose(tester);
+      });
+
+      testWidgets('M52d: a journal already readable asks for no group',
+          (tester) async {
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        await pumpLens(tester);
+        await openOneTap(tester);
+        expect(find.textContaining('usermod'), findsNothing);
+        await dispose(tester);
+      });
+
       testWidgets('loaded lens with unreadable certs: one line per safe cert',
           (tester) async {
         final at = DateTime.now().toUtc();
@@ -1482,7 +1562,7 @@ void main() {
       });
 
       testWidgets(
-          'reload SudoRequired on reload leg offers UnitSudoersGrant.tryCreate(verb: reload) on systemd',
+          'reload SudoRequired on a host without regex: the one tap adds exact lines for the unit',
           (tester) async {
         pool.lens = _healthyLens();
         pool.reloadStdout = '@init=systemd\n---TEST---\n@rc=0\n'
@@ -1493,26 +1573,40 @@ void main() {
         expect(find.byType(ActionableError), findsOneWidget);
         expect(enableRow(), findsNothing);
 
+        // M52d: no per-action grant; the full tap, same as every hint.
         await tester.tap(enableButton());
         await frames(tester, 12);
-        final grant = UnitSudoersGrant.tryCreate(
-          user: 'hendra',
-          verb: 'reload',
-          unit: 'nginx.service',
-        )!;
-        expect(find.text('Allow reload nginx.service?'), findsOneWidget);
+        expect(find.text('Allow reload nginx.service?'), findsNothing);
+        const reload =
+            'hendra ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx.service';
         expect(
-          find.text('$kelolaUnitSudoersPath\n${grant.line}'),
+          find.descendant(
+            of: find.byType(KelolaSheet),
+            matching: find.textContaining(reload),
+          ),
           findsOneWidget,
         );
-        await tester.tap(find.widgetWithText(FilledButton, 'Add rule'));
+        expect(
+          find.textContaining('lines from $kelolaUnitSudoersPath'),
+          findsOneWidget,
+        );
+        await tester.tap(find.widgetWithText(FilledButton, 'Review and apply'));
+        await frames(tester, 8);
+        await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
         await frames(tester, 8);
         await enterPassword(tester);
-        final probe = pool.probes.whereType<UnitSudoersGrantProbe>().single;
-        expect(probe.grant.line, grant.line);
-        expect(pool.probes.whereType<WebSudoersGrantProbe>(), isEmpty);
-        expect(find.byType(ActionableError), findsNothing);
-        expect(reloadWidget(tester).onTap, isNotNull);
+        await frames(tester, 40);
+        final probe = pool.probes.whereType<SudoersInstallProbe>().single;
+        expect(
+          probe.spec.commands,
+          containsAll([
+            for (final verb in kelolaUnitLifecycleVerbs)
+              '/usr/bin/systemctl $verb nginx.service',
+          ]),
+        );
+        expect(probe.retireUnits, isTrue);
+        expect(probe.user, 'hendra');
+        expect(pool.stdin, utf8.encode('s3cret\n'));
         await dispose(tester);
       });
 
@@ -2035,15 +2129,26 @@ class _Pool extends SshSessionPool {
         out == null ? 0 : grantExit,
       );
     }
-    if (probe is UnitSudoersGrantProbe) {
-      stdin = stdinBytes;
-      return null as T;
-    }
     if (probe is SudoersInstallProbe) {
       stdin = stdinBytes;
-      return const SudoersInstallResult(ok: true) as T;
+      return SudoersInstallResult(ok: true, journalGroup: journalGroup) as T;
+    }
+    if (probe is HostFactsProbe) {
+      return relearnedFacts! as T;
     }
     throw StateError('unexpected probe ${probe.runtimeType}');
+  }
+
+  /// M52d: how the install's systemd-journal step ends.
+  JournalGroupOutcome journalGroup = JournalGroupOutcome.notAsked;
+
+  /// What a facts read returns after the login joined the group.
+  HostFacts? relearnedFacts;
+  final execDrops = <String>[];
+
+  @override
+  Future<void> dropExecClients(String hostId) async {
+    execDrops.add(hostId);
   }
 
   @override

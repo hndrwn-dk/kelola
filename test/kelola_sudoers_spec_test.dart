@@ -294,6 +294,7 @@ void main() {
           KelolaSudoersGroup.packages,
           KelolaSudoersGroup.firewall,
           KelolaSudoersGroup.hostPower,
+          KelolaSudoersGroup.caches,
           KelolaSudoersGroup.services,
           KelolaSudoersGroup.processes,
         },
@@ -317,6 +318,7 @@ void main() {
             KelolaSudoersGroup.packages,
             KelolaSudoersGroup.firewall,
             KelolaSudoersGroup.hostPower,
+            KelolaSudoersGroup.caches,
           },
         );
       });
@@ -760,6 +762,201 @@ User u may run the following commands on h:
     });
   });
 
+  group('M52d one tap', () {
+    test('Flush caches is one exact sysctl line on every sudo', () {
+      for (final sudo in allFlavors.values) {
+        final spec = fullSpec(facts(), sudo);
+        expect(spec.groups, contains(KelolaSudoersGroup.caches));
+        expect(spec.commands, contains(kelolaDropCachesCommand));
+        expect(
+          spec.commands.where((c) => c.startsWith('/usr/sbin/sysctl')),
+          [kelolaDropCachesCommand],
+        );
+      }
+      final probe =
+          const HostActionProbe(HostVerb.dropCaches).command(facts());
+      expect(probe, isNot(contains('sh -c')));
+      expect(probe, startsWith('sync && '));
+      final spec = fullSpec(facts(), regexSudo);
+      for (final cmd in sudoCommandsIn(probe)) {
+        expect(sudoAllows(spec, cmd), isTrue, reason: cmd);
+      }
+      // Other sysctl writes are not allowed.
+      for (final cmd in [
+        '/usr/sbin/sysctl -w vm.drop_caches=1',
+        '/usr/sbin/sysctl -w kernel.modprobe=/tmp/x',
+        '/usr/sbin/sysctl -p /tmp/evil.conf',
+        '/usr/sbin/sysctl',
+      ]) {
+        expect(sudoAllows(spec, cmd), isFalse, reason: cmd);
+      }
+    });
+
+    test('journald hosts get no log rule; syslog hosts get exact reads', () {
+      final journald = fullSpec(facts(), regexSudo);
+      expect(journald.groups, isNot(contains(KelolaSudoersGroup.logs)));
+      expect(
+        journald.commands.where(
+          (c) => c.contains('journalctl') || c.startsWith('/usr/bin/tail'),
+        ),
+        isEmpty,
+      );
+
+      final syslogFacts = facts().copyWith(hasJournald: false);
+      for (final sudo in allFlavors.values) {
+        final spec = fullSpec(syslogFacts, sudo);
+        expect(spec.groups, contains(KelolaSudoersGroup.logs));
+        for (final path in ['/var/log/syslog', '/var/log/messages']) {
+          for (final cmd in [
+            '/usr/bin/test -r $path',
+            '/usr/bin/tail -n 20 $path',
+            '/usr/bin/tail -n 50 $path',
+            '/usr/bin/tail -n 200 $path',
+            '/usr/bin/tail -n 0 -F $path',
+          ]) {
+            expect(sudoAllows(spec, cmd), isTrue, reason: cmd);
+          }
+        }
+        for (final cmd in [
+          '/usr/bin/tail -n 20 /etc/shadow',
+          '/usr/bin/tail -n 20 /var/log/syslog /etc/shadow',
+          '/usr/bin/tail -F /var/log/syslog',
+          '/usr/bin/test -r /etc/shadow',
+          '/usr/bin/tail',
+        ]) {
+          expect(sudoAllows(spec, cmd), isFalse, reason: cmd);
+        }
+        // Every rule is exact: no regex, no bare binary.
+        for (final rule in spec.commands.where(
+          (c) => c.startsWith('/usr/bin/tail') || c.startsWith('/usr/bin/test'),
+        )) {
+          expect(rule, isNot(contains('^')));
+          expect(rule, contains(' '));
+        }
+      }
+    });
+
+    test('the journal screens read only the counts the tail lines allow', () {
+      expect(kelolaSyslogTailLimits, containsAll([20, 50, 200]));
+      final source = [
+        'lib/presentation/widgets/diagnostic_pack_sheet.dart',
+        'lib/presentation/widgets/incident_sheet.dart',
+        'lib/presentation/screens/journal_screen.dart',
+      ].map((p) => File(p).readAsStringSync()).join('\n');
+      for (final m in RegExp(r'JournalProbe\([^)]*limit: (\d+)')
+          .allMatches(source)) {
+        expect(
+          kelolaSyslogTailLimits,
+          contains(int.parse(m.group(1)!)),
+          reason: m.group(0),
+        );
+      }
+    });
+
+    test('a host without regex gets exact lines for the named units only', () {
+      for (final sudo in noRegexFlavors.values) {
+        final spec = buildKelolaSudoersSpec(
+          user: 'hendr',
+          facts: facts(),
+          groups: defaultKelolaSudoersGroups(
+            facts(),
+            sudo: sudo,
+            units: const ['nginx.service', 'getty@tty1.service'],
+          ),
+          sudo: sudo,
+          units: const ['nginx.service', 'getty@tty1.service'],
+        );
+        expect(spec.groups, contains(KelolaSudoersGroup.services));
+        for (final unit in ['nginx.service', 'getty@tty1.service']) {
+          for (final verb in kelolaUnitLifecycleVerbs) {
+            final cmd = '/usr/bin/systemctl $verb $unit';
+            expect(spec.commands, contains(cmd));
+            expect(sudoAllows(spec, cmd), isTrue, reason: cmd);
+          }
+        }
+        for (final cmd in [
+          '/usr/bin/systemctl restart sshd.service',
+          '/usr/bin/systemctl enable nginx.service',
+          '/usr/bin/systemctl link nginx.service',
+          '/usr/bin/systemctl restart nginx.service sshd.service',
+          '/usr/bin/systemctl',
+        ]) {
+          expect(sudoAllows(spec, cmd), isFalse, reason: cmd);
+        }
+      }
+    });
+
+    test('unit names from the host that are unsafe are dropped', () {
+      final lines = exactUnitCommands(InitSystem.systemd, const [
+        'nginx.service',
+        'nginx.service',
+        r'foo\x2dbar.service',
+        '--root=/tmp',
+        'a b.service',
+        'x,y.service',
+        'evil\n.service',
+        '*',
+        'dbus-org.freedesktop:1.service',
+      ]);
+      expect(lines, [
+        for (final v in kelolaUnitLifecycleVerbs)
+          '/usr/bin/systemctl $v nginx.service',
+        for (final v in kelolaUnitLifecycleVerbs)
+          r'/usr/bin/systemctl ' '$v' r' dbus-org.freedesktop\:1.service',
+      ]);
+      expect(exactUnitCommands(InitSystem.openrc, const ['nginx']), isEmpty);
+    });
+
+    test('a host with regex keeps the one pattern and no unit lines', () {
+      final spec = buildKelolaSudoersSpec(
+        user: 'hendr',
+        facts: facts(),
+        groups: defaultKelolaSudoersGroups(facts(), sudo: regexSudo),
+        sudo: regexSudo,
+        units: const ['nginx.service'],
+      );
+      expect(
+        spec.commands.where((c) => c.startsWith('/usr/bin/systemctl')),
+        hasLength(1),
+      );
+    });
+
+    test('a host without regex and no units still has no Services group', () {
+      for (final sudo in noRegexFlavors.values) {
+        expect(
+          defaultKelolaSudoersGroups(facts(), sudo: sudo),
+          isNot(contains(KelolaSudoersGroup.services)),
+        );
+      }
+    });
+
+    test('installed Containers, Flush caches and Logs rules are current', () {
+      final f = facts().copyWith(hasJournald: false, runtimes: ['docker']);
+      for (final sudo in allFlavors.values) {
+        final spec = fullSpec(f, sudo);
+        expect(
+          kelolaSudoRulesOutdated(listed: spec.commands, spec: spec),
+          isFalse,
+          reason: '$sudo',
+        );
+        for (final missing in [
+          kelolaDropCachesCommand,
+          '/usr/bin/docker info',
+          '/usr/bin/tail -n 0 -F /var/log/syslog',
+        ]) {
+          expect(
+            kelolaSudoRulesOutdated(
+              listed: spec.commands.where((c) => c != missing).toList(),
+              spec: spec,
+            ),
+            isTrue,
+            reason: missing,
+          );
+        }
+      }
+    });
+  });
+
   group('real visudo accepts every generated file', () {
     final ciRequired = Platform.environment['CI'] == 'true';
 
@@ -806,6 +1003,26 @@ User u may run the following commands on h:
               );
             }
           }
+          // M52d: syslog reads, Docker, and exact unit lines with a `:`.
+          const units = ['nginx.service', 'dbus-org.freedesktop:1.service'];
+          final f = facts().copyWith(hasJournald: false, runtimes: ['docker']);
+          final file = File('${dir.path}/m52d')
+            ..writeAsStringSync(
+              buildKelolaSudoersSpec(
+                user: 'hendr',
+                facts: f,
+                groups: defaultKelolaSudoersGroups(f, sudo: sudo, units: units),
+                sudo: sudo,
+                units: units,
+              ).content,
+            );
+          final result = Process.runSync(visudo, ['-c', '-f', file.path]);
+          expect(
+            result.exitCode,
+            0,
+            reason: '$name m52d: ${result.stdout}${result.stderr}\n'
+                '${file.readAsStringSync()}',
+          );
         });
       });
     }
