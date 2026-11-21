@@ -1,10 +1,13 @@
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/k8s/custom_columns.dart';
 import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_parser.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
+
+const _list = 'get deploy,sts,ds,job,cronjob,pod --all-namespaces';
 
 class WorkloadListProbe extends Probe<WorkloadInventory> {
   const WorkloadListProbe();
@@ -17,7 +20,8 @@ class WorkloadListProbe extends Probe<WorkloadInventory> {
     if (kubectlFlavor(facts) == KubectlFlavor.none) {
       return 'echo ---NO_KUBECTL---';
     }
-    return 'LC_ALL=C ${kubectlTry(facts, 'get deploy,sts,ds,job,cronjob,pod -A -o json')}';
+    // M52d: through sudo, names and counts only, never the pod template.
+    return 'LC_ALL=C ${kubectlTry(facts, '$_list --output=json', sudoArgs: '$_list ${shellSingleQuote(kWorkloadSudoOutput)}')}';
   }
 
   @override
@@ -53,7 +57,7 @@ class WorkloadDescribeProbe extends Probe<String> {
   String command(HostFacts facts) {
     final ns = shellSingleQuote(namespace);
     final res = shellSingleQuote('${kind.resource}/$name');
-    return 'LC_ALL=C ${kubectlTry(facts, '-n $ns describe $res')}';
+    return 'LC_ALL=C ${kubectlTry(facts, '--namespace=$ns describe $res')}';
   }
 
   @override
@@ -84,7 +88,7 @@ class WorkloadEventsProbe extends Probe<List<K8sEvent>> {
   String command(HostFacts facts) {
     final ns = shellSingleQuote(namespace);
     final sel = shellSingleQuote('involvedObject.name=$name');
-    return 'LC_ALL=C ${kubectlTry(facts, '-n $ns get events --field-selector $sel -o json')}';
+    return 'LC_ALL=C ${kubectlTry(facts, '--namespace=$ns get events --field-selector=$sel --output=json')}';
   }
 
   @override
@@ -112,7 +116,7 @@ class WorkloadTopProbe extends Probe<List<K8sTopRow>> {
   String command(HostFacts facts) {
     final ns = shellSingleQuote(namespace);
     final extra = pod == null ? '' : ' ${shellSingleQuote(pod!)}';
-    return 'LC_ALL=C ${kubectlTry(facts, '-n $ns top pod$extra --no-headers')}';
+    return 'LC_ALL=C ${kubectlTry(facts, '--namespace=$ns top pod$extra --no-headers')}';
   }
 
   @override

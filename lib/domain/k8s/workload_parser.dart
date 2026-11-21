@@ -1,12 +1,89 @@
 import 'dart:convert';
 
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/k8s/custom_columns.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_config.dart';
+
+/// Whether [stdout] is a [kWorkloadSudoColumns] table.
+bool isWorkloadSudoTable(String stdout) =>
+    hasCustomColumnsHeader(stdout, kWorkloadSudoColumns);
+
+/// One [kWorkloadSudoColumns] row as the JSON shape [_item] reads. The
+/// parser only counts containers and takes the first reason, so a reason
+/// may sit on any container.
+Map<String, dynamic> _rowAsJson(Map<String, String> r) {
+  List<String> list(String k) =>
+      r[k]!.isEmpty ? const [] : r[k]!.split(',');
+  int? n(String k) => int.tryParse(r[k]!);
+  List<Map<String, dynamic>> statuses({
+    required List<String> counts,
+    List<String> ready = const [],
+    List<String> waiting = const [],
+    List<String> terminated = const [],
+  }) {
+    final len = [
+      counts.length,
+      ready.length,
+      waiting.length,
+      terminated.length,
+    ].reduce((a, b) => a > b ? a : b);
+    return [
+      for (var i = 0; i < len; i++)
+        {
+          if (i < ready.length) 'ready': ready[i] == 'true',
+          if (i < counts.length) 'restartCount': int.tryParse(counts[i]) ?? 0,
+          if (i < waiting.length)
+            'state': {
+              'waiting': {'reason': waiting[i]},
+            },
+          if (i < terminated.length)
+            'lastState': {
+              'terminated': {'reason': terminated[i]},
+            },
+        },
+    ];
+  }
+
+  return {
+    'kind': r['A'],
+    'metadata': {'namespace': r['B'], 'name': r['C']},
+    'spec': {'replicas': n('D'), 'completions': n('I')}
+      ..removeWhere((_, v) => v == null),
+    'status': <String, dynamic>{
+      'replicas': n('E'),
+      'readyReplicas': n('F'),
+      'desiredNumberScheduled': n('G'),
+      'numberReady': n('H'),
+      'succeeded': n('J'),
+      'failed': n('K'),
+      if (r['L']!.isNotEmpty) 'active': list('L'),
+      if (r['M']!.isNotEmpty) 'phase': r['M'],
+      'containerStatuses': statuses(
+        counts: list('O'),
+        ready: list('N'),
+        waiting: list('P'),
+        terminated: list('Q'),
+      ),
+      'initContainerStatuses': statuses(
+        counts: list('R'),
+        waiting: list('S'),
+      ),
+    }..removeWhere((_, v) => v == null),
+  };
+}
 
 WorkloadInventory parseWorkloadList(String stdout) {
   if (stdout.contains('---NO_KUBECTL---')) {
     return const WorkloadInventory(rows: [], missingKubectl: true);
+  }
+  if (isWorkloadSudoTable(stdout)) {
+    return WorkloadInventory(
+      rows: [
+        for (final r in parseCustomColumns(stdout, kWorkloadSudoColumns))
+          ?_item(_rowAsJson(r)),
+      ],
+    );
   }
   final decoded = _jsonMap(stdout);
   if (decoded == null) {

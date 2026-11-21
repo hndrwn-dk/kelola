@@ -39,7 +39,9 @@ class _Sandbox {
 /// Fake kubectl. Reaches the API only as [reachesAs], and every exec fails.
 String _kubectl(_Sandbox box, {required String reachesAs}) => '''
 who=plain; [ -n "\$FAKE_SUDO" ] && who=sudo
-if [ "\$1" = get ]; then
+# M52d: sudo calls lead with a no-op option; the verb follows it.
+verb=\$1; [ "\$verb" = $kSudoKubectlLead ] && verb=\$2
+if [ "\$verb" = get ]; then
   [ "\$who" = "$reachesAs" ] && exit 0
   echo "\$who: connection refused" >&2
   exit 1
@@ -81,7 +83,7 @@ void main() {
       box.script('sudo', _sudo(allowed: true));
       final r = await box.run(kubectlOnce(_facts('kubectl'), _exec));
       expect(box.calls, hasLength(1));
-      expect(box.calls.single, startsWith('sudo '));
+      expect(box.calls.single, startsWith('sudo $kSudoKubectlLead '));
       expect(r.exitCode, 127);
     });
 
@@ -103,7 +105,7 @@ void main() {
       box.script('sudo', _sudo(allowed: true));
       final r = await box.run(kubectlOnce(_facts('k3s'), _exec));
       expect(box.calls, hasLength(1));
-      expect(box.calls.single, startsWith('sudo '));
+      expect(box.calls.single, startsWith('sudo $kSudoKubectlLead '));
       expect(r.exitCode, 127);
     });
 

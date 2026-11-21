@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:kelola/domain/containers/container_row.dart';
 import 'package:kelola/domain/containers/docker_ps_parser.dart';
 import 'package:kelola/domain/containers/podman_ps_parser.dart';
+import 'package:kelola/domain/k8s/custom_columns.dart';
 
 class ContainerListParser {
   const ContainerListParser();
@@ -101,7 +102,15 @@ class ContainerListParser {
       'oc' => 'oc',
       _ => 'k8s',
     };
-    for (final line in raw.split('\n')) {
+    // M52d: through sudo, a custom-columns table instead of the TSV. The
+    // table has a header line; the TSV never does.
+    final lines = isPodSudoTable(raw)
+        ? [
+            for (final r in parseCustomColumns(raw, kPodSudoColumns))
+              [for (final c in kPodSudoColumns) r[c.$1]].join('\t'),
+          ]
+        : raw.split('\n');
+    for (final line in lines) {
       final parts = line.trim().split('\t');
       if (parts.length < 3) {
         continue;
@@ -190,3 +199,7 @@ class ContainerListParser {
     return '';
   }
 }
+
+/// Whether [raw] holds the [kPodSudoColumns] header.
+bool isPodSudoTable(String raw) =>
+    hasCustomColumnsHeader(raw, kPodSudoColumns);
