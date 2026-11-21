@@ -20,7 +20,9 @@ class HostActionProbe extends Probe<String> {
       case HostVerb.poweroff:
         return 'sudo -n /usr/sbin/poweroff';
       case HostVerb.dropCaches:
-        return "sudo -n sh -c ${shellSingleQuote('sync; echo 3 > /proc/sys/vm/drop_caches')}";
+        // M52d: `sync` needs no root, and the write is one exact sysctl
+        // line Enable Kelola sudo can allow. Never `sudo sh -c`.
+        return 'sync && sudo -n /usr/sbin/sysctl -w vm.drop_caches=3';
     }
   }
 

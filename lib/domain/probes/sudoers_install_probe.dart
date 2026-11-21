@@ -5,28 +5,45 @@ import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo/sudoers_install_script.dart';
-import 'package:kelola/domain/sudo/unit_sudoers_grant.dart';
 import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 
 class SudoersInstallProbe extends Probe<SudoersInstallResult> {
   const SudoersInstallProbe({
     required this.spec,
     required this.groupsLabel,
+    this.user,
+    this.retireUnits = false,
+    this.journalGroup = false,
   });
 
   final KelolaSudoersSpec spec;
   final String groupsLabel;
+
+  /// M52d: the login that [retireUnits] and [journalGroup] act for.
+  final String? user;
+
+  /// Fold this login's `kelola-units` lines into the file and remove it.
+  final bool retireUnits;
+
+  /// Add this login to `systemd-journal` so logs read without sudo.
+  final bool journalGroup;
 
   @override
   String get auditTitle => 'Installed $kelolaSudoersPath ($groupsLabel)';
 
   @override
   String auditCommand(HostFacts facts) =>
-      'kelola-sudoers-install $kelolaSudoersPath ${spec.contentHash}';
+      'kelola-sudoers-install $kelolaSudoersPath ${spec.contentHash}'
+      '${retireUnits ? ' retire=$kelolaUnitSudoersPath' : ''}'
+      '${journalGroup ? ' group=$kelolaJournalGroup' : ''}';
 
   @override
-  String command(HostFacts facts) =>
-      buildSudoersInstallScript(content: spec.content);
+  String command(HostFacts facts) => buildSudoersInstallScript(
+    content: spec.content,
+    user: user,
+    retireUnits: retireUnits,
+    journalGroup: journalGroup,
+  );
 
   @override
   SudoersInstallResult parse(String stdout, String stderr, int exitCode) {
@@ -37,47 +54,9 @@ class SudoersInstallProbe extends Probe<SudoersInstallResult> {
       expectedContent: spec.content,
     );
     if (!result.ok) {
-      throw KelolaException(
-        result.errorSummary ?? 'sudoers install failed',
-      );
+      throw KelolaException(result.errorSummary ?? 'sudoers install failed');
     }
     return result;
-  }
-
-  @override
-  bool get needsSudo => true;
-
-  @override
-  RiskLevel get risk => RiskLevel.mutate;
-
-  @override
-  Duration get timeout => const Duration(seconds: 45);
-}
-
-/// Adds one service action to [kelolaUnitSudoersPath]. The sudo password
-/// arrives on stdin only.
-class UnitSudoersGrantProbe extends Probe<void> {
-  const UnitSudoersGrantProbe(this.grant);
-
-  final UnitSudoersGrant grant;
-
-  @override
-  String get auditTitle => 'Allowed ${grant.action} without a password';
-
-  @override
-  String auditCommand(HostFacts facts) =>
-      'kelola-sudoers-unit-grant $kelolaUnitSudoersPath ${grant.lineHash}';
-
-  @override
-  String command(HostFacts facts) => buildUnitGrantScript(grant);
-
-  @override
-  void parse(String stdout, String stderr, int exitCode) {
-    if (exitCode == 0 && stdout.contains(unitGrantOkMarker)) {
-      return;
-    }
-    final err = stderr.trim();
-    throw KelolaException(err.isEmpty ? 'Could not add the sudo rule' : err);
   }
 
   @override

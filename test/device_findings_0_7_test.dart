@@ -70,7 +70,13 @@ void main() {
     final src = File(
       'lib/presentation/widgets/enable_kelola_sudo_flow.dart',
     ).readAsStringSync();
-    expect(RegExp('title: _sudoPasswordTitle').allMatches(src).length, 2);
+    // Every password sheet in the flow asks for the sudo password.
+    final sheets = RegExp('showPasswordEntrySheet\\(').allMatches(src).length;
+    expect(sheets, greaterThan(0));
+    expect(
+      RegExp('title: _sudoPasswordTitle').allMatches(src).length,
+      sheets,
+    );
   });
 
   test('a successful key install is a finished audit row', () async {

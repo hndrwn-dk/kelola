@@ -11,7 +11,6 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
-import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
 import 'package:kelola/domain/probes/sudoers_install_probe.dart';
 import 'package:kelola/domain/probes/web_lens_probe.dart';
@@ -20,9 +19,9 @@ import 'package:kelola/domain/services/service_detection.dart';
 import 'package:kelola/domain/services/web_lens.dart';
 import 'package:kelola/presentation/screens/web_lens_screen.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
-import 'package:kelola/domain/sudo/unit_sudoers_grant.dart';
 import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/sudo/sudo_flavor.dart';
+import 'package:kelola/domain/sudo/sudoers_install_script.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/enrollment/password_key_install_flow.dart';
 import 'package:kelola/presentation/host_session.dart';
@@ -40,6 +39,8 @@ String kelolaSudoersGroupLabel(KelolaSudoersGroup g) {
     KelolaSudoersGroup.services => 'Services',
     KelolaSudoersGroup.processes => 'Processes',
     KelolaSudoersGroup.containers => 'Containers',
+    KelolaSudoersGroup.caches => 'Flush caches',
+    KelolaSudoersGroup.logs => 'Logs',
   };
 }
 
@@ -53,12 +54,13 @@ String kelolaSudoersGroupsLabel(Set<KelolaSudoersGroup> groups) {
 /// Guided install of [kelolaSudoersPath]. Returns true on verified install.
 ///
 /// Always installs the full set available for [facts] (Packages, Firewall,
-/// Host power, Services, Processes, Containers when present). No per-group
-/// picker.
+/// Host power, Flush caches, Services, Processes, Containers, Logs when
+/// present). No per-group picker. In the same tap, with the same password:
+/// the web lens lines (M52c), the login joins `systemd-journal` (M52d), and
+/// old `kelola-units` lines move into the main file (M52d).
 ///
-/// [hint] is the failure that led here. On a host without regex rules the full
-/// set cannot cover a service action, so a service [hint] offers that one
-/// action instead.
+/// [hint] is the failure that led here. On a host without regex rules a
+/// service [hint]'s unit gets exact lines with the STACK services.
 Future<bool> runEnableKelolaSudoFlow({
   required BuildContext context,
   required WidgetRef ref,
@@ -113,31 +115,33 @@ Future<bool> runEnableKelolaSudoFlow({
     return false;
   }
 
-  final grant = hint == null ||
-          sudo.supportsArgRegex ||
-          resolved.init != InitSystem.systemd
-      ? null
-      : UnitSudoersGrant.fromHint(hint, host.username);
-  if (grant != null) {
-    return _runUnitGrantFlow(
-      context: context,
-      ref: ref,
-      host: host,
-      facts: resolved,
-      grant: grant,
-    );
-  }
-
-  final groups = defaultKelolaSudoersGroups(resolved, sudo: sudo);
-  if (groups.isEmpty) {
-    return false;
-  }
-  // One tap covers the web lenses too (M52c): their exact read lines go to
-  // kelola-web with the same password, through the same host-side checks.
-  final webServices = await _hostWebLensServices(ref, host, webService);
+  final cached = await _cachedServices(ref, host);
   if (!context.mounted) {
     return false;
   }
+  // M52d: a host whose sudo has no regex gets exact lifecycle lines for the
+  // STACK services and the unit that asked, in the same file. The old
+  // per-action kelola-units grant is folded in and retired.
+  final units = <String>[
+    if (hint?.kind == SudoHintKind.systemd && hint?.unit != null) hint!.unit!,
+    for (final s in [?webService, ...cached])
+      if (!s.inContainer && s.unit != null) s.unit!,
+  ];
+  final groups = defaultKelolaSudoersGroups(resolved, sudo: sudo, units: units);
+  if (groups.isEmpty) {
+    return false;
+  }
+  final login = host.username;
+  final retireUnits =
+      resolved.init == InitSystem.systemd && isSudoersSafeLogin(login);
+  // M52d: journal reads use the systemd-journal group, never a sudo rule.
+  final journalGroup =
+      resolved.hasJournald &&
+      resolved.effectiveJournalAccess != JournalAccess.plain &&
+      isSudoersSafeLogin(login);
+  // One tap covers the web lenses too (M52c): their exact read lines go to
+  // kelola-web with the same password, through the same host-side checks.
+  final webServices = _hostWebLensServices(cached, webService);
   final webLabel = webServices.isEmpty
       ? ''
       : ' Also adds exact read-only lines for the '
@@ -163,6 +167,9 @@ Future<bool> runEnableKelolaSudoFlow({
       groups: groups,
       sudo: sudo,
       fileExists: fileExists,
+      units: units,
+      retireUnits: retireUnits,
+      journalGroup: journalGroup,
       webLines: [for (final s in webServices) ...?previewed[s.id]],
     ),
   );
@@ -175,7 +182,16 @@ Future<bool> runEnableKelolaSudoFlow({
     facts: resolved,
     groups: groups,
     sudo: sudo,
+    units: units,
   );
+  final extrasLabel = [
+    if (journalGroup)
+      ' Adds $login to the $kelolaJournalGroup group so logs read without '
+          'sudo, from the next connection.',
+    if (retireUnits)
+      ' Moves this login\'s service lines from $kelolaUnitSudoersPath, if '
+          'any, into this file.',
+  ].join();
 
   final confirmed = await showModalBottomSheet<bool>(
     context: context,
@@ -199,7 +215,7 @@ Future<bool> runEnableKelolaSudoFlow({
               const SizedBox(height: 8),
               Text(
                 'Mode $kelolaSudoersMode. Includes '
-                '${kelolaSudoersGroupsLabel(groups)}.$webLabel '
+                '${kelolaSudoersGroupsLabel(groups)}.$webLabel$extrasLabel '
                 'Kelola will ask for your sudo password once, validate with '
                 'visudo, then discard the password. Daily probes stay '
                 'passwordless (sudo -n).',
@@ -261,16 +277,29 @@ Future<bool> runEnableKelolaSudoFlow({
 
     final groupsLabel = kelolaSudoersGroupsLabel(groups);
     try {
-      await runHostProbe(
+      final installed = await runHostProbe(
         ref: ref,
         context: context,
         host: host,
         facts: resolved,
-        probe: SudoersInstallProbe(spec: spec, groupsLabel: groupsLabel),
+        probe: SudoersInstallProbe(
+          spec: spec,
+          groupsLabel: groupsLabel,
+          user: login,
+          retireUnits: retireUnits,
+          journalGroup: journalGroup,
+        ),
         stdinBytes: utf8.encode('$pass\n'),
       );
-      await ref.read(hostRepositoryProvider).setSudoNeedsPassword(host.id, false);
-      final notes = <GrantNote>[];
+      await ref
+          .read(hostRepositoryProvider)
+          .setSudoNeedsPassword(host.id, false);
+      final notes = <GrantNote>[
+        ...journalGroupNotes(installed.journalGroup, login),
+      ];
+      if (installed.journalGroup == JournalGroupOutcome.added) {
+        await _relearnJournalAccess(ref, host);
+      }
       for (final service in webServices) {
         if (!context.mounted) break;
         notes.addAll(
@@ -292,20 +321,22 @@ Future<bool> runEnableKelolaSudoFlow({
       }
       if (notes.isNotEmpty && context.mounted) {
         // Not awaited: the caller reads again behind it.
-        unawaited(showModalBottomSheet<void>(
-          context: context,
-          backgroundColor: Colors.transparent,
-          builder: (ctx) => KelolaSheet(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 20, 14, 14),
-              child: grantNotesText(
-                ctx,
-                notes: notes,
-                style: KelolaType.body(color: ctx.kc.muted, size: 13),
+        unawaited(
+          showModalBottomSheet<void>(
+            context: context,
+            backgroundColor: Colors.transparent,
+            builder: (ctx) => KelolaSheet(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 20, 14, 14),
+                child: grantNotesText(
+                  ctx,
+                  notes: notes,
+                  style: KelolaType.body(color: ctx.kc.muted, size: 13),
+                ),
               ),
             ),
           ),
-        ));
+        );
       }
       return true;
     } catch (e) {
@@ -328,27 +359,65 @@ Future<bool> runEnableKelolaSudoFlow({
   }
 }
 
-/// M52c: the host's own nginx / Apache services (never a container) from the
-/// STACK cache, plus [current] (the lens that asked), one per id.
-Future<List<DetectedService>> _hostWebLensServices(
-  WidgetRef ref,
-  Host host,
-  DetectedService? current,
-) async {
-  ServiceDetection? cached;
+/// The STACK cache for [host]; empty when there is none.
+Future<List<DetectedService>> _cachedServices(WidgetRef ref, Host host) async {
   try {
     final store = await ref.read(serviceLensStoreProvider.future);
-    cached = await store.read(host.id);
+    return (await store.read(host.id))?.services ?? const [];
   } catch (_) {
-    cached = null;
+    return const [];
   }
+}
+
+/// M52c: the host's own nginx / Apache services (never a container) from the
+/// STACK cache, plus [current] (the lens that asked), one per id.
+List<DetectedService> _hostWebLensServices(
+  List<DetectedService> cached,
+  DetectedService? current,
+) {
   final byId = <ServiceId, DetectedService>{};
-  for (final s in [?current, ...?cached?.services]) {
+  for (final s in [?current, ...cached]) {
     if (hasLens(s.id) && !s.inContainer) {
       byId.putIfAbsent(s.id, () => s);
     }
   }
   return byId.values.toList();
+}
+
+/// M52d: the login joined systemd-journal, which only a new login sees.
+/// Drops the pooled exec connections and reads the facts again, so the
+/// journal screens learn plain access instead of a stale sudo or denied.
+Future<void> _relearnJournalAccess(WidgetRef ref, Host host) async {
+  try {
+    final pool = ref.read(sessionPoolProvider);
+    await pool.dropExecClients(host.id);
+    final facts = await pool.execute(host, const HostFactsProbe());
+    await ref.read(hostRepositoryProvider).saveFacts(host.id, facts);
+  } catch (_) {
+    // The next facts read learns it instead.
+  }
+}
+
+/// M52d: what the result says about [login]'s systemd-journal membership,
+/// when it did not simply work.
+List<GrantNote> journalGroupNotes(JournalGroupOutcome outcome, String login) {
+  return switch (outcome) {
+    JournalGroupOutcome.failed => [
+      (
+        lead: 'Logs: could not add $login to $kelolaJournalGroup. Run ',
+        path: 'usermod -aG $kelolaJournalGroup $login',
+        tail: ' on the host.',
+      ),
+    ],
+    JournalGroupOutcome.noGroup => [
+      (
+        lead: 'Logs: this host has no ',
+        path: kelolaJournalGroup,
+        tail: ' group, so journal reads still need your own sudo.',
+      ),
+    ],
+    _ => const [],
+  };
 }
 
 /// M52c: installs [service]'s lens read lines in [kelolaWebSudoersPath] with
@@ -532,33 +601,6 @@ Future<bool> confirmExtraWebLensLines({
   return ok == true;
 }
 
-/// Confirms and installs one service action. See [UnitSudoersGrant].
-Future<bool> _runUnitGrantFlow({
-  required BuildContext context,
-  required WidgetRef ref,
-  required Host host,
-  required HostFacts facts,
-  required UnitSudoersGrant grant,
-}) {
-  return _runExactGrantFlow(
-    context: context,
-    ref: ref,
-    host: host,
-    facts: facts,
-    title: 'Allow ${grant.action}?',
-    body: "This host's sudo cannot match a service by pattern, so "
-        'Kelola adds one rule for this action on this service. '
-        'Other services and actions are unchanged. Remove the line '
-        'on the host to undo it.',
-    path: kelolaUnitSudoersPath,
-    lines: [grant.line],
-    confirmLabel: 'Add rule',
-    probe: UnitSudoersGrantProbe(grant),
-    done: '${grant.action} allowed · try it again',
-    failed: 'Could not add the sudo rule',
-  );
-}
-
 /// M52c: the one-tap preview cannot list certificate and log lines yet.
 const webOneTapCertsLaterNote =
     'Certificate and log lines for each lens are shown for one more tap once '
@@ -604,175 +646,7 @@ Text grantNotesText(
       ..add(TextSpan(text: n.path, style: mono))
       ..add(TextSpan(text: n.tail));
   }
-  return Text.rich(
-    TextSpan(text: head, style: style, children: spans),
-  );
-}
-
-/// Shows [lines] (exact, mono) for [path], asks for the sudo password once,
-/// passes it on stdin to [probe], then discards it.
-Future<bool> _runExactGrantFlow({
-  required BuildContext context,
-  required WidgetRef ref,
-  required Host host,
-  required HostFacts facts,
-  required String title,
-  required String body,
-  String? note,
-  String? footer,
-  required String path,
-  required List<String> lines,
-  required String confirmLabel,
-  required Probe<Object?> probe,
-  required String done,
-  List<GrantNote> Function(Object? result)? doneNotes,
-  List<GrantNote>? Function(Object error)? errorNotes,
-  required String failed,
-}) async {
-  final confirmed = await showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) {
-      final c = ctx.kc;
-      return KelolaSheet(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 20, 14, 0),
-          child: RiskBand(
-            risk: RiskLevel.mutate,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  title,
-                  style: KelolaType.display(color: c.text, size: 16),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  body,
-                  style: KelolaType.body(color: c.muted, size: 13),
-                ),
-                if (note != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    note,
-                    style: KelolaType.body(color: c.muted, size: 13),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 260),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      '$path\n${lines.join('\n')}',
-                      style: KelolaType.mono(color: c.text, size: 11),
-                    ),
-                  ),
-                ),
-                if (footer != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    footer,
-                    style: KelolaType.body(color: c.muted, size: 13),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                        child: Text(confirmLabel),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-  if (confirmed != true || !context.mounted) {
-    return false;
-  }
-
-  final password = EphemeralPassword();
-  final lifecycle = _SudoPasswordLifecycle(password);
-  WidgetsBinding.instance.addObserver(lifecycle);
-  try {
-    final entered = await showPasswordEntrySheet(
-      context,
-      password: password,
-      title: _sudoPasswordTitle,
-      body: _sudoPasswordBody,
-    );
-    if (!entered || !context.mounted) {
-      return false;
-    }
-    final pass = password.read();
-    if (pass == null || pass.isEmpty) {
-      return false;
-    }
-    try {
-      final result = await runHostProbe(
-        ref: ref,
-        context: context,
-        host: host,
-        facts: facts,
-        probe: probe,
-        stdinBytes: utf8.encode('$pass\n'),
-      );
-      final notes = doneNotes?.call(result) ?? const <GrantNote>[];
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: notes.isEmpty
-                ? Text(done)
-                : Builder(
-                    builder: (ctx) => grantNotesText(
-                      ctx,
-                      head: done,
-                      notes: notes,
-                      style: DefaultTextStyle.of(ctx).style,
-                    ),
-                  ),
-          ),
-        );
-      }
-      return true;
-    } catch (e) {
-      final notes = errorNotes?.call(e);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: notes != null && notes.isNotEmpty
-                ? Builder(
-                    builder: (ctx) => grantNotesText(
-                      ctx,
-                      notes: notes,
-                      style: DefaultTextStyle.of(ctx).style,
-                    ),
-                  )
-                : Text(e is KelolaException ? e.message : failed),
-          ),
-        );
-      }
-      return false;
-    }
-  } finally {
-    WidgetsBinding.instance.removeObserver(lifecycle);
-    password.clear();
-  }
+  return Text.rich(TextSpan(text: head, style: style, children: spans));
 }
 
 class _SudoPasswordLifecycle with WidgetsBindingObserver {
@@ -797,6 +671,9 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
     required this.groups,
     required this.sudo,
     required this.fileExists,
+    this.units = const [],
+    this.retireUnits = false,
+    this.journalGroup = false,
     this.webLines = const [],
   });
 
@@ -810,6 +687,15 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
   final SudoFlavor sudo;
   final bool fileExists;
 
+  /// M52d: services that get exact lines on a host without regex.
+  final List<String> units;
+
+  /// M52d: lines already in [kelolaUnitSudoersPath] move into this file.
+  final bool retireUnits;
+
+  /// M52d: [user] joins [kelolaJournalGroup] for journal reads.
+  final bool journalGroup;
+
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
@@ -818,6 +704,7 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
       facts: facts,
       groups: groups,
       sudo: sudo,
+      units: units,
     );
     final tierNote = kelolaSudoersTierNote(sudo);
     return KelolaSheet(
@@ -841,10 +728,7 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
             ),
             if (tierNote != null) ...[
               const SizedBox(height: 8),
-              Text(
-                tierNote,
-                style: KelolaType.body(color: c.muted, size: 13),
-              ),
+              Text(tierNote, style: KelolaType.body(color: c.muted, size: 13)),
             ],
             const SizedBox(height: 12),
             Container(
@@ -860,6 +744,15 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
                 child: SelectableText(
                   [
                     spec.content.trimRight(),
+                    if (retireUnits)
+                      '# + this login\'s service lines from '
+                          '$kelolaUnitSudoersPath, if it exists; it is '
+                          'removed once nothing else is in it',
+                    if (journalGroup) ...[
+                      '',
+                      '# logs: no sudo rule, group membership',
+                      'usermod -aG $kelolaJournalGroup $user',
+                    ],
                     if (webLines.isNotEmpty) ...[
                       '',
                       '# path: $kelolaWebSudoersPath  mode: 0440',

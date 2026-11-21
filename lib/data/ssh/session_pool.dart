@@ -984,6 +984,16 @@ class SshSessionPool {
     }
   }
 
+  /// Closes only the pooled exec clients for [hostId], so the next probe logs
+  /// in again and picks up a group the login just joined (M52d). Tunnels,
+  /// the terminal and journal follow keep their connections.
+  Future<void> dropExecClients(String hostId) async {
+    final list = _pool.remove(hostId) ?? [];
+    for (final c in list) {
+      await c.close();
+    }
+  }
+
   Future<void> closeAll() async {
     final closer = closeTunnels;
     if (closer != null) {

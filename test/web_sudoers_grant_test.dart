@@ -11,6 +11,7 @@ import 'package:kelola/domain/probes/web_lens_probe.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo/sudo_flavor.dart';
+import 'package:kelola/domain/sudo/sudoers_install_script.dart';
 import 'package:kelola/domain/sudo/unit_sudoers_grant.dart';
 import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/sudo_hint.dart';
@@ -575,7 +576,7 @@ echo "subject=CN = shop.example.com"''');
         ),
       );
       expect(script, contains(webGrantOkMarker));
-      expect(webGrantOkMarker, isNot(unitGrantOkMarker));
+      expect(webGrantOkMarker, isNot(sudoersInstallOkMarker));
       // The binaries are checked before anything is read or written.
       final trust = script.indexOf('kelola_trust "');
       expect(trust, greaterThan(0));
@@ -598,17 +599,6 @@ echo "subject=CN = shop.example.com"''');
       // Portable find only (busybox has no -perm /mode).
       expect(script, isNot(contains('-perm /')));
       expect(script, contains('! -perm -020 ! -perm -002'));
-      // The unit script has no trust check (it stays byte-identical).
-      expect(
-        buildUnitGrantScript(
-          UnitSudoersGrant.tryCreate(
-            user: 'hendr',
-            verb: 'reload',
-            unit: 'nginx.service',
-          )!,
-        ),
-        isNot(contains('kelola_trust')),
-      );
       for (final line in grant().lines) {
         // Carried encoded, never raw.
         expect(script, contains(base64Encode(utf8.encode(line))));
@@ -825,23 +815,6 @@ echo "subject=CN = shop.example.com"''');
       expect(buildWebGrantScript(certsOnly), isNot(contains('kelola_cfg')));
     });
 
-    test('unit grant script is byte-identical to PR #17', () {
-      final snap = (jsonDecode(
-        File('test/fixtures/sudoers/unit_grant_script_pre_m52.json')
-            .readAsStringSync(),
-      ) as Map<String, dynamic>).cast<String, String>();
-      expect(snap, hasLength(12));
-      snap.forEach((key, expected) {
-        final parts = key.split(' ');
-        final g = UnitSudoersGrant.tryCreate(
-          user: 'hendr',
-          verb: parts[0],
-          unit: parts[1],
-        )!;
-        expect(buildUnitGrantScript(g), expected, reason: key);
-      });
-    });
-
     test('Enable spec output is unchanged by M52', () {
       final snap = (jsonDecode(
         File('test/fixtures/sudoers/enable_spec_pre_m52.json')
@@ -923,9 +896,10 @@ echo "subject=CN = shop.example.com"''');
         ]) {
           now['all/$name/${h.$1}'] = spec(
             h.$2,
-            // M52c's Containers group is pinned in its own test.
+            // M52c's Containers and M52d's Flush caches and Logs groups are
+            // pinned in their own tests.
             KelolaSudoersGroup.values
-                .where((g) => g != KelolaSudoersGroup.containers)
+                .where((g) => !_pinnedElsewhere.contains(g))
                 .toSet(),
             sudo,
           );
@@ -934,7 +908,7 @@ echo "subject=CN = shop.example.com"''');
       expect(now.keys.toSet(), snap.keys.toSet());
       // Every group appears in the snapshot.
       for (final g in KelolaSudoersGroup.values) {
-        if (g == KelolaSudoersGroup.containers) continue;
+        if (_pinnedElsewhere.contains(g)) continue;
         expect(snap.keys.any((k) => k.startsWith('${g.name}/')), isTrue);
       }
       now.forEach((k, v) => expect(v, snap[k], reason: k));
@@ -1289,7 +1263,7 @@ cp "\$src" "\$dst"''');
       expect(() => probe.parse('', 'boom', 1), throwsA(isA<KelolaException>()));
       expect(() => probe.parse('', '', 0), throwsA(isA<KelolaException>()));
       expect(
-        () => probe.parse(unitGrantOkMarker, '', 0),
+        () => probe.parse('KELOLA_UNIT_GRANT_OK', '', 0),
         throwsA(isA<KelolaException>()),
       );
       probe.parse(webGrantOkMarker, '', 0);
@@ -3441,3 +3415,10 @@ cp "\$src" "\$dst"''');
     expect(hint.snippet, isNot(contains('NOPASSWD: <nginx>')));
   });
 }
+
+/// Groups added after M52 whose lines are pinned in their own tests.
+const _pinnedElsewhere = {
+  KelolaSudoersGroup.containers,
+  KelolaSudoersGroup.caches,
+  KelolaSudoersGroup.logs,
+};

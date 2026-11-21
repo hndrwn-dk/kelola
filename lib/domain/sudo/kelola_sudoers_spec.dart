@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/journal/journal_follow.dart';
 import 'package:kelola/domain/sudo/sudo_flavor.dart';
 
 const kelolaSudoersPath = '/etc/sudoers.d/kelola';
@@ -19,6 +20,15 @@ enum KelolaSudoersGroup {
   /// `cp`, `inspect` or a mutate verb: root `docker exec` is root on the
   /// host, and `inspect` shows container env secrets.
   containers,
+
+  /// M52d: Flush caches. One exact `sysctl` line; the `sync` before it needs
+  /// no root.
+  caches,
+
+  /// M52d: syslog reads on hosts without journald. Exact `test -r` and
+  /// `tail` lines for [syslogProbePaths] only. Journald hosts read logs
+  /// through the `systemd-journal` group instead, which needs no rule.
+  logs,
 }
 
 class KelolaSudoersSpec {
@@ -66,11 +76,17 @@ class KelolaSudoersSpec {
 /// classic sudo have no safe way to say "one package name": their only other
 /// wildcard is a trailing `*`, which also takes `-c /tmp/evil.conf`. On those
 /// hosts the rule is left out and `sudo -n` fails as it would with no rule.
+///
+/// [units] (M52d) are services whose lifecycle verbs get exact lines on a
+/// systemd host whose sudo has no regex, where the Services group has no
+/// rule of its own. Names that are not safe in a sudoers line are dropped.
+/// Ignored when regex rules cover every unit.
 KelolaSudoersSpec buildKelolaSudoersSpec({
   required String user,
   required HostFacts facts,
   required Set<KelolaSudoersGroup> groups,
   required SudoFlavor sudo,
+  Iterable<String> units = const [],
 }) {
   final cmds = <String>[];
   final regex = sudo.supportsArgRegex;
@@ -89,8 +105,12 @@ KelolaSudoersSpec buildKelolaSudoersSpec({
   if (groups.contains(KelolaSudoersGroup.hostPower)) {
     cmds.addAll(const ['/usr/sbin/reboot ""', '/usr/sbin/poweroff ""']);
   }
-  if (regex && groups.contains(KelolaSudoersGroup.services)) {
-    cmds.addAll(_serviceRegexCommands(facts.init));
+  if (groups.contains(KelolaSudoersGroup.services)) {
+    if (regex) {
+      cmds.addAll(_serviceRegexCommands(facts.init));
+    } else {
+      cmds.addAll(exactUnitCommands(facts.init, units));
+    }
   }
   if (regex && groups.contains(KelolaSudoersGroup.processes)) {
     cmds.addAll(_processRegexCommands);
@@ -101,16 +121,34 @@ KelolaSudoersSpec buildKelolaSudoersSpec({
       cmds.addAll(_containerRegexCommands);
     }
   }
+  if (groups.contains(KelolaSudoersGroup.caches)) {
+    cmds.add(kelolaDropCachesCommand);
+  }
+  if (groups.contains(KelolaSudoersGroup.logs) && !facts.hasJournald) {
+    cmds.addAll(_syslogCommands);
+  }
   return KelolaSudoersSpec(user: user, groups: groups, commands: cmds);
 }
 
 /// Groups that have at least one rule on this host. Services and Processes
-/// are all variable values, so they drop out without regex support.
+/// are all variable values, so they drop out without regex support; Services
+/// comes back there when [units] names a unit for exact lines.
 Set<KelolaSudoersGroup> defaultKelolaSudoersGroups(
   HostFacts facts, {
   required SudoFlavor sudo,
+  Iterable<String> units = const [],
 }) {
-  final out = <KelolaSudoersGroup>{KelolaSudoersGroup.hostPower};
+  final out = <KelolaSudoersGroup>{
+    KelolaSudoersGroup.hostPower,
+    KelolaSudoersGroup.caches,
+  };
+  if (!facts.hasJournald) {
+    out.add(KelolaSudoersGroup.logs);
+  }
+  if (!sudo.supportsArgRegex &&
+      exactUnitCommands(facts.init, units).isNotEmpty) {
+    out.add(KelolaSudoersGroup.services);
+  }
   if (facts.pkg != PackageManager.unknown) {
     out.add(KelolaSudoersGroup.packages);
   }
@@ -144,10 +182,8 @@ const kelolaSudoRulesOutdatedCopy =
 
 /// Rule text with sudo's listing escapes removed. Classic sudo keeps `\:` and
 /// adds `\=`, and before 1.9.10 also prints `""` as `\"\"`. Sudo-rs prints none.
-String normalizeSudoRule(String rule) => rule.replaceAllMapped(
-      RegExp(r'\\([:="])'),
-      (m) => m[1]!,
-    );
+String normalizeSudoRule(String rule) =>
+    rule.replaceAllMapped(RegExp(r'\\([:="])'), (m) => m[1]!);
 
 const _kelolaBinaries = {
   '/usr/bin/dnf',
@@ -164,6 +200,10 @@ const _kelolaBinaries = {
   '/usr/sbin/poweroff',
   '/usr/bin/systemctl',
   '/usr/bin/kill',
+  '/usr/bin/docker',
+  '/usr/sbin/sysctl',
+  '/usr/bin/test',
+  '/usr/bin/tail',
 };
 
 /// Commands a `sudo -n -l` listing grants without a password.
@@ -292,8 +332,7 @@ String _packageNameRegex(PackageManager pkg) {
   return switch (pkg) {
     PackageManager.dnf ||
     PackageManager.yum ||
-    PackageManager.zypper =>
-      _packageName(notEnding: '.rpm'),
+    PackageManager.zypper => _packageName(notEnding: '.rpm'),
     // `name-` removes a package. `name:arch` is how apt lists foreign arches.
     PackageManager.apt =>
       '${_packageName(notEnding: '.deb', neverLast: '-')}(\\:[a-z0-9]+)?',
@@ -316,12 +355,12 @@ List<String> _packageRegexCommands(PackageManager pkg) {
     PackageManager.dnf => ['/usr/bin/dnf ^upgrade -y $name\$'],
     PackageManager.yum => ['/usr/bin/yum ^update -y $name\$'],
     PackageManager.apt => [
-        r'/usr/bin/apt-get ^-y -o Dpkg\:\:Options\:\:=--force-confold '
-            'install --only-upgrade $name\$',
-      ],
+      r'/usr/bin/apt-get ^-y -o Dpkg\:\:Options\:\:=--force-confold '
+          'install --only-upgrade $name\$',
+    ],
     PackageManager.zypper => [
-        '/usr/bin/zypper ^--non-interactive update $name\$',
-      ],
+      '/usr/bin/zypper ^--non-interactive update $name\$',
+    ],
     PackageManager.apk => ['/sbin/apk ^add -u $name\$'],
     PackageManager.pacman => ['/usr/bin/pacman ^-S --noconfirm $name\$'],
     PackageManager.unknown => const [],
@@ -365,9 +404,7 @@ List<String> _firewallRegexCommands(FirewallBackend fw) {
             '--permanent --(add|remove)-port=$_firewalldPort\$',
       ];
     case FirewallBackend.ufw:
-      return const [
-        r'/usr/sbin/ufw ^(delete )?allow [0-9]+(/(tcp|udp))?$',
-      ];
+      return const [r'/usr/sbin/ufw ^(delete )?allow [0-9]+(/(tcp|udp))?$'];
     case FirewallBackend.nftables:
       return const [
         '/usr/sbin/nft ^add rule inet filter input (tcp|udp) dport [0-9]+ '
@@ -396,6 +433,33 @@ List<String> _serviceRegexCommands(InitSystem init) {
 }
 
 const _unitNameRegex = r'[a-zA-Z0-9][a-zA-Z0-9\:_.@-]*';
+
+/// The verbs a service rule allows. `enable`, `disable`, `link` and `edit`
+/// act on unit files, so they are never passwordless.
+const kelolaUnitLifecycleVerbs = ['start', 'stop', 'restart', 'reload'];
+
+/// M52d: exact lifecycle lines for each of [units], for a systemd host whose
+/// sudo has no regex. A name with a backslash is dropped: systemd escapes
+/// such as `foo\x2dbar` would need escaping again for sudoers. Other unsafe
+/// names are dropped too, since they come from the host's output.
+List<String> exactUnitCommands(InitSystem init, Iterable<String> units) {
+  if (init != InitSystem.systemd) {
+    return const [];
+  }
+  final seen = <String>{};
+  final out = <String>[];
+  for (final unit in units) {
+    if (unit.contains(r'\') ||
+        !isSudoersSafeUnitName(unit) ||
+        !seen.add(unit)) {
+      continue;
+    }
+    for (final verb in kelolaUnitLifecycleVerbs) {
+      out.add('/usr/bin/systemctl $verb ${unit.replaceAll(':', r'\:')}');
+    }
+  }
+  return out;
+}
 
 /// Whether [name] is one unit name the service rule would accept. The name
 /// comes from the host's output, so nothing else may reach a sudoers line.
@@ -429,6 +493,22 @@ const kelolaDockerNameRegex = '[A-Za-z0-9][A-Za-z0-9_.-]*';
 /// environment, which often holds credentials.
 const _containerRegexCommands = [
   '/usr/bin/docker ^logs --tail (60|2000) $kelolaDockerNameRegex\$',
+];
+
+/// M52d: what Flush caches runs through sudo. `sync` runs first without
+/// sudo; only the write to `vm.drop_caches` needs root.
+const kelolaDropCachesCommand = '/usr/sbin/sysctl -w vm.drop_caches=3';
+
+/// M52d: the line counts the journal screens read from syslog, and the
+/// follow, for hosts without journald. Exact lines, so every sudo takes them.
+const kelolaSyslogTailLimits = [20, 50, 200];
+
+final _syslogCommands = [
+  for (final path in syslogProbePaths) ...[
+    '/usr/bin/test -r $path',
+    for (final n in kelolaSyslogTailLimits) '/usr/bin/tail -n $n $path',
+    '/usr/bin/tail -n 0 -F $path',
+  ],
 ];
 
 const _processRegexCommands = [
