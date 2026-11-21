@@ -24,12 +24,12 @@ void main() {
     );
   });
 
-  test('list command uses facts binary and -o json, not command -v', () {
+  test('list command uses facts binary and --output=json, not command -v', () {
     final k3s = WorkloadListProbe().command(
       HostFacts.undiscovered.copyWith(runtimes: const ['k3s']),
     );
     expect(k3s, contains('k3s kubectl'));
-    expect(k3s, contains('-o json'));
+    expect(k3s, contains('--output=json'));
     expect(k3s, contains('deploy,sts,ds,job,cronjob,pod'));
     expect(k3s, isNot(contains('command -v')));
 
@@ -53,10 +53,10 @@ void main() {
     expect(top.risk, RiskLevel.read);
     expect(const WorkloadListProbe().risk, RiskLevel.read);
 
-    expect(describe.command(facts), contains("-n 'prod' describe 'deployment/web'"));
+    expect(describe.command(facts), contains("--namespace='prod' describe 'deployment/web'"));
     expect(describe.command(facts), isNot(contains('command -v')));
     expect(events.command(facts), contains("involvedObject.name=web"));
-    expect(events.command(facts), contains('-o json'));
+    expect(events.command(facts), contains('--output=json'));
     expect(top.command(facts), contains("top pod 'web-abc'"));
     expect(top.command(facts), contains('--no-headers'));
   });

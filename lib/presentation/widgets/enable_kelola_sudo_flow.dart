@@ -41,6 +41,7 @@ String kelolaSudoersGroupLabel(KelolaSudoersGroup g) {
     KelolaSudoersGroup.containers => 'Containers',
     KelolaSudoersGroup.caches => 'Flush caches',
     KelolaSudoersGroup.logs => 'Logs',
+    KelolaSudoersGroup.kubernetes => 'Kubernetes reads',
   };
 }
 
@@ -54,8 +55,8 @@ String kelolaSudoersGroupsLabel(Set<KelolaSudoersGroup> groups) {
 /// Guided install of [kelolaSudoersPath]. Returns true on verified install.
 ///
 /// Always installs the full set available for [facts] (Packages, Firewall,
-/// Host power, Flush caches, Services, Processes, Containers, Logs when
-/// present). No per-group picker. In the same tap, with the same password:
+/// Host power, Flush caches, Services, Processes, Containers, Logs and
+/// Kubernetes reads when present). No per-group picker. In the same tap, with the same password:
 /// the web lens lines (M52c), the login joins `systemd-journal` (M52d), and
 /// old `kelola-units` lines move into the main file (M52d).
 ///
@@ -707,6 +708,7 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
       units: units,
     );
     final tierNote = kelolaSudoersTierNote(sudo);
+    final k8sNote = kelolaSudoersK8sNote(facts, sudo);
     return KelolaSheet(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 18, 14, 0),
@@ -729,6 +731,10 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
             if (tierNote != null) ...[
               const SizedBox(height: 8),
               Text(tierNote, style: KelolaType.body(color: c.muted, size: 13)),
+            ],
+            if (k8sNote != null) ...[
+              const SizedBox(height: 8),
+              Text(k8sNote, style: KelolaType.body(color: c.muted, size: 13)),
             ],
             const SizedBox(height: 12),
             Container(

@@ -52,10 +52,10 @@ void main() {
       for (final m in ['CLUSTERVERSION', 'CLUSTEROPERATORS', 'MCP', 'CSR']) {
         expect(cmd, contains('echo ---$m---'));
       }
-      expect(cmd, contains('get clusterversion version -o json'));
-      expect(cmd, contains('get clusteroperators -o json'));
-      expect(cmd, contains('get machineconfigpools -o json'));
-      expect(cmd, contains('get csr -o json'));
+      expect(cmd, contains('get clusterversion version --output=json'));
+      expect(cmd, contains('get clusteroperators --output=json'));
+      expect(cmd, contains('get machineconfigpools --output=json'));
+      expect(cmd, contains('get csr --output=json'));
       expect(cmd, contains("sed 's/^/KELOLA_ERR /'"));
       for (final verb in [
         ' adm ',

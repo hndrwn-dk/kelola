@@ -28,6 +28,7 @@ class ContainerActionProbe extends Probe<String> {
       final ns = shellSingleQuote(row.namespace);
       final name = shellSingleQuote(row.names);
       if (verb == ContainerVerb.inspect) {
+        // No Kubernetes sudoers rule takes describe: it prints env values.
         return '''
 LC_ALL=C
 (kubectl -n $ns describe pod $name 2>/dev/null \\

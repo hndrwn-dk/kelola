@@ -43,14 +43,36 @@ String? kubectlBin(HostFacts facts) {
 /// `OC=…;` so the result still composes after `LC_ALL=C` and after a pipe.
 const kOcBinary = r'"$(command -v oc || echo "$HOME/.crc/bin/oc/oc")"';
 
+/// M52d: the first argument of every `sudo -n` kubectl call. A no-op (zero
+/// is kubectl's default: no timeout), there so the argv the Kubernetes
+/// sudoers rules match starts with an option. Sudo matches the arguments
+/// joined with spaces, so the login may pass them split differently; with an
+/// option first, kubectl never reads a joined argument as a command or plugin
+/// name.
+const kSudoKubectlLead = '--request-timeout=0';
+
+/// `sudo -n` kubectl for the k3s and kubectl flavors, up to the read's args.
+const kSudoK3sKubectl = 'sudo -n k3s kubectl $kSudoKubectlLead';
+const kSudoKubectl = 'sudo -n kubectl $kSudoKubectlLead';
+
 /// Facts pick the binary. k3s usually needs passwordless sudo; kubectl does not.
-String kubectlTry(HostFacts facts, String args) {
+///
+/// Reads pass each option as one argument (`--namespace=x`, `--output=json`,
+/// `--all-namespaces`), never `-n x` or `-o json`: the Kubernetes sudoers
+/// rules (M52d) take only that form, so a joined argv cannot be re-split
+/// into a cluster of short options.
+///
+/// [sudoArgs], when set, replaces [args] in the sudo branch: a read that
+/// names only the fields it prints, where [args] would print a pod template
+/// (M52d).
+String kubectlTry(HostFacts facts, String args, {String? sudoArgs}) {
+  final viaSudo = sudoArgs ?? args;
   return switch (kubectlFlavor(facts)) {
     KubectlFlavor.none => 'echo ---NO_KUBECTL---',
     KubectlFlavor.k3s =>
-      'sudo -n k3s kubectl $args 2>/dev/null || k3s kubectl $args',
+      '$kSudoK3sKubectl $viaSudo 2>/dev/null || k3s kubectl $args',
     KubectlFlavor.kubectl =>
-      'kubectl $args 2>/dev/null || sudo -n kubectl $args',
+      'kubectl $args 2>/dev/null || $kSudoKubectl $viaSudo',
     KubectlFlavor.oc =>
       '$kOcBinary $args 2>/dev/null || sudo -n $kOcBinary $args',
   };
@@ -62,8 +84,8 @@ String kubectlTry(HostFacts facts, String args) {
 String kubectlRun(HostFacts facts, String args) {
   return switch (kubectlFlavor(facts)) {
     KubectlFlavor.none => 'echo ---NO_KUBECTL---; exit 1',
-    KubectlFlavor.k3s => 'sudo -n k3s kubectl $args || k3s kubectl $args',
-    KubectlFlavor.kubectl => 'kubectl $args || sudo -n kubectl $args',
+    KubectlFlavor.k3s => '$kSudoK3sKubectl $args || k3s kubectl $args',
+    KubectlFlavor.kubectl => 'kubectl $args || $kSudoKubectl $args',
     KubectlFlavor.oc => '$kOcBinary $args || sudo -n $kOcBinary $args',
   };
 }
@@ -79,9 +101,8 @@ String kubectlRun(HostFacts facts, String args) {
 String kubectlOnce(HostFacts facts, String args) {
   return switch (kubectlFlavor(facts)) {
     KubectlFlavor.none => '{ echo ---NO_KUBECTL---; exit 1; }',
-    KubectlFlavor.k3s =>
-      _kubectlOnce('sudo -n k3s kubectl', 'k3s kubectl', args),
-    KubectlFlavor.kubectl => _kubectlOnce('kubectl', 'sudo -n kubectl', args),
+    KubectlFlavor.k3s => _kubectlOnce(kSudoK3sKubectl, 'k3s kubectl', args),
+    KubectlFlavor.kubectl => _kubectlOnce('kubectl', kSudoKubectl, args),
     KubectlFlavor.oc => _kubectlOnce(kOcBinary, 'sudo -n $kOcBinary', args),
   };
 }

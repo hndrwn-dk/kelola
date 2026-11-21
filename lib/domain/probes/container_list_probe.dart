@@ -2,8 +2,10 @@ import 'package:kelola/domain/containers/container_engine.dart';
 import 'package:kelola/domain/containers/container_list_parser.dart';
 import 'package:kelola/domain/containers/container_row.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/k8s/custom_columns.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
+import 'package:kelola/domain/units/shell_quote.dart';
 
 class ContainerListProbe extends Probe<ContainerInventory> {
   const ContainerListProbe();
@@ -20,16 +22,18 @@ command -v k3s kubectl oc docker podman crictl nerdctl 2>/dev/null || true
 [ -x "$HOME/.crc/bin/oc/oc" ] && echo "$HOME/.crc/bin/oc/oc"
 echo "---PODS---"
 # M48 precedence oc -> k3s -> kubectl. CRC keeps oc off PATH.
+# M52d: through sudo, named columns only (pod JSON carries every env
+# value); the parser reads both.
 oc_bin=$(command -v oc 2>/dev/null || { [ -x "$HOME/.crc/bin/oc/oc" ] && echo "$HOME/.crc/bin/oc/oc"; })
 if [ -n "$oc_bin" ]; then
   echo "cli=oc"
   "$oc_bin" get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || sudo -n "$oc_bin" get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || true
 elif command -v k3s >/dev/null 2>&1; then
   echo "cli=k3s"
-  sudo -n k3s kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || k3s kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || true
+  sudo -n k3s kubectl --request-timeout=0 get pods --all-namespaces __KELOLA_POD_COLUMNS__ 2>/dev/null || k3s kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || true
 elif command -v kubectl >/dev/null 2>&1; then
   echo "cli=kubectl"
-  kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || sudo -n kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || true
+  kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || sudo -n kubectl --request-timeout=0 get pods --all-namespaces __KELOLA_POD_COLUMNS__ 2>/dev/null || true
 fi
 echo "---PS_DOCKER---"
 if command -v docker >/dev/null 2>&1; then
@@ -75,7 +79,9 @@ if command -v podman >/dev/null 2>&1; then
   fi
 fi
 echo "---PS---"
-''').replaceAll('\r\n', '\n');
+''')
+        .replaceAll('\r\n', '\n')
+        .replaceAll('__KELOLA_POD_COLUMNS__', shellSingleQuote(kPodSudoOutput));
   }
 
   @override

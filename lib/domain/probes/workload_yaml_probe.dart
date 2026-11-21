@@ -20,7 +20,7 @@ class WorkloadYamlGetProbe extends Probe<String> {
   String command(HostFacts facts) {
     final ns = shellSingleQuote(workload.namespace);
     final res = shellSingleQuote('${workload.kind.resource}/${workload.name}');
-    return 'LC_ALL=C ${kubectlTry(facts, '-n $ns get $res -o yaml')}';
+    return 'LC_ALL=C ${kubectlTry(facts, '--namespace=$ns get $res --output=yaml')}';
   }
 
   @override

@@ -406,11 +406,11 @@ void main() {
   test('probe commands are read-only cluster-wide gets', () {
     final facts = HostFacts.undiscovered.copyWith(runtimes: const ['kubectl']);
     expect(const ClusterEventsProbe().command(facts),
-        contains('get events -A --field-selector type=Warning -o json'));
+        contains('get events --all-namespaces --field-selector=type=Warning --output=json'));
     expect(const ServiceListProbe().command(facts),
-        contains('get svc,endpoints -A -o json'));
+        contains('get svc,endpoints --all-namespaces --output=json'));
     expect(const StorageListProbe().command(facts),
-        contains('get pv,pvc -A -o json'));
+        contains('get pv,pvc --all-namespaces --output=json'));
     expect(const StorageListProbe().command(HostFacts.undiscovered),
         'echo ---NO_KUBECTL---');
   });
@@ -553,11 +553,11 @@ void main() {
           HostFacts.undiscovered.copyWith(runtimes: const ['kubectl']);
       expect(
         const RolloutHistoryProbe().command(facts),
-        contains('get rs,controllerrevision -A -o json'),
+        contains('get rs,controllerrevision --all-namespaces --output=json'),
       );
       expect(
         const RolloutHistoryProbe(namespace: 'shop').command(facts),
-        contains("-n 'shop' -o json"),
+        contains("--namespace='shop' --output=json"),
       );
       expect(
         () => const RolloutHistoryProbe()
