@@ -65,6 +65,8 @@ DEST="$ROOT/bundles_release/v${VERSION}"
 mkdir -p "$DEST"
 cp -f "$ROOT/build/app/outputs/bundle/release/app-release.aab" \
   "$DEST/app-release-${VERSION}.aab"
+# Release notes travel with the AAB: paste this file into Play Console.
+cp -f "$ROOT/docs/store/whatsnew/whatsnew-en-US" "$DEST/whatsnew-en-US.txt"
 echo "AAB: $DEST/app-release-${VERSION}.aab"
 echo "Symbols: $SYMBOLS (keep them; needed to read crash traces)"
-echo "Play notes: $ROOT/bundles_release/play-console/PLAY_STORE_v${VERSION}.txt"
+echo "Release notes: $DEST/whatsnew-en-US.txt (paste into Play Console)"
