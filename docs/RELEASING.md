@@ -93,9 +93,9 @@ Never commit `pubspec_overrides.yaml`, keystores, or
 
 Analyze/test in CI always use the stub (no secrets).
 
-The `play` GitHub environment and its secrets (`ANDROID_KEYSTORE_*`,
-`ANDROID_KEY_*`, `PLAY_SERVICE_ACCOUNT_JSON`, `KELOLA_PRO_DEPLOY_KEY`)
-are no longer read by any workflow and can be deleted.
+The repo is public: no workflow uses secrets or GitHub environments, and
+none should be added. Signing and Play upload stay on the maintainer's
+machine.
 
 ## Reading CI
 
