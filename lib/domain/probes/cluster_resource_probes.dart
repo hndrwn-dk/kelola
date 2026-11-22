@@ -14,6 +14,10 @@ abstract class _ClusterGetProbe<T> extends Probe<T> {
   /// Arguments after `get`, e.g. `svc,endpoints --all-namespaces --output=json`.
   String get getArgs;
 
+  /// Whether the read-only `kelola-reader` account may make this read
+  /// (M52e). Off for reads that print pod templates.
+  bool get viaReader => true;
+
   /// Human noun for errors, e.g. `services`.
   String get what;
 
@@ -24,7 +28,8 @@ abstract class _ClusterGetProbe<T> extends Probe<T> {
     if (kubectlFlavor(facts) == KubectlFlavor.none) {
       return 'echo ---NO_KUBECTL---';
     }
-    return 'LC_ALL=C ${kubectlTry(facts, 'get $getArgs')}';
+    final args = 'get $getArgs';
+    return 'LC_ALL=C ${viaReader ? kubectlRead(facts, args) : kubectlTry(facts, args)}';
   }
 
   @override
@@ -117,9 +122,8 @@ class SecurityInventoryProbe extends _ClusterGetProbe<K8sSecurityInventory> {
 /// name, (Secret) type and key names; `.data` values are never emitted, so
 /// secret material does not leave the host.
 ///
-/// M52d: no Kubernetes sudoers rule covers this read. Through sudo it would
-/// list every Secret in the cluster, so it stays on the login's own
-/// kubeconfig (`kelolaSudoersK8sNote` says so).
+/// M52e: the `kelola-reader` role has no ConfigMaps or Secrets, so this
+/// read stays on the login's own kubeconfig.
 class ConfigInventoryProbe extends Probe<K8sConfigInventory> {
   const ConfigInventoryProbe();
 
@@ -191,6 +195,11 @@ class RolloutHistoryProbe extends _ClusterGetProbe<List<K8sRevision>> {
 
   @override
   String get what => 'rollout history';
+
+  /// ReplicaSets and ControllerRevisions carry pod templates, so the
+  /// reader's role has neither (M52e).
+  @override
+  bool get viaReader => false;
 
   @override
   List<K8sRevision> parseJson(String stdout) => parseRolloutHistory(stdout);

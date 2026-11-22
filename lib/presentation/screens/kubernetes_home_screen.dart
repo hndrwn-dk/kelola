@@ -12,6 +12,7 @@ import 'package:kelola/domain/k8s/cluster_health.dart';
 import 'package:kelola/domain/k8s/cluster_kind.dart';
 import 'package:kelola/domain/k8s/cluster_policy.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
+import 'package:kelola/domain/k8s/k8s_reader.dart';
 import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/k8s/openshift_health.dart';
 import 'package:kelola/domain/k8s/workload.dart';
@@ -19,17 +20,20 @@ import 'package:kelola/domain/k8s/workload_home_summary.dart';
 import 'package:kelola/domain/k8s/workload_view.dart';
 import 'package:kelola/domain/probes/cluster_health_probe.dart';
 import 'package:kelola/domain/probes/cluster_resource_probes.dart';
-import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/domain/probes/k8s_reader_probes.dart';
 import 'package:kelola/domain/probes/openshift_health_probe.dart';
+import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
 import 'package:kelola/presentation/host_session.dart';
 import 'package:kelola/presentation/screens/k8s_resource_detail_screen.dart';
 import 'package:kelola/presentation/screens/k8s_resource_list_screen.dart';
 import 'package:kelola/presentation/screens/workload_detail_screen.dart';
 import 'package:kelola/presentation/screens/workloads_screen.dart';
-import 'package:kelola/presentation/widgets/ocp_operator_sheet.dart';
+import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
+import 'package:kelola/presentation/widgets/k8s_reader_flow.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
+import 'package:kelola/presentation/widgets/ocp_operator_sheet.dart';
 import 'package:kelola/providers.dart';
 
 class KubernetesHomeScreen extends ConsumerStatefulWidget {
@@ -88,6 +92,10 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
   _SectionError? _ocpError;
   DateTime? _ocpReadAt;
   OcpOperatorFilter _opFilter = OcpOperatorFilter.all;
+
+  /// M52e: the `kelola-reader` kubeconfig on this host; null where the host
+  /// gets no reader (oc) or the check failed.
+  K8sReaderStatus? _reader;
 
   @override
   void initState() {
@@ -218,6 +226,9 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
         _section(host, facts, const RolloutHistoryProbe()),
       ]);
       final ocpResult = await ocpFuture;
+      final reader = kelolaReaderSupported(kubectlFlavor(facts))
+          ? await _section(host, facts, const K8sReaderStatusProbe())
+          : null;
       if (!mounted) {
         return;
       }
@@ -243,6 +254,7 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
         _securityError = results[4].error;
         _changes = results[5].value as List<K8sRevision>?;
         _changesError = results[5].error;
+        _reader = reader?.value as K8sReaderStatus?;
       });
     } catch (e) {
       setState(() => _error = describeSshError(e));
@@ -435,9 +447,45 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
           const SizedBox(height: 10),
           const SectionSlab('Security'),
           _securityBlock(c),
+          if (_reader != null) ...[
+            const SizedBox(height: 10),
+            const SectionSlab('Read access'),
+            K8sReaderAccessBlock(
+              status: _reader!,
+              now: _now(),
+              onSetUp: _loading ? null : _setUpReader,
+              onRemove: _loading ? null : _removeReader,
+            ),
+          ],
         ],
       ],
     );
+  }
+
+  /// M52e: Enable Kelola sudo sets up the reader or renews its token.
+  Future<void> _setUpReader() async {
+    final host = _host;
+    if (host == null) return;
+    final ok = await runEnableKelolaSudoFlow(
+      context: context,
+      ref: ref,
+      host: host,
+      facts: _facts,
+    );
+    if (ok && mounted) await _load();
+  }
+
+  Future<void> _removeReader() async {
+    final host = _host;
+    final facts = _facts;
+    if (host == null || facts == null) return;
+    final ok = await runK8sReaderRemoveFlow(
+      context: context,
+      ref: ref,
+      host: host,
+      facts: facts,
+    );
+    if (ok && mounted) await _load();
   }
 
   Widget _workloadsBlock(KelolaColors c) {

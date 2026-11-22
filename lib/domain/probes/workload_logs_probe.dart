@@ -20,7 +20,7 @@ class WorkloadLogsProbe extends Probe<String> {
   String command(HostFacts facts) {
     final ns = shellSingleQuote(workload.namespace);
     final res = shellSingleQuote('${workload.kind.resource}/${workload.name}');
-    return kubectlOnce(facts, '--namespace=$ns logs $res --tail=$tail --timestamps');
+    return kubectlOnceRead(facts, '--namespace=$ns logs $res --tail=$tail --timestamps');
   }
 
   @override

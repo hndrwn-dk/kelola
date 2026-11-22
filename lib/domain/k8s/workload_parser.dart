@@ -5,11 +5,11 @@ import 'package:kelola/domain/k8s/custom_columns.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_config.dart';
 
-/// Whether [stdout] is a [kWorkloadSudoColumns] table.
-bool isWorkloadSudoTable(String stdout) =>
-    hasCustomColumnsHeader(stdout, kWorkloadSudoColumns);
+/// Whether [stdout] is a [kWorkloadReaderColumns] table.
+bool isWorkloadReaderTable(String stdout) =>
+    hasCustomColumnsHeader(stdout, kWorkloadReaderColumns);
 
-/// One [kWorkloadSudoColumns] row as the JSON shape [_item] reads. The
+/// One [kWorkloadReaderColumns] row as the JSON shape [_item] reads. The
 /// parser only counts containers and takes the first reason, so a reason
 /// may sit on any container.
 Map<String, dynamic> _rowAsJson(Map<String, String> r) {
@@ -77,10 +77,10 @@ WorkloadInventory parseWorkloadList(String stdout) {
   if (stdout.contains('---NO_KUBECTL---')) {
     return const WorkloadInventory(rows: [], missingKubectl: true);
   }
-  if (isWorkloadSudoTable(stdout)) {
+  if (isWorkloadReaderTable(stdout)) {
     return WorkloadInventory(
       rows: [
-        for (final r in parseCustomColumns(stdout, kWorkloadSudoColumns))
+        for (final r in parseCustomColumns(stdout, kWorkloadReaderColumns))
           ?_item(_rowAsJson(r)),
       ],
     );

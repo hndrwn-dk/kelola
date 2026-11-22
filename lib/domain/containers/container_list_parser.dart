@@ -102,12 +102,12 @@ class ContainerListParser {
       'oc' => 'oc',
       _ => 'k8s',
     };
-    // M52d: through sudo, a custom-columns table instead of the TSV. The
+    // M52e: through the reader, a custom-columns table instead of the TSV. The
     // table has a header line; the TSV never does.
-    final lines = isPodSudoTable(raw)
+    final lines = isPodReaderTable(raw)
         ? [
-            for (final r in parseCustomColumns(raw, kPodSudoColumns))
-              [for (final c in kPodSudoColumns) r[c.$1]].join('\t'),
+            for (final r in parseCustomColumns(raw, kPodReaderColumns))
+              [for (final c in kPodReaderColumns) r[c.$1]].join('\t'),
           ]
         : raw.split('\n');
     for (final line in lines) {
@@ -200,6 +200,6 @@ class ContainerListParser {
   }
 }
 
-/// Whether [raw] holds the [kPodSudoColumns] header.
-bool isPodSudoTable(String raw) =>
-    hasCustomColumnsHeader(raw, kPodSudoColumns);
+/// Whether [raw] holds the [kPodReaderColumns] header.
+bool isPodReaderTable(String raw) =>
+    hasCustomColumnsHeader(raw, kPodReaderColumns);

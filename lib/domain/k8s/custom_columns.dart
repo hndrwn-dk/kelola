@@ -1,6 +1,7 @@
-/// M52d: `kubectl --output=custom-columns=` reads, which name the fields
-/// they print. Kelola uses them through sudo so a read never prints a pod
-/// template, whose literal `env` values often hold credentials.
+/// `kubectl --output=custom-columns=` reads, which name the fields they
+/// print. Kelola uses them through the read-only `kelola-reader` account
+/// (M52e) so a read never prints a pod template, whose literal `env` values
+/// often hold credentials.
 library;
 
 /// `--output=custom-columns=H:path,…`. Each header is one token and no path
@@ -39,11 +40,11 @@ List<Map<String, String>> parseCustomColumns(
   return out;
 }
 
-/// M52d: the workload list read through sudo. Only names, counts and
+/// The workload list read through the reader (M52d, M52e). Only names, counts and
 /// container states, never the pod template: `--output=json` of a workload
 /// carries every literal `env` value, which often holds credentials. Each
 /// column is one header letter and one path; no path or value holds a space.
-const kWorkloadSudoColumns = [
+const kWorkloadReaderColumns = [
   ('A', '.kind'),
   ('B', '.metadata.namespace'),
   ('C', '.metadata.name'),
@@ -65,18 +66,18 @@ const kWorkloadSudoColumns = [
   ('S', '.status.initContainerStatuses[*].state.waiting.reason'),
 ];
 
-/// `--output=custom-columns=…` for [kWorkloadSudoColumns].
-final kWorkloadSudoOutput = customColumnsOutput(kWorkloadSudoColumns);
+/// `--output=custom-columns=…` for [kWorkloadReaderColumns].
+final kWorkloadReaderOutput = customColumnsOutput(kWorkloadReaderColumns);
 
-/// M52d: the pod list read through sudo. Namespace, name, phase and the
+/// The pod list read through the reader (M52d, M52e). Namespace, name, phase and the
 /// first image only: `--output=json` of a pod carries every literal `env`
 /// value.
-const kPodSudoColumns = [
+const kPodReaderColumns = [
   ('N', '.metadata.namespace'),
   ('P', '.metadata.name'),
   ('S', '.status.phase'),
   ('I', '.spec.containers[0].image'),
 ];
 
-/// `--output=custom-columns=…` for [kPodSudoColumns].
-final kPodSudoOutput = customColumnsOutput(kPodSudoColumns);
+/// `--output=custom-columns=…` for [kPodReaderColumns].
+final kPodReaderOutput = customColumnsOutput(kPodReaderColumns);

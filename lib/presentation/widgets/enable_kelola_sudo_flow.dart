@@ -10,6 +10,8 @@ import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/k8s/k8s_reader.dart';
+import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
 import 'package:kelola/domain/probes/sudoers_install_probe.dart';
@@ -25,6 +27,7 @@ import 'package:kelola/domain/sudo/sudoers_install_script.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/enrollment/password_key_install_flow.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/widgets/k8s_reader_flow.dart';
 import 'package:kelola/providers.dart';
 
 const _sudoPasswordTitle = 'Sudo password';
@@ -41,7 +44,6 @@ String kelolaSudoersGroupLabel(KelolaSudoersGroup g) {
     KelolaSudoersGroup.containers => 'Containers',
     KelolaSudoersGroup.caches => 'Flush caches',
     KelolaSudoersGroup.logs => 'Logs',
-    KelolaSudoersGroup.kubernetes => 'Kubernetes reads',
   };
 }
 
@@ -55,10 +57,12 @@ String kelolaSudoersGroupsLabel(Set<KelolaSudoersGroup> groups) {
 /// Guided install of [kelolaSudoersPath]. Returns true on verified install.
 ///
 /// Always installs the full set available for [facts] (Packages, Firewall,
-/// Host power, Flush caches, Services, Processes, Containers, Logs and
-/// Kubernetes reads when present). No per-group picker. In the same tap, with the same password:
-/// the web lens lines (M52c), the login joins `systemd-journal` (M52d), and
-/// old `kelola-units` lines move into the main file (M52d).
+/// Host power, Flush caches, Services, Processes, Containers and Logs when
+/// present). No per-group picker. In the same tap, with the same password:
+/// the web lens lines (M52c), the login joins `systemd-journal` (M52d), old
+/// `kelola-units` lines move into the main file (M52d), and on a `k3s` or
+/// `kubectl` host the read-only `kelola-reader` Kubernetes account is set up
+/// or its token renewed (M52e).
 ///
 /// [hint] is the failure that led here. On a host without regex rules a
 /// service [hint]'s unit gets exact lines with the STACK services.
@@ -129,6 +133,9 @@ Future<bool> runEnableKelolaSudoFlow({
       if (!s.inContainer && s.unit != null) s.unit!,
   ];
   final groups = defaultKelolaSudoersGroups(resolved, sudo: sudo, units: units);
+  // M52e: Kubernetes reads get a read-only ServiceAccount, not a sudo rule.
+  final k8sFlavor = kubectlFlavor(resolved);
+  final k8sReader = kelolaReaderSupported(k8sFlavor);
   if (groups.isEmpty) {
     return false;
   }
@@ -172,6 +179,7 @@ Future<bool> runEnableKelolaSudoFlow({
       retireUnits: retireUnits,
       journalGroup: journalGroup,
       webLines: [for (final s in webServices) ...?previewed[s.id]],
+      k8sFlavor: k8sFlavor,
     ),
   );
   if (reviewed != true || !context.mounted) {
@@ -192,6 +200,9 @@ Future<bool> runEnableKelolaSudoFlow({
     if (retireUnits)
       ' Moves this login\'s service lines from $kelolaUnitSudoersPath, if '
           'any, into this file.',
+    if (k8sReader)
+      ' Applies the read-only $kelolaReaderName Kubernetes account and '
+          'writes its token to $kelolaReaderKubeconfigPath.',
   ].join();
 
   final confirmed = await showModalBottomSheet<bool>(
@@ -258,7 +269,7 @@ Future<bool> runEnableKelolaSudoFlow({
   }
 
   final password = EphemeralPassword();
-  final lifecycle = _SudoPasswordLifecycle(password);
+  final lifecycle = SudoPasswordLifecycle(password);
   WidgetsBinding.instance.addObserver(lifecycle);
   try {
     final entered = await showPasswordEntrySheet(
@@ -311,6 +322,17 @@ Future<bool> runEnableKelolaSudoFlow({
             facts: resolved,
             service: service,
             previewed: previewed[service.id] ?? const [],
+            password: password.read,
+          ),
+        );
+      }
+      if (k8sReader && context.mounted) {
+        notes.addAll(
+          await runK8sReaderSetup(
+            context: context,
+            ref: ref,
+            host: host,
+            facts: resolved,
             password: password.read,
           ),
         );
@@ -650,8 +672,9 @@ Text grantNotesText(
   return Text.rich(TextSpan(text: head, style: style, children: spans));
 }
 
-class _SudoPasswordLifecycle with WidgetsBindingObserver {
-  _SudoPasswordLifecycle(this._password);
+/// Clears [EphemeralPassword] when the app leaves the foreground.
+class SudoPasswordLifecycle with WidgetsBindingObserver {
+  SudoPasswordLifecycle(this._password);
 
   final EphemeralPassword _password;
 
@@ -676,7 +699,11 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
     this.retireUnits = false,
     this.journalGroup = false,
     this.webLines = const [],
+    this.k8sFlavor = KubectlFlavor.none,
   });
+
+  /// M52e: the host's Kubernetes CLI; `k3s` and `kubectl` get the reader.
+  final KubectlFlavor k8sFlavor;
 
   /// M52c: the first exact lens lines for [kelolaWebSudoersPath]; certificate
   /// and log lines follow once the config can be read.
@@ -708,7 +735,8 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
       units: units,
     );
     final tierNote = kelolaSudoersTierNote(sudo);
-    final k8sNote = kelolaSudoersK8sNote(facts, sudo);
+    final k8sNote = k8sReaderPreviewNote(k8sFlavor);
+    final k8sReader = kelolaReaderSupported(k8sFlavor);
     return KelolaSheet(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 18, 14, 0),
@@ -764,6 +792,7 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
                       '# path: $kelolaWebSudoersPath  mode: 0440',
                       ...webLines,
                     ],
+                    if (k8sReader) ...['', ...k8sReaderPreviewLines()],
                   ].join('\n'),
                   style: KelolaType.mono(color: c.text, size: 11),
                 ),

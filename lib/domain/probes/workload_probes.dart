@@ -20,8 +20,9 @@ class WorkloadListProbe extends Probe<WorkloadInventory> {
     if (kubectlFlavor(facts) == KubectlFlavor.none) {
       return 'echo ---NO_KUBECTL---';
     }
-    // M52d: through sudo, names and counts only, never the pod template.
-    return 'LC_ALL=C ${kubectlTry(facts, '$_list --output=json', sudoArgs: '$_list ${shellSingleQuote(kWorkloadSudoOutput)}')}';
+    // M52e: through the reader, names and counts only, never the pod
+    // template.
+    return 'LC_ALL=C ${kubectlRead(facts, '$_list --output=json', readerArgs: '$_list ${shellSingleQuote(kWorkloadReaderOutput)}')}';
   }
 
   @override
@@ -88,7 +89,7 @@ class WorkloadEventsProbe extends Probe<List<K8sEvent>> {
   String command(HostFacts facts) {
     final ns = shellSingleQuote(namespace);
     final sel = shellSingleQuote('involvedObject.name=$name');
-    return 'LC_ALL=C ${kubectlTry(facts, '--namespace=$ns get events --field-selector=$sel --output=json')}';
+    return 'LC_ALL=C ${kubectlRead(facts, '--namespace=$ns get events --field-selector=$sel --output=json')}';
   }
 
   @override
@@ -116,7 +117,7 @@ class WorkloadTopProbe extends Probe<List<K8sTopRow>> {
   String command(HostFacts facts) {
     final ns = shellSingleQuote(namespace);
     final extra = pod == null ? '' : ' ${shellSingleQuote(pod!)}';
-    return 'LC_ALL=C ${kubectlTry(facts, '--namespace=$ns top pod$extra --no-headers')}';
+    return 'LC_ALL=C ${kubectlRead(facts, '--namespace=$ns top pod$extra --no-headers')}';
   }
 
   @override
