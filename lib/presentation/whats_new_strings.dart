@@ -11,8 +11,8 @@ abstract final class WhatsNewStrings {
   static String label(String version) => "What's new · $version";
 
   static const notes = <String>[
-    "Fleet watch alerts are gone from Pro, as a phone can't alert reliably.",
-    'Agent forwarding now asks you to confirm every signature.',
-    'Commands stay as typed, and failed pod commands show the real error.',
+    'Web lenses for nginx and Apache: sites, certificate expiry, errors.',
+    'One Enable Kelola sudo tap now covers logs, caches and services.',
+    'Kubernetes reads use a read-only account that never sees Secrets.',
   ];
 }
