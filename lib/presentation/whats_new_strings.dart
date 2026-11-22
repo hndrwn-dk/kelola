@@ -11,8 +11,8 @@ abstract final class WhatsNewStrings {
   static String label(String version) => "What's new · $version";
 
   static const notes = <String>[
-    'Web lenses for nginx and Apache, on the host or in Docker: sites, certificate expiry, errors and status codes.',
-    'One Enable Kelola sudo tap now also covers logs, Flush caches and service actions.',
-    'Kubernetes screens read through a read-only account Kelola sets up once, never with access to Secrets.',
+    'Web lenses for nginx and Apache: sites, certificate expiry, errors.',
+    'One Enable Kelola sudo tap now covers logs, caches and services.',
+    'Kubernetes reads use a read-only account that never sees Secrets.',
   ];
 }
