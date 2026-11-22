@@ -3,6 +3,7 @@ import 'package:kelola/domain/fleet/fleet_k8s.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
 import 'package:kelola/domain/k8s/cluster_health_parser.dart';
 import 'package:kelola/domain/k8s/workload.dart';
+import 'package:kelola/domain/k8s/workload_parser.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
 import 'package:kelola/domain/k8s/openshift_health.dart';
 import 'package:kelola/domain/k8s/openshift_health_parser.dart';
@@ -91,7 +92,9 @@ class FleetWorkloadListProbe extends WorkloadListProbe {
 
   @override
   WorkloadInventory parse(String stdout, String stderr, int exitCode) {
-    if (!stdout.contains('{') && !stdout.contains('---NO_KUBECTL---')) {
+    if (!stdout.contains('{') &&
+        !isWorkloadSudoTable(stdout) &&
+        !stdout.contains('---NO_KUBECTL---')) {
       throw K8sReadException('workloads', stderr.trim().split('\n').first);
     }
     return super.parse(stdout, stderr, exitCode);

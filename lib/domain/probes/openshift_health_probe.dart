@@ -7,16 +7,16 @@ import 'package:kelola/domain/risk/risk_level.dart';
 
 /// M48 §2a. ClusterVersion, ClusterOperators, MachineConfigPools and pending
 /// CSRs in one batched read. Runs only when `ClusterHealth.isOpenShift` is
-/// true. Read-only: every section is a `get … -o json`.
+/// true. Read-only: every section is a `get … --output=json`.
 class OpenShiftHealthProbe extends Probe<OpenShiftHealth> {
   const OpenShiftHealthProbe();
 
   /// Marker → `get` arguments, in print order.
   static const sections = <(String, String)>[
-    ('CLUSTERVERSION', 'get clusterversion version -o json'),
-    ('CLUSTEROPERATORS', 'get clusteroperators -o json'),
-    ('MCP', 'get machineconfigpools -o json'),
-    ('CSR', 'get csr -o json'),
+    ('CLUSTERVERSION', 'get clusterversion version --output=json'),
+    ('CLUSTEROPERATORS', 'get clusteroperators --output=json'),
+    ('MCP', 'get machineconfigpools --output=json'),
+    ('CSR', 'get csr --output=json'),
   ];
 
   /// Shared with `FleetOpenShiftProbe` so fleet reads exactly the same.

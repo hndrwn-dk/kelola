@@ -44,8 +44,8 @@ void main() {
     final facts = HostFacts.undiscovered.copyWith(runtimes: const ['kubectl']);
     final get = WorkloadYamlGetProbe(workload: workload);
     expect(get.risk, RiskLevel.read);
-    expect(get.command(facts), contains('-o yaml'));
-    expect(get.command(facts), contains("-n 'prod'"));
+    expect(get.command(facts), contains('--output=yaml'));
+    expect(get.command(facts), contains("--namespace='prod'"));
     expect(get.command(facts), contains('deployment/web'));
     expect(get.command(facts), isNot(contains('command -v')));
 

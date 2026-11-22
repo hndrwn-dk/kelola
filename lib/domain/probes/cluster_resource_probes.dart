@@ -7,11 +7,11 @@ import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
-/// Shared shape for Wave 2 cluster-wide reads: `kubectl get … -A -o json`.
+/// Shared shape for Wave 2 cluster-wide reads: `kubectl get … --all-namespaces --output=json`.
 abstract class _ClusterGetProbe<T> extends Probe<T> {
   const _ClusterGetProbe();
 
-  /// Arguments after `get`, e.g. `svc,endpoints -A -o json`.
+  /// Arguments after `get`, e.g. `svc,endpoints --all-namespaces --output=json`.
   String get getArgs;
 
   /// Human noun for errors, e.g. `services`.
@@ -55,7 +55,7 @@ class ClusterEventsProbe extends _ClusterGetProbe<List<K8sClusterEvent>> {
   String get auditTitle => 'Listed cluster warning events';
 
   @override
-  String get getArgs => 'events -A --field-selector type=Warning -o json';
+  String get getArgs => 'events --all-namespaces --field-selector=type=Warning --output=json';
 
   @override
   String get what => 'events';
@@ -71,7 +71,7 @@ class ServiceListProbe extends _ClusterGetProbe<K8sNetworking> {
   String get auditTitle => 'Listed services and endpoints';
 
   @override
-  String get getArgs => 'svc,endpoints -A -o json';
+  String get getArgs => 'svc,endpoints --all-namespaces --output=json';
 
   @override
   String get what => 'services';
@@ -87,7 +87,7 @@ class StorageListProbe extends _ClusterGetProbe<K8sStorage> {
   String get auditTitle => 'Listed persistent volumes and claims';
 
   @override
-  String get getArgs => 'pv,pvc -A -o json';
+  String get getArgs => 'pv,pvc --all-namespaces --output=json';
 
   @override
   String get what => 'volumes';
@@ -103,7 +103,7 @@ class SecurityInventoryProbe extends _ClusterGetProbe<K8sSecurityInventory> {
   String get auditTitle => 'Listed service accounts, network policies, bindings';
 
   @override
-  String get getArgs => 'sa,networkpolicy,clusterrolebinding -A -o json';
+  String get getArgs => 'sa,networkpolicy,clusterrolebinding --all-namespaces --output=json';
 
   @override
   String get what => 'security objects';
@@ -116,6 +116,10 @@ class SecurityInventoryProbe extends _ClusterGetProbe<K8sSecurityInventory> {
 /// ConfigMap / Secret **metadata only**. The go-templates print namespace,
 /// name, (Secret) type and key names; `.data` values are never emitted, so
 /// secret material does not leave the host.
+///
+/// M52d: no Kubernetes sudoers rule covers this read. Through sudo it would
+/// list every Secret in the cluster, so it stays on the login's own
+/// kubeconfig (`kelolaSudoersK8sNote` says so).
 class ConfigInventoryProbe extends Probe<K8sConfigInventory> {
   const ConfigInventoryProbe();
 
@@ -182,8 +186,8 @@ class RolloutHistoryProbe extends _ClusterGetProbe<List<K8sRevision>> {
 
   @override
   String get getArgs => namespace == null
-      ? 'rs,controllerrevision -A -o json'
-      : 'rs,controllerrevision -n ${shellSingleQuote(namespace!)} -o json';
+      ? 'rs,controllerrevision --all-namespaces --output=json'
+      : 'rs,controllerrevision --namespace=${shellSingleQuote(namespace!)} --output=json';
 
   @override
   String get what => 'rollout history';

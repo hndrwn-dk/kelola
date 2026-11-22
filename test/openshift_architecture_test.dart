@@ -71,7 +71,7 @@ void main() {
     expect(cmd(JournalAccess.unknown), isNot(contains('journalctl')));
     expect(cmd(JournalAccess.plain), contains('rpm-ostree status --json'));
     expect(cmd(JournalAccess.plain), contains('systemctl is-active crio kubelet'));
-    expect(cmd(JournalAccess.plain), contains('sudo -n crictl ps -o json'));
+    expect(cmd(JournalAccess.plain), contains('sudo -n crictl ps --output=json'));
   });
 
   test('no M48 file adds a ProFeature value or a gate call', () {

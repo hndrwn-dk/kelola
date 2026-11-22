@@ -3421,4 +3421,6 @@ const _pinnedElsewhere = {
   KelolaSudoersGroup.containers,
   KelolaSudoersGroup.caches,
   KelolaSudoersGroup.logs,
+  // M52d: kelola_sudoers_spec_test.dart, Kubernetes reads.
+  KelolaSudoersGroup.kubernetes,
 };

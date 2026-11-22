@@ -67,6 +67,34 @@ default	nginx	Running	nginx:latest
     expect(rows.last.running, isTrue);
   });
 
+  test('M52d: pods read through sudo are named columns, same rows as the TSV',
+      () {
+    const raw = '''
+---ENGINE---
+/usr/local/bin/k3s
+---PODS---
+cli=k3s
+N             P             S         I
+kube-system   coredns-abc   Running   rancher/coredns:1.10
+default       job-1         Succeeded <none>
+default       broken
+---PS---
+''';
+    final rows = const ContainerListParser().parse(raw).rows;
+    expect(rows.map((r) => r.title), ['kube-system/coredns-abc', 'default/job-1']);
+    expect(rows.first.engine, 'k3s');
+    expect(rows.first.image, 'rancher/coredns:1.10');
+    expect(rows.first.running, isTrue);
+    expect(rows.last.image, '');
+    expect(rows.last.status, 'Succeeded');
+    // Junk after the header is no pods, never a throw.
+    for (final bad in ['{"items": [', 'N P S I\nx', 'N P S I\n\n<none>']) {
+      final out = const ContainerListParser()
+          .parse('---ENGINE---\nk3s\n---PODS---\ncli=k3s\n$bad\n---PS---\n');
+      expect(out.rows, isEmpty, reason: bad);
+    }
+  });
+
   test('docker denied is distinct from an empty engine', () {
     const raw = '''
 ---ENGINE---

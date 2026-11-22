@@ -41,6 +41,62 @@ const _listJson = r'''
 ''';
 
 void main() {
+  group('M52d: the workload list read through sudo', () {
+    // kubectl prints a header per kind; `<none>` for a field a kind lacks.
+    const table = '''
+A          B        C        D      E      F      G      H      I      J      K      L                M         N            O     P                  Q          R      S
+Deployment shop     web      3      3      2      <none> <none> <none> <none> <none> <none>           <none>    <none>       <none> <none>            <none>     <none> <none>
+Deployment shop     idle     0      <none> <none> <none> <none> <none> <none> <none> <none>           <none>    <none>       <none> <none>            <none>     <none> <none>
+
+A          B        C        D      E      F      G      H      I      J      K      L                M         N            O     P                  Q          R      S
+DaemonSet  kube     fluent   <none> <none> <none> 3      3      <none> <none> <none> <none>           <none>    <none>       <none> <none>            <none>     <none> <none>
+Job        shop     migrate  <none> <none> <none> <none> <none> 1      <none> 1      <none>           <none>    <none>       <none> <none>            <none>     <none> <none>
+CronJob    shop     backup   <none> <none> <none> <none> <none> <none> <none> <none> backup-1,backup-2 <none>    <none>       <none> <none>            <none>     <none> <none>
+Pod        shop     web-a    <none> <none> <none> <none> <none> <none> <none> <none> <none>           Running   true,true    0,6   <none>             OOMKilled  <none> <none>
+Pod        shop     web-b    <none> <none> <none> <none> <none> <none> <none> <none> <none>           Pending   false        0     CrashLoopBackOff   <none>     2      <none>
+Pod        shop     init-c   <none> <none> <none> <none> <none> <none> <none> <none> <none>           Pending   false        0     <none>             <none>     1      ErrImagePull
+Pod        shop     short
+''';
+
+    test('rows match what the JSON gives, without any pod template', () {
+      final inv = parseWorkloadList(table);
+      final by = {for (final w in inv.rows) w.name: w};
+      expect(by.keys, [
+        'web',
+        'idle',
+        'fluent',
+        'migrate',
+        'backup',
+        'web-a',
+        'web-b',
+        'init-c',
+      ]);
+      expect((by['web']!.ready, by['web']!.desired), (2, 3));
+      expect(by['web']!.health, HealthStatus.warning);
+      expect(by['idle']!.phase, 'scaled to 0');
+      expect((by['fluent']!.ready, by['fluent']!.desired), (3, 3));
+      expect(by['migrate']!.health, HealthStatus.failed);
+      expect(by['backup']!.ready, 2);
+      expect(by['web-a']!.kind, K8sKind.pod);
+      expect((by['web-a']!.ready, by['web-a']!.desired), (2, 2));
+      expect(by['web-a']!.restarts, 6);
+      expect(by['web-a']!.phase, 'Running · last OOMKilled');
+      expect(by['web-b']!.phase, 'CrashLoopBackOff');
+      expect(by['web-b']!.health, HealthStatus.failed);
+      expect(by['web-b']!.restarts, 2);
+      expect(by['init-c']!.phase, 'Init:ErrImagePull');
+      expect(by['web']!.namespace, 'shop');
+      // No pod spec came through sudo, so no container config.
+      expect(inv.rows.every((w) => w.config == null), isTrue);
+    });
+
+    test('junk never throws', () {
+      for (final bad in ['', 'A B C', 'A B C D E F G H I J K L M N O P Q R S\nx']) {
+        expect(parseWorkloadList(bad).rows, isEmpty, reason: bad);
+      }
+    });
+  });
+
   test('parses get -o json ready rollups and ignores unknown kinds', () {
     final inv = parseWorkloadList(_listJson);
     expect(inv.missingKubectl, isFalse);

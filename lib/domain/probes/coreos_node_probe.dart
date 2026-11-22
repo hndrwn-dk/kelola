@@ -32,7 +32,8 @@ class CoreOsNodeProbe extends Probe<CoreOsNodeStatus> {
       'echo ---KUBELET---',
       journal,
       'echo ---CRICTL---',
-      'sudo -n crictl ps -o json 2>/dev/null',
+      // M52d: one `--output=json` argument, as the Kubernetes sudoers rule.
+      'sudo -n crictl ps --output=json 2>/dev/null',
       'true',
     ].join('\n');
   }

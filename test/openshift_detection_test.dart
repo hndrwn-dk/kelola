@@ -102,14 +102,14 @@ void main() {
       );
     });
 
-    test('vanilla kubectl and k3s commands are unchanged', () {
+    test('vanilla kubectl and k3s lead their sudo argv with a no-op option', () {
       expect(
         kubectlTry(_facts(['kubectl']), 'get nodes'),
-        'kubectl get nodes 2>/dev/null || sudo -n kubectl get nodes',
+        'kubectl get nodes 2>/dev/null || sudo -n kubectl --request-timeout=0 get nodes',
       );
       expect(
         kubectlTry(_facts(['k3s']), 'get nodes'),
-        'sudo -n k3s kubectl get nodes 2>/dev/null || k3s kubectl get nodes',
+        'sudo -n k3s kubectl --request-timeout=0 get nodes 2>/dev/null || k3s kubectl get nodes',
       );
     });
   });
@@ -133,7 +133,7 @@ void main() {
         cmd,
         contains(
           '{ kubectl get --raw=/apis/config.openshift.io/v1 2>/dev/null || '
-          'sudo -n kubectl get --raw=/apis/config.openshift.io/v1 || '
+          'sudo -n kubectl --request-timeout=0 get --raw=/apis/config.openshift.io/v1 || '
           'echo ---OPENSHIFT_NONE---; }; echo',
         ),
       );
@@ -297,7 +297,7 @@ void main() {
         cmd,
         contains(
           'kubectl config current-context 2>/dev/null || '
-          'sudo -n kubectl config current-context',
+          'sudo -n kubectl --request-timeout=0 config current-context',
         ),
       );
     });

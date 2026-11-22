@@ -25,7 +25,7 @@ class ClusterHealthProbe extends Probe<ClusterHealth> {
       // on its own line. A failure sets readyz_failed for ---AUTH---.
       '{ ${kubectlTry(facts, 'get --raw=/readyz')} || { echo ---READYZ_FAIL---; readyz_failed=1; }; }; echo',
       'echo ---NODES---',
-      kubectlTry(facts, 'get nodes -o json'),
+      kubectlTry(facts, 'get nodes --output=json'),
       // M48 §1b: cluster kind from the API, independent of the CLI.
       'echo ---OPENSHIFT---',
       '{ ${kubectlTry(facts, 'get --raw=/apis/config.openshift.io/v1')} || echo ---OPENSHIFT_NONE---; }; echo',
