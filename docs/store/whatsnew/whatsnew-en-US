@@ -1,3 +1,3 @@
-- Fleet watch alerts are gone from Pro, as a phone can't alert reliably.
-- Agent forwarding now asks you to confirm every signature.
-- Commands stay as typed, and failed pod commands show the real error.
+- Web lenses for nginx and Apache, on the host or in Docker: sites, certificate expiry, errors and status codes.
+- One Enable Kelola sudo tap now also covers logs, Flush caches and service actions.
+- Kubernetes screens read through a read-only account Kelola sets up once, never with access to Secrets.
