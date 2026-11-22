@@ -4,8 +4,6 @@ import 'package:crypto/crypto.dart';
 import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/journal/journal_follow.dart';
-import 'package:kelola/domain/k8s/custom_columns.dart';
-import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/sudo/sudo_flavor.dart';
 
 const kelolaSudoersPath = '/etc/sudoers.d/kelola';
@@ -31,14 +29,6 @@ enum KelolaSudoersGroup {
   /// `tail` lines for [syslogProbePaths] only. Journald hosts read logs
   /// through the `systemd-journal` group instead, which needs no rule.
   logs,
-
-  /// M52d: Kubernetes reads through `k3s kubectl`, `kubectl` and `crictl`.
-  /// Root kubectl reads as cluster-admin, so only the read argv Kelola sends
-  /// (get, describe, logs, top) with fixed resource lists and one-name
-  /// classes. Never `exec`, `apply`, `port-forward`, `delete`, `scale`,
-  /// `edit`, a template file, a kubeconfig or an arbitrary `--raw` path, and
-  /// never `oc`, which may live under the login's home. Regex sudo only.
-  kubernetes,
 }
 
 class KelolaSudoersSpec {
@@ -46,17 +36,11 @@ class KelolaSudoersSpec {
     required this.user,
     required this.groups,
     required this.commands,
-    this.defaults = const [],
   });
 
   final String user;
   final Set<KelolaSudoersGroup> groups;
   final List<String> commands;
-
-  /// Lines written before the rules (M52d): a `Cmnd_Alias` and the
-  /// `Defaults!` that pins the environment for it. `sudo -l` lists them
-  /// apart from the NOPASSWD rules.
-  final List<String> defaults;
 
   String get path => kelolaSudoersPath;
 
@@ -72,9 +56,6 @@ class KelolaSudoersSpec {
       return buf.toString();
     }
     buf.writeln();
-    for (final line in defaults) {
-      buf.writeln(line);
-    }
     for (final cmd in commands) {
       buf.writeln('$user ALL=(root) NOPASSWD: $cmd');
     }
@@ -146,15 +127,7 @@ KelolaSudoersSpec buildKelolaSudoersSpec({
   if (groups.contains(KelolaSudoersGroup.logs) && !facts.hasJournald) {
     cmds.addAll(_syslogCommands);
   }
-  if (regex && groups.contains(KelolaSudoersGroup.kubernetes)) {
-    cmds.addAll(kubernetesReadCommands(facts));
-  }
-  return KelolaSudoersSpec(
-    user: user,
-    groups: groups,
-    commands: cmds,
-    defaults: cmds.any(_isK8sRule) ? kelolaK8sDefaults : const [],
-  );
+  return KelolaSudoersSpec(user: user, groups: groups, commands: cmds);
 }
 
 /// Groups that have at least one rule on this host. Services and Processes
@@ -187,9 +160,6 @@ Set<KelolaSudoersGroup> defaultKelolaSudoersGroups(
       out.add(KelolaSudoersGroup.services);
     }
     out.add(KelolaSudoersGroup.processes);
-    if (kubernetesReadCommands(facts).isNotEmpty) {
-      out.add(KelolaSudoersGroup.kubernetes);
-    }
   }
   if (facts.runtimes.contains('docker')) {
     out.add(KelolaSudoersGroup.containers);
@@ -207,56 +177,13 @@ String? kelolaSudoersTierNote(SudoFlavor sudo) {
       'signals still need your own sudo.';
 }
 
-/// M52d: shown before install on a host with a Kubernetes CLI, saying which
-/// Kubernetes features still need the login's own kubeconfig.
-String? kelolaSudoersK8sNote(HostFacts facts, SudoFlavor sudo) {
-  final flavor = kubectlFlavor(facts);
-  if (flavor == KubectlFlavor.none && !facts.runtimes.contains('crictl')) {
-    return null;
-  }
-  if (flavor == KubectlFlavor.oc) {
-    return 'Kubernetes reads use your own oc login. Kelola adds no sudo rule '
-        'for oc.';
-  }
-  if (!sudo.supportsArgRegex) {
-    return 'Kubernetes reads still need your own kubeconfig: this host\'s '
-        'sudo cannot limit a namespace or a name.';
-  }
-  return 'Kubernetes rules are read-only: lists, events, logs and top, never '
-      'a pod spec or its env values. Describe, YAML, rollout history, '
-      'ConfigMap and Secret names, diff and apply, exec, port-forward, '
-      'scale, restart and delete still need your own kubeconfig.';
-}
-
-/// M52d: the `Cmnd_Alias` for every Kubernetes binary the group names.
-const kelolaK8sCmndAlias = 'KELOLA_K8S_READS';
-
-/// M52d: written before the Kubernetes rules. Root kubectl with the login's
-/// `HOME` or `KUBECONFIG` would read a kubeconfig the login wrote, and a
-/// kubeconfig can name a credential plugin, which runs as root. So these
-/// binaries always get a fresh environment and root's home, whatever the
-/// host's own `env_keep`, `env_reset` or `setenv` say.
-final kelolaK8sDefaults = [
-  'Cmnd_Alias $kelolaK8sCmndAlias = '
-      '${[kelolaK3sPath, ...kelolaKubectlPaths, ...kelolaCrictlPaths].join(', ')}',
-  'Defaults!$kelolaK8sCmndAlias env_reset, always_set_home, !setenv, '
-      'env_keep -= "HOME KUBECONFIG"',
-];
-
-bool _isK8sRule(String rule) {
-  final binary = rule.split(' ').first;
-  return binary == kelolaK3sPath ||
-      kelolaKubectlPaths.contains(binary) ||
-      kelolaCrictlPaths.contains(binary);
-}
-
 const kelolaSudoRulesOutdatedCopy =
     'Kelola sudo rules are outdated. Re-run Enable Kelola sudo.';
 
 /// Rule text with sudo's listing escapes removed. Classic sudo keeps `\:` and
 /// adds `\=`, and before 1.9.10 also prints `""` as `\"\"`. Sudo-rs prints none.
 String normalizeSudoRule(String rule) =>
-    rule.replaceAllMapped(RegExp(r'\\([:=",])'), (m) => m[1]!);
+    rule.replaceAllMapped(RegExp(r'\\([:="])'), (m) => m[1]!);
 
 const _kelolaBinaries = {
   '/usr/bin/dnf',
@@ -277,9 +204,6 @@ const _kelolaBinaries = {
   '/usr/sbin/sysctl',
   '/usr/bin/test',
   '/usr/bin/tail',
-  kelolaK3sPath,
-  ...kelolaKubectlPaths,
-  ...kelolaCrictlPaths,
 };
 
 /// Commands a `sudo -n -l` listing grants without a password.
@@ -586,104 +510,6 @@ final _syslogCommands = [
     '/usr/bin/tail -n 0 -F $path',
   ],
 ];
-
-/// M52d: where `sudo -n k3s`, `sudo -n kubectl` and `sudo -n crictl` land
-/// through secure_path. A CLI anywhere else gets no rule and keeps today's
-/// behaviour.
-const kelolaK3sPath = '/usr/local/bin/k3s';
-const kelolaKubectlPaths = [
-  '/usr/bin/kubectl',
-  '/usr/local/bin/kubectl',
-  '/snap/bin/kubectl',
-];
-const kelolaCrictlPaths = ['/usr/bin/crictl', '/usr/local/bin/crictl'];
-
-/// One namespace (a DNS label) and one object name (a DNS subdomain). No
-/// upper case, `/`, `,`, `=`, space or leading `-`.
-const kelolaK8sNamespaceRegex = '[a-z0-9][a-z0-9-]*';
-const kelolaK8sNameRegex = '[a-z0-9][a-z0-9.-]*';
-
-/// The workload kinds a per-object read may name. Never `secret`.
-const _k8sKind = '(deployment|statefulset|daemonset|job|cronjob|pod)';
-
-const _ns = '--namespace=$kelolaK8sNamespaceRegex';
-const _obj = '$_k8sKind/$kelolaK8sNameRegex';
-
-/// [literal] as an ERE that matches only itself, escaped for a sudoers
-/// command line (`,` and `:` end or split a command there).
-String _sudoersLiteral(String literal) => literal
-    .replaceAllMapped(RegExp(r'[.\[\]*+?(){}|^$\\]'), (m) => '\\${m[0]}')
-    .replaceAll(',', r'\,')
-    .replaceAll(':', r'\:');
-
-/// M52d: the kubectl reads Kelola sends through sudo, after
-/// [kSudoKubectlLead]. Each option is one argument and no slot holds a space,
-/// so the joined argv that sudo matches has one reading. Commas are escaped
-/// for sudoers.
-///
-/// No read prints a pod template, whose literal `env` values often hold
-/// credentials: workload and pod lists name their columns
-/// ([kWorkloadSudoColumns], [kPodSudoColumns]), and `describe`,
-/// `--output=yaml`, ReplicaSets and ControllerRevisions get no rule. Also
-/// left out: ConfigMap and Secret listings, `rollout`, and every mutate verb.
-final kelolaK8sReadShapes = [
-  r'get --raw=/(version|readyz|apis/config\.openshift\.io/v1)',
-  'config current-context',
-  'get (nodes|clusterversion version|clusteroperators|machineconfigpools|csr) '
-      '--output=json',
-  r'get (svc\,endpoints|pv\,pvc|sa\,networkpolicy\,clusterrolebinding) '
-      '--all-namespaces --output=json',
-  'get events --all-namespaces --field-selector=type=Warning --output=json',
-  r'get deploy\,sts\,ds\,job\,cronjob\,pod --all-namespaces '
-      '${_sudoersLiteral(kWorkloadSudoOutput)}',
-  'get pods --all-namespaces ${_sudoersLiteral(kPodSudoOutput)}',
-  '$_ns get events --field-selector=involvedObject.name=$kelolaK8sNameRegex '
-      '--output=json',
-  '$_ns top pod( $kelolaK8sNameRegex)? --no-headers',
-  '$_ns logs $_obj --tail=[0-9]+ --timestamps',
-];
-
-/// Longest regex argument Kelola writes. Sudo 1.9.15 stops matching a regex
-/// argument past 1024 characters with no error, and visudo still accepts the
-/// file, so a long rule fails silently. The margin leaves room for other
-/// builds.
-const kelolaSudoRegexArgMax = 900;
-
-/// M52d: the Kubernetes group's rules for this host's CLI: `k3s kubectl` or
-/// `kubectl` (never `oc`), and `crictl ps` where crictl is present. The read
-/// shapes are packed into as few lines as fit [kelolaSudoRegexArgMax].
-List<String> kubernetesReadCommands(HostFacts facts) {
-  final flavor = kubectlFlavor(facts);
-  return [
-    if (flavor == KubectlFlavor.k3s)
-      for (final reads in _k8sReadRegexes('kubectl '))
-        '$kelolaK3sPath $reads',
-    if (flavor == KubectlFlavor.kubectl)
-      for (final path in kelolaKubectlPaths)
-        for (final reads in _k8sReadRegexes('')) '$path $reads',
-    if (facts.runtimes.contains('crictl'))
-      for (final path in kelolaCrictlPaths) '$path ps --output=json',
-  ];
-}
-
-List<String> _k8sReadRegexes(String before) {
-  String regex(List<String> shapes) =>
-      '^$before$kSudoKubectlLead (${shapes.join('|')})\$';
-  final out = <String>[];
-  var line = <String>[];
-  for (final shape in kelolaK8sReadShapes) {
-    if (line.isNotEmpty &&
-        regex([...line, shape]).length > kelolaSudoRegexArgMax) {
-      out.add(regex(line));
-      line = [];
-    }
-    line.add(shape);
-  }
-  if (line.isNotEmpty) {
-    out.add(regex(line));
-  }
-  return out;
-}
 
 const _processRegexCommands = [
   r'/usr/bin/kill ^-s (TERM|KILL) '

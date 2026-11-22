@@ -18,11 +18,13 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
 import 'package:kelola/domain/k8s/cluster_policy.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
+import 'package:kelola/domain/k8s/k8s_reader.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_config.dart';
 import 'package:kelola/domain/k8s/workload_view.dart';
 import 'package:kelola/domain/probes/cluster_health_probe.dart';
 import 'package:kelola/domain/probes/cluster_resource_probes.dart';
+import 'package:kelola/domain/probes/k8s_reader_probes.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
@@ -568,6 +570,57 @@ void main() {
     expect(find.text('All claims bound'), findsOneWidget);
   });
 
+  testWidgets('M52e: Read access shows the reader and its token expiry',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 4800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    pool.cluster = const ClusterHealth(
+      apiReachable: true,
+      controlPlaneReady: 1,
+      controlPlaneDesired: 1,
+    );
+    pool.reader = K8sReaderStatus(
+      present: true,
+      expires: DateTime.utc(2027, 2, 20),
+    );
+    await pumpHome(
+      tester,
+      facts: HostFacts.undiscovered.copyWith(runtimes: const ['k3s']),
+    );
+    expect(find.text('READ ACCESS'), findsOneWidget);
+    expect(
+      find.text(
+        'Reads use the read-only kelola-reader account. Token until '
+        '20 Feb 2027.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(OutlinedButton, 'Renew'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Remove'), findsOneWidget);
+    expect(pool.probes.whereType<K8sReaderStatusProbe>(), hasLength(1));
+  });
+
+  testWidgets('M52e: no Read access block on an oc host', (tester) async {
+    tester.view.physicalSize = const Size(1080, 4800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    pool.cluster = const ClusterHealth(
+      apiReachable: true,
+      controlPlaneReady: 1,
+      controlPlaneDesired: 1,
+    );
+    pool.reader = const K8sReaderStatus(present: false);
+    await pumpHome(
+      tester,
+      facts: HostFacts.undiscovered.copyWith(runtimes: const ['oc']),
+    );
+    expect(find.text('READ ACCESS'), findsNothing);
+    expect(pool.probes.whereType<K8sReaderStatusProbe>(), isEmpty);
+  });
+
   testWidgets('wave 3: configuration and security findings', (tester) async {
     tester.view.physicalSize = const Size(1080, 4200);
     tester.view.devicePixelRatio = 1;
@@ -845,6 +898,9 @@ class _HomePool extends SshSessionPool {
   /// When set, RolloutHistoryProbe fails like an RBAC-denied kubectl get.
   bool denyHistory = false;
 
+  /// M52e: what the reader status read returns; null fails it.
+  K8sReaderStatus? reader;
+
   /// When set, ServiceListProbe fails like an RBAC-denied kubectl get.
   bool denyServices = false;
 
@@ -888,6 +944,11 @@ class _HomePool extends SshSessionPool {
     }
     if (probe is SecurityInventoryProbe) {
       return security as T;
+    }
+    if (probe is K8sReaderStatusProbe) {
+      final r = reader;
+      if (r == null) throw StateError('no reader status');
+      return r as T;
     }
     if (probe is RolloutHistoryProbe) {
       if (denyHistory) {

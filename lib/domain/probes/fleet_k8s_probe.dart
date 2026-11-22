@@ -93,7 +93,7 @@ class FleetWorkloadListProbe extends WorkloadListProbe {
   @override
   WorkloadInventory parse(String stdout, String stderr, int exitCode) {
     if (!stdout.contains('{') &&
-        !isWorkloadSudoTable(stdout) &&
+        !isWorkloadReaderTable(stdout) &&
         !stdout.contains('---NO_KUBECTL---')) {
       throw K8sReadException('workloads', stderr.trim().split('\n').first);
     }

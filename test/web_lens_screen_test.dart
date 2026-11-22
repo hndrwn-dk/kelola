@@ -10,9 +10,9 @@ import 'package:kelola/app.dart';
 import 'package:kelola/data/db/database.dart';
 import 'package:kelola/data/db/host_repository.dart';
 import 'package:kelola/data/keystore/hardware_signer.dart';
+import 'package:kelola/data/services/service_lens_store.dart';
 import 'package:kelola/data/ssh/host_key_policy.dart';
 import 'package:kelola/data/ssh/session_pool.dart';
-import 'package:kelola/data/services/service_lens_store.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/exceptions.dart';
@@ -20,23 +20,26 @@ import 'package:kelola/domain/facts/enums.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/files/sftp_port.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/probes/config_tested_reload_probe.dart';
+import 'package:kelola/domain/probes/host_facts_probe.dart';
+import 'package:kelola/domain/probes/k8s_reader_probes.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
-import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
 import 'package:kelola/domain/probes/sudoers_install_probe.dart';
-import 'package:kelola/domain/sudo/sudoers_install_script.dart';
 import 'package:kelola/domain/probes/web_lens_probe.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/service_detection.dart';
 import 'package:kelola/domain/services/web_lens.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo/sudo_flavor.dart';
+import 'package:kelola/domain/sudo/sudoers_install_script.dart';
 import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/screens/web_lens_screen.dart';
 import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
+import 'package:kelola/presentation/widgets/k8s_reader_flow.dart';
 import 'package:kelola/providers.dart';
 
 const _nginx = DetectedService(
@@ -1321,6 +1324,99 @@ void main() {
       });
 
       testWidgets(
+          'M52e: a k3s host gets the read-only kelola-reader account in the '
+          'same tap, with the same password', (tester) async {
+        await repo.saveFacts(host.id, _facts().copyWith(runtimes: ['k3s']));
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        await pumpLens(tester);
+        await openOneTap(tester);
+        // Exactly the objects it applies, and no sudo rule for kubectl.
+        expect(
+          find.textContaining(
+            'Namespace kelola\nServiceAccount kelola/kelola-reader\n'
+            'ClusterRole kelola-reader (get, list)\n  core: nodes,',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('ClusterRoleBinding kelola-reader\n'
+              '# token: kubectl create token, 90 days'),
+          findsOneWidget,
+        );
+        expect(find.text(k8sReaderPreviewNote(KubectlFlavor.k3s)!),
+            findsOneWidget);
+        expect(find.textContaining('/usr/local/bin/k3s'), findsNothing);
+        await tester.tap(find.widgetWithText(FilledButton, 'Review and apply'));
+        await frames(tester, 8);
+        expect(
+          find.textContaining(
+            'Applies the read-only kelola-reader Kubernetes account and '
+            'writes its token to ~/.kube/kelola.yaml.',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+        await frames(tester, 8);
+        await enterPassword(tester);
+        await frames(tester, 40);
+        expect(pool.probes.whereType<SudoersInstallProbe>(), hasLength(1));
+        expect(pool.probes.whereType<K8sReaderSetupProbe>(), hasLength(1));
+        expect(pool.readerStdin, utf8.encode('s3cret\n'));
+        expect(
+          find.textContaining(
+            'Kubernetes reads now use the read-only kelola-reader account, '
+            'from ~/.kube/kelola.yaml. Token until 20 Feb 2027.',
+          ),
+          findsOneWidget,
+        );
+        await dispose(tester);
+      });
+
+      testWidgets(
+          'M52e: a host where the account cannot be made says why and keeps '
+          'its reads', (tester) async {
+        await repo.saveFacts(
+          host.id,
+          _facts().copyWith(runtimes: ['kubectl']),
+        );
+        pool.readerStdout = 'KELOLA_K8S_READER=noadmin\n';
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        await pumpLens(tester);
+        await openOneTap(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Review and apply'));
+        await frames(tester, 8);
+        await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+        await frames(tester, 8);
+        await enterPassword(tester);
+        await frames(tester, 40);
+        expect(
+          find.textContaining(
+            'Kubernetes reader not set up: no admin kubeconfig found and '
+            'your own cannot create cluster roles. Kubernetes reads keep '
+            'using your own kubeconfig.',
+          ),
+          findsOneWidget,
+        );
+        await dispose(tester);
+      });
+
+      testWidgets('M52e: oc hosts get no account', (tester) async {
+        await repo.saveFacts(host.id, _facts().copyWith(runtimes: ['oc']));
+        pool.error = SudoRequiredException(
+          SudoHintContext.webServices(service: 'nginx'),
+        );
+        await pumpLens(tester);
+        await openOneTap(tester);
+        expect(find.textContaining('Namespace kelola'), findsNothing);
+        expect(find.textContaining('own oc login'), findsOneWidget);
+        await dispose(tester);
+      });
+
+      testWidgets(
           'M52d: a journal that needs sudo: the tap adds the login to systemd-journal and logs in again',
           (tester) async {
         final denied = _facts().copyWith(journalReadable: false);
@@ -2129,6 +2225,15 @@ class _Pool extends SshSessionPool {
         out == null ? 0 : grantExit,
       );
     }
+    if (probe is K8sReaderSetupProbe) {
+      readerStdin = stdinBytes;
+      return probe.parse(
+        readerStdout ??
+            'KELOLA_K8S_READER=ok\nKELOLA_K8S_READER_EXP=2027-02-20T10:00:00Z\n',
+        '',
+        0,
+      );
+    }
     if (probe is SudoersInstallProbe) {
       stdin = stdinBytes;
       return SudoersInstallResult(ok: true, journalGroup: journalGroup) as T;
@@ -2138,6 +2243,10 @@ class _Pool extends SshSessionPool {
     }
     throw StateError('unexpected probe ${probe.runtimeType}');
   }
+
+  /// M52e: what the reader setup prints, and the stdin it got.
+  String? readerStdout;
+  List<int>? readerStdin;
 
   /// M52d: how the install's systemd-journal step ends.
   JournalGroupOutcome journalGroup = JournalGroupOutcome.notAsked;

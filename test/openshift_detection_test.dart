@@ -102,14 +102,14 @@ void main() {
       );
     });
 
-    test('vanilla kubectl and k3s lead their sudo argv with a no-op option', () {
+    test('vanilla kubectl and k3s keep their plain and sudo order', () {
       expect(
         kubectlTry(_facts(['kubectl']), 'get nodes'),
-        'kubectl get nodes 2>/dev/null || sudo -n kubectl --request-timeout=0 get nodes',
+        'kubectl get nodes 2>/dev/null || sudo -n kubectl get nodes',
       );
       expect(
         kubectlTry(_facts(['k3s']), 'get nodes'),
-        'sudo -n k3s kubectl --request-timeout=0 get nodes 2>/dev/null || k3s kubectl get nodes',
+        'sudo -n k3s kubectl get nodes 2>/dev/null || k3s kubectl get nodes',
       );
     });
   });
@@ -126,14 +126,17 @@ void main() {
   });
 
   group('cluster kind from the API (M48 §1b)', () {
-    test('probe asks config.openshift.io/v1 through kubectlTry', () {
+    test('probe asks config.openshift.io/v1 through kubectlRead', () {
       final cmd = const ClusterHealthProbe().command(_facts(['kubectl']));
       expect(cmd, contains('echo ---OPENSHIFT---'));
       expect(
         cmd,
         contains(
-          '{ kubectl get --raw=/apis/config.openshift.io/v1 2>/dev/null || '
-          'sudo -n kubectl --request-timeout=0 get --raw=/apis/config.openshift.io/v1 || '
+          '{ [ -r "\$HOME/.kube/kelola.yaml" ] && LC_ALL=C kubectl '
+          '--kubeconfig="\$HOME/.kube/kelola.yaml" '
+          'get --raw=/apis/config.openshift.io/v1 2>/dev/null || '
+          'kubectl get --raw=/apis/config.openshift.io/v1 2>/dev/null || '
+          'sudo -n kubectl get --raw=/apis/config.openshift.io/v1 || '
           'echo ---OPENSHIFT_NONE---; }; echo',
         ),
       );
@@ -296,8 +299,9 @@ void main() {
       expect(
         cmd,
         contains(
+          'echo ---CONTEXT---\n'
           'kubectl config current-context 2>/dev/null || '
-          'sudo -n kubectl --request-timeout=0 config current-context',
+          'sudo -n kubectl config current-context',
         ),
       );
     });

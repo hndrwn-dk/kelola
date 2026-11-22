@@ -23,14 +23,15 @@ class ClusterHealthProbe extends Probe<ClusterHealth> {
       'echo ---READYZ---',
       // --raw prints no trailing newline; the echo keeps the next marker
       // on its own line. A failure sets readyz_failed for ---AUTH---.
-      '{ ${kubectlTry(facts, 'get --raw=/readyz')} || { echo ---READYZ_FAIL---; readyz_failed=1; }; }; echo',
+      '{ ${kubectlRead(facts, 'get --raw=/readyz')} || { echo ---READYZ_FAIL---; readyz_failed=1; }; }; echo',
       'echo ---NODES---',
-      kubectlTry(facts, 'get nodes --output=json'),
+      kubectlRead(facts, 'get nodes --output=json'),
       // M48 §1b: cluster kind from the API, independent of the CLI.
       'echo ---OPENSHIFT---',
-      '{ ${kubectlTry(facts, 'get --raw=/apis/config.openshift.io/v1')} || echo ---OPENSHIFT_NONE---; }; echo',
+      '{ ${kubectlRead(facts, 'get --raw=/apis/config.openshift.io/v1')} || echo ---OPENSHIFT_NONE---; }; echo',
       // M48: kubeconfig context (local, no API call), so a cached
-      // OpenShift/Kubernetes label can tell when the cluster changed.
+      // OpenShift/Kubernetes label can tell when the cluster changed. The
+      // login's own kubeconfig, never the reader's fixed one (M52e).
       'echo ---CONTEXT---',
       kubectlTry(facts, 'config current-context'),
       // M48 §1d: why readyz failed, only when it did (expired oc login).
