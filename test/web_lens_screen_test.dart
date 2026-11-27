@@ -1730,7 +1730,10 @@ void main() {
           await tester.tap(enableButton());
           await frames(tester, 12);
           // The Services group is written: the sheet says what it means.
-          expect(find.text(kelolaServicesConfigAsRootNote), findsOneWidget);
+          expect(
+          find.text('$kelolaServicesFoundNote $kelolaServicesConfigAsRootNote'),
+          findsOneWidget,
+        );
           await tester.tap(
             find.widgetWithText(FilledButton, 'Review and apply'),
           );

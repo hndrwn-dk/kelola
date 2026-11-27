@@ -309,6 +309,100 @@ void main() {
     });
   });
 
+  // Owner decision on PR #12: no services regex on any tier. Every host gets
+  // exact lifecycle lines for the services Kelola knows, so the web unit gate
+  // applies everywhere.
+  group('exact service lines on every sudo tier', () {
+    const classic = ClassicSudo(1, 9, 15);
+    KelolaSudoersSpec spec(SudoFlavor sudo, List<String> units) =>
+        buildKelolaSudoersSpec(
+          user: 'hendr',
+          facts: _facts,
+          groups: defaultKelolaSudoersGroups(_facts, sudo: sudo, units: units),
+          sudo: sudo,
+          units: units,
+        );
+
+    test('a regex-capable sudo gets exact lines, never the systemctl regex', () {
+      final s = spec(classic, ['nginx.service', 'mariadb.service']);
+      expect(s.groups, contains(KelolaSudoersGroup.services));
+      for (final u in ['nginx.service', 'mariadb.service']) {
+        for (final v in kelolaUnitLifecycleVerbs) {
+          expect(s.commands, contains('/usr/bin/systemctl $v $u'));
+        }
+      }
+      expect(
+        s.commands.where((c) => c.startsWith('/usr/bin/systemctl ^')),
+        isEmpty,
+      );
+      // Same lines as a host without regex.
+      expect(
+        s.commands.where((c) => c.startsWith('/usr/bin/systemctl ')),
+        spec(
+          const SudoRs('0.2.13'),
+          ['nginx.service', 'mariadb.service'],
+        ).commands.where((c) => c.startsWith('/usr/bin/systemctl ')),
+      );
+    });
+
+    test('no known service: no Services group on any tier', () {
+      for (final sudo in const [classic, SudoRs('0.2.13')]) {
+        final groups = defaultKelolaSudoersGroups(_facts, sudo: sudo);
+        expect(groups, isNot(contains(KelolaSudoersGroup.services)));
+        final s = spec(sudo, const []);
+        expect(
+          s.commands.where((c) => c.startsWith('/usr/bin/systemctl')),
+          isEmpty,
+        );
+      }
+      // Processes keeps its regex rule.
+      expect(
+        defaultKelolaSudoersGroups(_facts, sudo: classic),
+        contains(KelolaSudoersGroup.processes),
+      );
+    });
+
+    test('copy says service lines cover the services Kelola found', () {
+      expect(
+        kelolaServicesFoundNote,
+        'Service lines cover the services Kelola has found. A service found '
+        'later needs Enable Kelola sudo again.',
+      );
+      // The tier note no longer lists service actions: every tier gets them.
+      expect(kelolaSudoersTierNote(const SudoRs('0.2.13')), isNot(contains('service')));
+      expect(kelolaSudoersTierNote(classic), isNull);
+      final faq = kSupportFaq.firstWhere(
+        (f) => f.question == 'Why does an action say sudo needs a password?',
+      );
+      expect(faq.answer, contains(kelolaServicesFoundNote));
+      expect(faq.answer, isNot(contains('one action at a time')));
+    });
+
+    test('a host still listing the old regex rule reads as outdated', () {
+      final current = spec(classic, const []);
+      final listed = [
+        ...current.commands,
+        r'/usr/bin/systemctl ^(start|stop|restart|reload) '
+            r'[a-zA-Z0-9][a-zA-Z0-9\:_.@-]*$',
+      ];
+      expect(
+        kelolaSudoRulesOutdated(listed: listed, spec: current),
+        isTrue,
+      );
+      // Exact unit lines beside the current set are not outdated.
+      expect(
+        kelolaSudoRulesOutdated(
+          listed: [
+            ...current.commands,
+            '/usr/bin/systemctl reload nginx.service',
+          ],
+          spec: current,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('services regex rule note', () {
     test('Enable sheet and help topic carry the same line', () {
       expect(

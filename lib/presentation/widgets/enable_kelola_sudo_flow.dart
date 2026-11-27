@@ -64,8 +64,8 @@ String kelolaSudoersGroupsLabel(Set<KelolaSudoersGroup> groups) {
 /// `kubectl` host the read-only `kelola-reader` Kubernetes account is set up
 /// or its token renewed (M52e).
 ///
-/// [hint] is the failure that led here. On a host without regex rules a
-/// service [hint]'s unit gets exact lines with the STACK services.
+/// [hint] is the failure that led here. A service [hint]'s unit gets exact
+/// lines with the STACK services, on every sudo tier (PR #12).
 ///
 /// [gateService] (a web lens's own service, from its Reload hint) only tells
 /// the web unit gate which server binary to check ([WebUnitGate]); unlike
@@ -129,8 +129,8 @@ Future<bool> runEnableKelolaSudoFlow({
   if (!context.mounted) {
     return false;
   }
-  // M52d: a host whose sudo has no regex gets exact lifecycle lines for the
-  // STACK services and the unit that asked, in the same file. The old
+  // Exact lifecycle lines for the STACK services and the unit that asked, on
+  // every sudo tier (PR #12: no services regex), in the same file. The old
   // per-action kelola-units grant is folded in and retired.
   final units = <String>[
     if (hint?.kind == SudoHintKind.systemd && hint?.unit != null) hint!.unit!,
@@ -736,7 +736,7 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
   final SudoFlavor sudo;
   final bool fileExists;
 
-  /// M52d: services that get exact lines on a host without regex.
+  /// Services that get exact lifecycle lines (every sudo tier).
   final List<String> units;
 
   /// M52d: lines already in [kelolaUnitSudoersPath] move into this file.
@@ -788,7 +788,7 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
             if (groups.contains(KelolaSudoersGroup.services)) ...[
               const SizedBox(height: 8),
               Text(
-                kelolaServicesConfigAsRootNote,
+                '$kelolaServicesFoundNote $kelolaServicesConfigAsRootNote',
                 style: KelolaType.body(color: c.muted, size: 13),
               ),
             ],

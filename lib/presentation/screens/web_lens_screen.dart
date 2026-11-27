@@ -803,9 +803,9 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
     if (ok && mounted) await _load();
   }
 
-  /// PR #17: the reload leg was refused on systemd. The flow offers the one
-  /// `systemctl reload <unit>` rule (or Enable on regex-tier hosts, whose
-  /// services rule already covers it); then Reload can be tried again.
+  /// PR #17: the reload leg was refused on systemd. Enable adds this unit's
+  /// exact lifecycle lines (every sudo tier since PR #12), kept only when its
+  /// config passes the host-side check; then Reload can be tried again.
   Future<void> _grantUnit(SudoHintContext hint) async {
     final host = _host;
     if (host == null || _busy) return;
