@@ -9,6 +9,7 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/probes/config_tested_reload_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/probes/sudo_flavor_probe.dart';
 import 'package:kelola/domain/probes/web_lens_probe.dart';
 import 'package:kelola/domain/services/apache_vhosts_parser.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
@@ -288,6 +289,25 @@ String webReadOnlySudoBody(String label) =>
     'grant read access, or add the exact lines yourself.';
 
 /// Label of the lens read grant action (spec §7b).
+/// Title of the read-only row for a config-test grant written before the
+/// config check (PR #3) whose config now fails it.
+const webOutdatedGrantTitle = 'Outdated config-test grant';
+
+/// The remove instructions under that row: the exact lines, as the host's
+/// `sudo -n -l` listed them for [user].
+String webOutdatedGrantFix(String user, List<String> rules) => [
+  'These lines run the server config as root without a password. Remove '
+      'them with sudo visudo -f $kelolaWebSudoersPath (or the file that '
+      'holds them):',
+  for (final r in rules) '$user ALL=(root) NOPASSWD: $r',
+].join('\n');
+
+/// A config-test grant the host still lists whose config fails the check.
+typedef WebOutdatedGrant = ({
+  List<String> rules,
+  WebGrantConfigRefusal refusal,
+});
+
 const webEnableSudoLabel = 'Enable Kelola sudo';
 
 /// M52c: the lens's one-tap row says what the tap covers.
@@ -499,6 +519,9 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
   /// Host output of the last failed reload, shown in mono under [_error].
   String _reloadOutput = '';
 
+  /// A listed config-test grant whose config now fails the check.
+  WebOutdatedGrant? _outdated;
+
   @override
   void initState() {
     super.initState();
@@ -550,12 +573,52 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
         _facts = facts;
         _lens = lens;
       });
+      final outdated = await _checkOutdatedGrant(host, facts, lens);
+      if (mounted) setState(() => _outdated = outdated);
     } catch (e) {
       // SudoRequiredException keeps its hint context in the message, so
       // KelolaError renders the web-services sudo hint (§7b).
       if (mounted) setState(() => _error = describeSshError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Only when the config test ran through `sudo -n`, so hosts without such
+  /// a rule run nothing more. Read-only; a failure shows nothing.
+  Future<WebOutdatedGrant?> _checkOutdatedGrant(
+    Host host,
+    HostFacts? facts,
+    WebLens lens,
+  ) async {
+    if (!lens.configTestViaSudo || widget.service.inContainer) return null;
+    try {
+      final rules = await runHostProbe(
+        ref: ref,
+        context: context,
+        host: host,
+        facts: facts,
+        probe: const SudoRulesProbe(),
+      );
+      final lines = webListedConfigTestLines(
+        listed: rules.listed,
+        id: widget.service.id,
+      );
+      if (lines.isEmpty || !mounted) return null;
+      final refusal = await runHostProbe(
+        ref: ref,
+        context: context,
+        host: host,
+        facts: facts,
+        probe: WebConfigTrustProbe(
+          id: widget.service.id,
+          binary: lines.first.split(' ').first,
+        ),
+      );
+      if (refusal == null) return null;
+      return (rules: lines, refusal: refusal);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -752,6 +815,7 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
       host: host,
       facts: _facts,
       hint: hint,
+      gateService: widget.service,
     );
     if (ok && mounted) setState(() => _error = null);
   }
@@ -919,6 +983,20 @@ class _WebLensScreenState extends ConsumerState<WebLensScreen> {
       const SizedBox(height: 14),
       Text('ACTIONS', style: _slabStyle(c)),
       const SizedBox(height: 8),
+      if (_outdated case final o?) ...[
+        ServiceRow(
+          risk: RiskLevel.read,
+          name: webOutdatedGrantTitle,
+          meta: kelolaWebSudoersPath,
+          detail: webGrantConfigCopy(o.refusal),
+        ),
+        const SizedBox(height: 4),
+        SelectableText(
+          webOutdatedGrantFix(host.username, o.rules),
+          style: KelolaType.mono(color: c.muted, size: 10.5),
+        ),
+        const SizedBox(height: 8),
+      ],
       if (grant != null) ...[
         ServiceRow(
           risk: RiskLevel.mutate,

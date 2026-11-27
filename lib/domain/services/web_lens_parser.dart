@@ -290,6 +290,7 @@ WebLens parseWebLens(
     accessLogStat: _stat(sections[_Sec.access]?.metaValue('stat')),
     loginGroups: loginGroups,
     vhostCertsUnlinked: vhostCertsUnlinked,
+    configTestViaSudo: !inContainer && ct?.metaValue('elevated') == '1',
   );
 }
 

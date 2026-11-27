@@ -107,6 +107,7 @@ WebLens _lens({
   WebLogStat? accessLogStat,
   List<String>? loginGroups,
   bool vhostCertsUnlinked = false,
+  bool configTestViaSudo = false,
   List<String> errorLogTail = const [
     '2026/11/10 01:31:42 [error] 3159#3159: *1 connect() failed (111: Connection refused) while connecting to upstream',
     '2026/11/10 01:31:48 [warn] 3176#3176: *2 an upstream response is buffered to a temporary file',
@@ -148,6 +149,7 @@ WebLens _lens({
     accessLogStat: accessLogStat,
     loginGroups: loginGroups,
     vhostCertsUnlinked: vhostCertsUnlinked,
+    configTestViaSudo: configTestViaSudo,
   );
 }
 
@@ -1706,6 +1708,54 @@ void main() {
         await dispose(tester);
       });
 
+      testWidgets(
+        'the one tap gates the nginx unit lines on its config, and says what the host left out',
+        (tester) async {
+          pool.lens = _healthyLens();
+          pool.reloadStdout =
+              '@init=systemd\n---TEST---\n@rc=0\n'
+              '---RELOAD---\n@rc=nosudo\n---VERIFY---\n|ActiveState=active\n';
+          pool.reloadExit = 1;
+          pool.installRefusals = const [
+            WebUnitRefusal(
+              unit: 'nginx.service',
+              refusal: WebGrantConfigRefusal(
+                path: '/etc/nginx/sites-enabled',
+                reason: WebConfigRefusalReason.mode,
+              ),
+            ),
+          ];
+          await pumpLens(tester);
+          await tapReloadAndConfirm(tester);
+          await tester.tap(enableButton());
+          await frames(tester, 12);
+          // The Services group is written: the sheet says what it means.
+          expect(find.text(kelolaServicesConfigAsRootNote), findsOneWidget);
+          await tester.tap(
+            find.widgetWithText(FilledButton, 'Review and apply'),
+          );
+          await frames(tester, 8);
+          await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+          await frames(tester, 8);
+          await enterPassword(tester);
+          await frames(tester, 40);
+          final probe = pool.probes.whereType<SudoersInstallProbe>().single;
+          expect(probe.webUnitGates.map((g) => g.unit), ['nginx.service']);
+          expect(probe.webUnitGates.single.binary, '/usr/sbin/nginx');
+          expect(
+            find.textContaining(
+              'nginx.service start, stop, restart and reload not granted: ',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.textContaining('is writable by group or others.'),
+            findsOneWidget,
+          );
+          await dispose(tester);
+        },
+      );
+
       testWidgets('OpenRC reload failure shows the sudo hint with no grant offer',
           (tester) async {
         await repo.saveFacts(
@@ -1979,6 +2029,98 @@ void main() {
 
     // Fix 2: Debian / Ubuntu logs are group adm, so joining adm reads them
     // with no sudo at all.
+    // PR #3 gated new config-test grants; lines granted before it stay on
+    // hosts. When the lens's config test ran through sudo -n, the listing is
+    // checked, and a `-t` line on a config that now fails the check gets a
+    // read-only row with the remove instructions.
+    group('outdated config-test grant', () {
+      const listing =
+          'User hendra may run the following commands on web01:\n'
+          '    (root) NOPASSWD: /usr/sbin/nginx -t\n'
+          '    (root) NOPASSWD: /usr/sbin/nginx -T\n';
+      String refused(String path) =>
+          '$webGrantConfigMarker ${base64Encode(utf8.encode(path))} mode\n';
+      Finder row() => find.widgetWithText(ServiceRow, webOutdatedGrantTitle);
+
+      testWidgets('a -t line on a config that fails the check shows the row', (
+        tester,
+      ) async {
+        pool.lens = _lens(configTestViaSudo: true);
+        pool.sudoListing = listing;
+        pool.trustStdout = refused('/etc/nginx/sites-enabled');
+        await pumpLens(tester);
+        expect(row(), findsOneWidget);
+        expect(
+          find.textContaining(
+            'Config test not granted: /etc/nginx/sites-enabled is writable '
+            'by group or others.',
+          ),
+          findsOneWidget,
+        );
+        final fix = find.textContaining('sudo visudo -f $kelolaWebSudoersPath');
+        expect(fix, findsOneWidget);
+        expect(
+          find.textContaining('hendra ALL=(root) NOPASSWD: /usr/sbin/nginx -t'),
+          findsOneWidget,
+        );
+        expect(
+          tester
+              .widget<SelectableText>(
+                find.ancestor(of: fix, matching: find.byType(SelectableText)),
+              )
+              .style
+              ?.fontFamily,
+          KelolaType.mono(color: Colors.white).fontFamily,
+        );
+        final trust = pool.probes.whereType<WebConfigTrustProbe>().single;
+        expect(trust.binary, '/usr/sbin/nginx');
+        // Read-only: nothing to tap.
+        expect(tester.widget<ServiceRow>(row()).onTap, isNull);
+        await dispose(tester);
+      });
+
+      testWidgets(
+        'a config that passes shows no row, and the row goes once it passes',
+        (tester) async {
+          pool.lens = _lens(configTestViaSudo: true);
+          pool.sudoListing = listing;
+          pool.trustStdout = refused('/etc/nginx/conf.d');
+          await pumpLens(tester);
+          expect(row(), findsOneWidget);
+          pool.trustStdout = '$webConfigTrustOkMarker\n';
+          unawaited(
+            tester
+                .state<RefreshIndicatorState>(find.byType(RefreshIndicator))
+                .show(),
+          );
+          await frames(tester, 30);
+          expect(row(), findsNothing);
+          await dispose(tester);
+        },
+      );
+
+      testWidgets('no -t line listed: no check runs, no row', (tester) async {
+        pool.lens = _lens(configTestViaSudo: true);
+        pool.sudoListing = '    (root) NOPASSWD: /usr/bin/tail -n 60 /var/log/nginx/error.log\n';
+        await pumpLens(tester);
+        expect(pool.probes.whereType<SudoRulesProbe>(), hasLength(1));
+        expect(pool.probes.whereType<WebConfigTrustProbe>(), isEmpty);
+        expect(row(), findsNothing);
+        await dispose(tester);
+      });
+
+      testWidgets('a config test that ran as the login checks nothing', (
+        tester,
+      ) async {
+        pool.lens = _lens();
+        pool.sudoListing = listing;
+        await pumpLens(tester);
+        expect(pool.probes.whereType<SudoRulesProbe>(), isEmpty);
+        expect(row(), findsNothing);
+        await dispose(tester);
+      });
+    });
+
     group('adm group hint', () {
       const errCopy =
           'Could not read error log: no access with or without sudo -n';
@@ -2236,10 +2378,23 @@ class _Pool extends SshSessionPool {
     }
     if (probe is SudoersInstallProbe) {
       stdin = stdinBytes;
-      return SudoersInstallResult(ok: true, journalGroup: journalGroup) as T;
+      return SudoersInstallResult(
+            ok: true,
+            journalGroup: journalGroup,
+            unitRefusals: installRefusals,
+          )
+          as T;
     }
     if (probe is HostFactsProbe) {
       return relearnedFacts! as T;
+    }
+    if (probe is SudoRulesProbe) {
+      final l = sudoListing;
+      if (l == null) throw StateError('no listing');
+      return probe.parse('Sudo version 1.9.15\n---SUDO_LIST---\n$l', '', 0);
+    }
+    if (probe is WebConfigTrustProbe) {
+      return probe.parse(trustStdout ?? '', '', 0);
     }
     throw StateError('unexpected probe ${probe.runtimeType}');
   }
@@ -2253,6 +2408,13 @@ class _Pool extends SshSessionPool {
 
   /// What a facts read returns after the login joined the group.
   HostFacts? relearnedFacts;
+
+  /// Web units the install left out.
+  List<WebUnitRefusal> installRefusals = const [];
+
+  /// `sudo -n -l` as the host lists it, and the config check's output.
+  String? sudoListing;
+  String? trustStdout;
   final execDrops = <String>[];
 
   @override

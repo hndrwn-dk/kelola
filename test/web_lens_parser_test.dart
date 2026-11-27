@@ -153,6 +153,31 @@ void main() {
       });
     });
 
+    test('a config test that passed only through sudo -n is marked', () {
+      final viaSudo = parseWebLens(
+        nginxOutput(
+          conftest: [
+            '@elevated=1',
+            '|nginx: configuration file /etc/nginx/nginx.conf test is successful',
+            '@rc=0',
+          ],
+        ),
+        id: ServiceId.nginx,
+        now: now,
+      );
+      expect(viaSudo.configTestViaSudo, isTrue);
+      expect(viaSudo.configOk, isTrue);
+      final plain = parseWebLens(nginxOutput(), id: ServiceId.nginx, now: now);
+      expect(plain.configTestViaSudo, isFalse);
+      // Host output cannot forge it: data lines carry the `|` prefix.
+      final forged = parseWebLens(
+        nginxOutput(conftest: ['|@elevated=1', '@rc=0']),
+        id: ServiceId.nginx,
+        now: now,
+      );
+      expect(forged.configTestViaSudo, isFalse);
+    });
+
     test("status buckets parsed with junk and '-' lines", () {
       final lens = parseWebLens(nginxOutput(), id: ServiceId.nginx, now: now);
       expect(lens.statusCounts, {200: 30, 404: 4, 500: 4, 502: 1});
@@ -700,6 +725,22 @@ void main() {
   });
 
   group('WebLensProbe command', () {
+    test(
+      'marks a config test that ran through sudo -n, never a refused one',
+      () {
+        final cmd = WebLensProbe(
+          id: ServiceId.nginx,
+          binaries: const {'nginx': '/usr/sbin/nginx'},
+        ).command(ubuntu);
+        final i = cmd.indexOf(r'o=$(sudo -n "$B" -t 2>&1); r=$?');
+        expect(i, greaterThan(0));
+        expect(
+          cmd.indexOf(r'case "$r" in nosudo) ;; *) echo @elevated=1 ;; esac', i),
+          greaterThan(i),
+        );
+      },
+    );
+
     const nginx = WebLensProbe(
       id: ServiceId.nginx,
       binaries: {'nginx': '/usr/sbin/nginx'},
