@@ -12,6 +12,7 @@ import 'package:kelola/domain/probes/sudoers_install_probe.dart';
 import 'package:kelola/domain/probes/web_lens_probe.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
+import 'package:kelola/domain/sudo/sudoers_install_script.dart';
 import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 
 /// M52 architecture pins: the service lenses stay read-only (apart from the
@@ -358,6 +359,45 @@ void main() {
             .toSet(),
         {'root'},
       );
+    });
+
+    // The web unit gate (reload-grant gate) reuses the same check through the
+    // Enable install script; its overrides are test-only too.
+    test('web unit gate: overrides are test-only and production checks root only', () {
+      final install = _read('lib/domain/sudo/sudoers_install_script.dart');
+      expect(
+        install,
+        contains("@visibleForTesting List<String> trustOwners = const ['root'],"),
+      );
+      expect(install, contains("@visibleForTesting String configPrefix = '',"));
+      final grant = _read('lib/domain/sudo/web_sudoers_grant.dart');
+      expect(
+        grant,
+        contains("@visibleForTesting List<String> owners = const ['root'],"),
+      );
+      expect(grant, contains("@visibleForTesting String prefix = '',"));
+      final script = buildSudoersInstallScript(
+        content: '# k\n',
+        user: 'alice',
+        retireUnits: true,
+        webUnitGates: const [
+          WebUnitGate(
+            unit: 'nginx.service',
+            id: ServiceId.nginx,
+            binary: '/usr/sbin/nginx',
+          ),
+          WebUnitGate(unit: 'apache2.service', id: ServiceId.apache),
+        ],
+      );
+      expect(script, contains('kelola_cfg'));
+      expect(
+        RegExp(r"-user '([^']*)'")
+            .allMatches(script)
+            .map((m) => m.group(1))
+            .toSet(),
+        {'root'},
+      );
+      expect(script, contains('kelola_pre=\n'));
     });
 
     test('config trust locations are the real ones in lib (test-only prefix unused)', () {

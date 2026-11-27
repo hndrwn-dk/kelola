@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
+import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/units/shell_quote.dart';
 
 const sudoersInstallOkMarker = 'KELOLA_SUDOERS_OK';
@@ -36,6 +38,24 @@ String unitGrantLineRegex(String user) {
       r'(start|stop|restart|reload) [a-zA-Z0-9]([a-zA-Z0-9_.@-]|\\:)*';
 }
 
+/// Printed by the install script, with the unit, the failing path (each
+/// base64) and a [WebConfigRefusalReason] name, for each web server unit
+/// whose lifecycle lines were left out ([WebUnitGate]).
+const sudoersUnitConfigMarker = 'KELOLA_UNIT_CONFIG';
+
+/// ERE (for `grep -Ex`) for the old per-action grant's lines for [user] on
+/// web server [unit], written either as `nginx` or `nginx.service`.
+String webUnitGrantLineRegex(String user, String unit) {
+  String ere(String s) =>
+      s.replaceAllMapped(RegExp(r'[.^$*+?()\[\]{}|\\]'), (m) => '\\${m[0]}');
+  final base = unit.endsWith('.service')
+      ? unit.substring(0, unit.length - '.service'.length)
+      : unit;
+  return '${ere(user)} '
+      r'ALL=\(root\) NOPASSWD: /usr/bin/systemctl '
+      '(start|stop|restart|reload) ${ere(base)}(\\.service)?';
+}
+
 /// Remote sh that reads the sudo password on stdin (one line), then installs
 /// [content] to [kelolaSudoersPath]. Password must never appear in argv.
 ///
@@ -49,11 +69,25 @@ String unitGrantLineRegex(String user) {
 ///
 /// Both run after the main file is installed or never; neither can fail the
 /// install. Their results follow [sudoersInstallOkMarker].
+///
+/// [webUnitGates] (needs [user]): web server units whose lifecycle lines are
+/// kept only when the server config is root-controlled
+/// ([webUnitConfigGateShell], run as the login before visudo). A unit that
+/// fails has its exact lines cut from the new file and its old
+/// `kelola-units` lines left behind (not moved; the file is still retired),
+/// and prints [sudoersUnitConfigMarker]. Other lines are unaffected. Empty
+/// (every host without a web server unit): the script is unchanged.
+///
+/// [trustOwners] and [configPrefix] exist for tests only (see
+/// [buildWebGrantScript]).
 String buildSudoersInstallScript({
   required String content,
   String? user,
   bool retireUnits = false,
   bool journalGroup = false,
+  List<WebUnitGate> webUnitGates = const [],
+  @visibleForTesting List<String> trustOwners = const ['root'],
+  @visibleForTesting String configPrefix = '',
 }) {
   final b64 = base64Encode(utf8.encode(content));
   assert(!b64.contains("'"), 'base64 must not contain single quotes');
@@ -62,6 +96,40 @@ String buildSudoersInstallScript({
   final login = user != null && isSudoersSafeLogin(user) ? user : null;
   const sudo = "printf '%s\\n' \"\$SUDO_PASS\" | sudo -S -p ''";
   final units = shellSingleQuote(kelolaUnitSudoersPath);
+  final gates = login == null ? const <WebUnitGate>[] : webUnitGates;
+  final contentLines = content.split('\n').toSet();
+  final gateShell = StringBuffer();
+  if (gates.isNotEmpty) {
+    gateShell.write(
+      webUnitConfigGateShell(
+        gates,
+        sudoersUnitConfigMarker,
+        trustOwners,
+        configPrefix,
+      ),
+    );
+    for (final (j, g) in gates.indexed) {
+      for (final l in webUnitLines(login!, g.unit)) {
+        if (!contentLines.contains(l)) continue;
+        final lb = base64Encode(utf8.encode(l));
+        gateShell.writeln(
+          'if [ "\$KELOLA_U$j" != 1 ]; then '
+          "L=\$(printf '%s' '$lb' | base64 -d); "
+          '{ grep -vxF -- "\$L" "\$TMP" || true; } > "\$CUT"; '
+          'cat "\$CUT" > "\$TMP"; fi',
+        );
+      }
+    }
+  }
+  // A folded line of a refused unit is dropped, not moved.
+  final skip = StringBuffer();
+  for (final (j, g) in gates.indexed) {
+    skip.writeln(
+      '    if [ "\$KELOLA_U$j" != 1 ] && printf \'%s\\n\' "\$l" | '
+      'grep -Eqx -- ${shellSingleQuote(webUnitGrantLineRegex(login!, g.unit))}; '
+      'then continue; fi',
+    );
+  }
   final fold = login == null || !retireUnits
       ? ''
       : '''
@@ -72,7 +140,7 @@ if $sudo test -f $units; then
   while IFS= read -r l || [ -n "\$l" ]; do
     case "\$l" in ''|'#'*) continue ;; esac
     if printf '%s\\n' "\$l" | grep -Eqx -- ${shellSingleQuote(unitGrantLineRegex(login))}; then
-      grep -qxF -- "\$l" "\$TMP" || printf '%s\\n' "\$l" >> "\$TMP"
+$skip      grep -qxF -- "\$l" "\$TMP" || printf '%s\\n' "\$l" >> "\$TMP"
     else
       RETIRE=0
     fi
@@ -99,14 +167,24 @@ else
   printf '%s\\n' '${sudoersJournalGroupMarker}failed'
 fi
 ''';
+  final temps = gates.isEmpty
+      ? '''
+OLD=\$(mktemp)
+trap 'rm -f "\$TMP" "\$OLD"' EXIT
+'''
+      : '''
+OLD=\$(mktemp)
+CUT=\$(mktemp)
+trap 'rm -f "\$TMP" "\$OLD" "\$CUT"' EXIT
+''';
   return '''
 set -eu
 IFS= read -r SUDO_PASS || true
 TMP=\$(mktemp)
-OLD=\$(mktemp)
-trap 'rm -f "\$TMP" "\$OLD"' EXIT
+$temps'''
+      '''
 printf '%s' '$b64' | base64 -d > "\$TMP"
-$fold$sudo visudo -c -f "\$TMP"
+$gateShell$fold$sudo visudo -c -f "\$TMP"
 $sudo install -o root -g root -m $mode "\$TMP" $path
 $sudo cat $path
 printf '%s\\n' '$sudoersInstallOkMarker'
@@ -124,6 +202,7 @@ class SudoersInstallResult {
     this.errorSummary,
     this.journalGroup = JournalGroupOutcome.notAsked,
     this.unitsRetired = false,
+    this.unitRefusals = const [],
   });
 
   final bool ok;
@@ -133,6 +212,9 @@ class SudoersInstallResult {
 
   /// [kelolaUnitSudoersPath] was folded into the main file and removed.
   final bool unitsRetired;
+
+  /// Web server units whose lifecycle lines the host left out.
+  final List<WebUnitRefusal> unitRefusals;
 }
 
 SudoersInstallResult parseSudoersInstallOutput({
@@ -140,6 +222,8 @@ SudoersInstallResult parseSudoersInstallOutput({
   required String stderr,
   required int exitCode,
   required String expectedContent,
+  String? user,
+  List<WebUnitGate> webUnitGates = const [],
 }) {
   if (exitCode != 0) {
     final err = stderr.trim().isEmpty ? 'exit $exitCode' : stderr.trim();
@@ -160,7 +244,15 @@ SudoersInstallResult parseSudoersInstallOutput({
       .map((l) => l.trim())
       .contains(sudoersUnitsRetiredMarker);
   final body = _extractSudoersBody(before).trimRight();
-  final normalizedExpected = expectedContent.trimRight();
+  final refusals = user == null
+      ? const <WebUnitRefusal>[]
+      : _unitRefusals(before, webUnitGates);
+  // A refused unit's lines were cut on the host, so they are not expected.
+  final cut = {for (final r in refusals) ...webUnitLines(user!, r.unit)};
+  final normalizedExpected = [
+    for (final l in expectedContent.split('\n'))
+      if (!cut.contains(l)) l,
+  ].join('\n').trimRight();
   // Lines moved from kelola-units follow the expected content.
   if (body != normalizedExpected && !before.contains(normalizedExpected)) {
     return SudoersInstallResult(
@@ -174,7 +266,39 @@ SudoersInstallResult parseSudoersInstallOutput({
     verifiedContent: body,
     journalGroup: journalGroup,
     unitsRetired: unitsRetired,
+    unitRefusals: refusals,
   );
+}
+
+/// Each [sudoersUnitConfigMarker] line in [out] for a unit in [gates], once.
+/// Host text is only displayed ([webGrantConfigRefusal] checks the path).
+List<WebUnitRefusal> _unitRefusals(String out, List<WebUnitGate> gates) {
+  final res = <WebUnitRefusal>[];
+  for (final line in const LineSplitter().convert(out)) {
+    if (!line.startsWith('$sudoersUnitConfigMarker ')) continue;
+    final words = line.substring(sudoersUnitConfigMarker.length + 1).split(' ');
+    if (words.length != 3) continue;
+    String unit;
+    try {
+      unit = utf8.decode(base64Decode(words[0]));
+    } on FormatException {
+      continue;
+    }
+    if (!gates.any((g) => g.unit == unit)) continue;
+    if (res.any((r) => r.unit == unit)) continue;
+    // `-`: the gate had no server binary to ask ([webUnitConfigGateShell]).
+    final refusal = words[1] == '-'
+        ? const WebGrantConfigRefusal(
+            path: 'the server binary',
+            reason: WebConfigRefusalReason.unreadable,
+          )
+        : webGrantConfigRefusal(
+            '$webGrantConfigMarker ${words[1]} ${words[2]}',
+          );
+    if (refusal == null) continue;
+    res.add(WebUnitRefusal(unit: unit, refusal: refusal));
+  }
+  return res;
 }
 
 JournalGroupOutcome _journalGroupOutcome(String after) {

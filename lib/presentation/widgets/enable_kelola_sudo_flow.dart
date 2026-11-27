@@ -66,6 +66,10 @@ String kelolaSudoersGroupsLabel(Set<KelolaSudoersGroup> groups) {
 ///
 /// [hint] is the failure that led here. On a host without regex rules a
 /// service [hint]'s unit gets exact lines with the STACK services.
+///
+/// [gateService] (a web lens's own service, from its Reload hint) only tells
+/// the web unit gate which server binary to check ([WebUnitGate]); unlike
+/// [webService] it adds no lens read lines.
 Future<bool> runEnableKelolaSudoFlow({
   required BuildContext context,
   required WidgetRef ref,
@@ -73,6 +77,7 @@ Future<bool> runEnableKelolaSudoFlow({
   HostFacts? facts,
   SudoHintContext? hint,
   DetectedService? webService,
+  DetectedService? gateService,
 }) async {
   await ref.read(enrollmentProvider.notifier).ensureKey();
   var resolved = facts ?? await ref.read(hostRepositoryProvider).facts(host.id);
@@ -147,6 +152,16 @@ Future<bool> runEnableKelolaSudoFlow({
       resolved.hasJournald &&
       resolved.effectiveJournalAccess != JournalAccess.plain &&
       isSudoersSafeLogin(login);
+  // A web server start, restart or reload as root loads the config the
+  // config test does, so its unit lines (exact, or folded from kelola-units)
+  // get the same host-side check. None for hosts without a web server unit.
+  final webUnitGates =
+      resolved.init == InitSystem.systemd && isSudoersSafeLogin(login)
+      ? webUnitGatesFor(
+          services: [?webService, ?gateService, ...cached],
+          hintUnit: hint?.kind == SudoHintKind.systemd ? hint?.unit : null,
+        )
+      : const <WebUnitGate>[];
   // One tap covers the web lenses too (M52c): their exact read lines go to
   // kelola-web with the same password, through the same host-side checks.
   final webServices = _hostWebLensServices(cached, webService);
@@ -200,6 +215,10 @@ Future<bool> runEnableKelolaSudoFlow({
     if (retireUnits)
       ' Moves this login\'s service lines from $kelolaUnitSudoersPath, if '
           'any, into this file.',
+    if (webUnitGates.isNotEmpty)
+      ' Service lines for ${webUnitGates.map((g) => g.unit).join(' and ')} '
+          'are kept only if that server\'s config is root-owned and not '
+          'writable by others.',
     if (k8sReader)
       ' Applies the read-only $kelolaReaderName Kubernetes account and '
           'writes its token to $kelolaReaderKubeconfigPath.',
@@ -300,6 +319,7 @@ Future<bool> runEnableKelolaSudoFlow({
           user: login,
           retireUnits: retireUnits,
           journalGroup: journalGroup,
+          webUnitGates: webUnitGates,
         ),
         stdinBytes: utf8.encode('$pass\n'),
       );
@@ -307,6 +327,7 @@ Future<bool> runEnableKelolaSudoFlow({
           .read(hostRepositoryProvider)
           .setSudoNeedsPassword(host.id, false);
       final notes = <GrantNote>[
+        ...installed.unitRefusals.map(webUnitRefusalCopyParts),
         ...journalGroupNotes(installed.journalGroup, login),
       ];
       if (installed.journalGroup == JournalGroupOutcome.added) {
@@ -763,6 +784,13 @@ class _EnableSudoPreviewSheet extends StatelessWidget {
             if (k8sNote != null) ...[
               const SizedBox(height: 8),
               Text(k8sNote, style: KelolaType.body(color: c.muted, size: 13)),
+            ],
+            if (groups.contains(KelolaSudoersGroup.services)) ...[
+              const SizedBox(height: 8),
+              Text(
+                kelolaServicesConfigAsRootNote,
+                style: KelolaType.body(color: c.muted, size: 13),
+              ),
             ],
             const SizedBox(height: 12),
             Container(

@@ -1,3 +1,5 @@
+import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
+
 const kKelolaPlayStoreUrl =
     'https://play.google.com/store/apps/details?id=com.tursinalabs.kelola';
 const kKelolaPrivacyUrl = 'https://www.tursinalabs.com/kelola/privacy';
@@ -38,7 +40,7 @@ const kSupportFaq = <SupportFaqItem>[
   SupportFaqItem(
     question: 'Why does an action say sudo needs a password?',
     answer:
-        'Kelola never asks for a sudo password during daily use. Actions that change a host need passwordless sudo. Tap Enable Kelola sudo to review and add the rules once. On hosts with sudo-rs or older sudo it adds service rules one action at a time.',
+        'Kelola never asks for a sudo password during daily use. Actions that change a host need passwordless sudo. Tap Enable Kelola sudo to review and add the rules once. On hosts with sudo-rs or older sudo it adds service rules one action at a time. $kelolaServicesConfigAsRootNote Kelola adds nginx and Apache service lines only when their config is root-owned and not writable by others.',
   ),
   SupportFaqItem(
     question: 'What are tags and tag variables?',

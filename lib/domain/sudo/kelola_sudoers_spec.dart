@@ -177,6 +177,13 @@ String? kelolaSudoersTierNote(SudoFlavor sudo) {
       'signals still need your own sudo.';
 }
 
+/// Shown on the Enable sheet and in Help whenever the Services group is
+/// written. The classic sudo regex rule covers every unit, so the config
+/// check the nginx and Apache lines get cannot be enforced per unit there.
+const kelolaServicesConfigAsRootNote =
+    "Passwordless service restart runs that service's config as root. "
+    'Only enable it where service configs are root-owned.';
+
 const kelolaSudoRulesOutdatedCopy =
     'Kelola sudo rules are outdated. Re-run Enable Kelola sudo.';
 
