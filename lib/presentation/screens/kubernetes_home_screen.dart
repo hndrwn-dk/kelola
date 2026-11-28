@@ -251,10 +251,12 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
           : null;
       // M49: no SSH call unless Argo CD is known to be installed. Unknown
       // now: the cached record (same context only) decides, on its own.
-      final argoFuture = argoKnown == true
-          ? _argoRead(host, facts)
-          : null;
-      if (argoKnown == null) {
+      // Either way the GitOps result lands on its own, so the sections
+      // below never wait on a slow `get applications -A`. A refresh while
+      // it runs shares the pending read ([_argoPending]), never a second.
+      if (argoKnown == true) {
+        unawaited(_argoApply(host, facts, gen));
+      } else if (argoKnown == null) {
         unawaited(_argoFromCache(host, facts, cluster, cachedKind, gen));
       }
       final results = await Future.wait([
@@ -266,7 +268,6 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
         _section(host, facts, const RolloutHistoryProbe()),
       ]);
       final ocpResult = await ocpFuture;
-      final argoResult = await argoFuture;
       final reader = kelolaReaderSupported(kubectlFlavor(facts))
           ? await _section(host, facts, const K8sReaderStatusProbe())
           : null;
@@ -278,11 +279,6 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
         _ocp = ocpResult?.value as OpenShiftHealth?;
         _ocpError = ocpResult?.error;
         _ocpReadAt = ocpResult == null ? null : _readAt;
-        if (argoResult != null) {
-          _argo = argoResult.value;
-          _argoError = argoResult.error;
-          _argoReadAt = _readAt;
-        }
         // M48.1: the version beats the node-image hint in the tile cache.
         final distro = _ocp?.version?.distro;
         if (distro != null) {
@@ -359,6 +355,12 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
     if (known != true) {
       return;
     }
+    await _argoApply(host, facts, gen);
+  }
+
+  /// Reads Argo CD (or joins the read in flight) and shows it, unless a
+  /// newer load started meanwhile.
+  Future<void> _argoApply(Host host, HostFacts facts, int gen) async {
     final r = await _argoRead(host, facts);
     if (!mounted || gen != _loadGen) {
       return;

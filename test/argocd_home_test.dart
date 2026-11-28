@@ -26,6 +26,7 @@ import 'package:kelola/domain/probes/argo_probes.dart';
 import 'package:kelola/domain/probes/cluster_health_probe.dart';
 import 'package:kelola/domain/probes/cluster_resource_probes.dart';
 import 'package:kelola/domain/probes/probe.dart';
+import 'package:kelola/domain/probes/k8s_reader_probes.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
 import 'package:kelola/presentation/screens/argo_apps_screen.dart';
@@ -389,6 +390,42 @@ void main() {
     expect(find.text('1 app · all synced and healthy'), findsOneWidget);
   });
 
+  testWidgets('a slow fresh Argo read does not hold back the other sections',
+      (tester) async {
+    pool.cluster = _cluster(argo: true);
+    pool.argoStdout = _apps('apps_guestbook_synced.json');
+    pool.events = const [
+      K8sClusterEvent(
+        namespace: 'prod',
+        type: 'Warning',
+        reason: 'BackOff',
+        message: 'Back-off restarting failed container',
+        objectKind: 'Pod',
+        objectName: 'web-1',
+      ),
+    ];
+    pool.argoGate = Completer<void>();
+    await pumpHome(tester);
+
+    // Events (Wave 2) and the reader check are in while Argo CD still reads.
+    expect(find.text('BackOff'), findsOneWidget);
+    expect(pool.probes.whereType<K8sReaderStatusProbe>(), hasLength(1));
+    expect(find.text('ARGO CD'), findsOneWidget);
+    expect(find.text('1 app · all synced and healthy'), findsNothing);
+
+    // A refresh meanwhile joins the pending read instead of a second one.
+    await refresh(tester);
+    expect(pool.probes.whereType<ClusterHealthProbe>(), hasLength(2));
+    expect(pool.probes.whereType<ArgoAppsProbe>(), hasLength(1));
+
+    pool.argoGate!.complete();
+    for (var i = 0; i < 8; i++) {
+      await tester.pump();
+    }
+    expect(find.text('1 app · all synced and healthy'), findsOneWidget);
+    expect(pool.probes.whereType<ArgoAppsProbe>(), hasLength(1));
+  });
+
   group('argoSlabLabel', () {
     test('Argo CD by default and while unread', () {
       expect(argoSlabLabel(null), 'Argo CD');
@@ -422,6 +459,8 @@ class _ArgoPool extends SshSessionPool {
 
   /// When set, ArgoAppsProbe waits on it (a slow Applications read).
   Completer<void>? argoGate;
+
+  List<K8sClusterEvent> events = const [];
   final probes = <Probe<dynamic>>[];
 
   @override
@@ -443,7 +482,7 @@ class _ArgoPool extends SshSessionPool {
       return const WorkloadInventory(rows: []) as T;
     }
     if (probe is ClusterEventsProbe) {
-      return const <K8sClusterEvent>[] as T;
+      return events as T;
     }
     if (probe is ServiceListProbe) {
       return const K8sNetworking(services: []) as T;
