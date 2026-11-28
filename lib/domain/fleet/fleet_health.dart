@@ -240,6 +240,11 @@ class FleetHostHealth {
         FleetTileMetric(label: ocp.prefix.toLowerCase(), value: ocp.tileValue),
       );
     }
+    // M49: Argo CD, one short cell. No fleet issue (M51).
+    final argo = cluster?.argo;
+    if (argo != null) {
+      cells.add(FleetTileMetric(label: 'argo', value: argo.tileValue));
+    }
     if (fromCache || isStale(now: now)) {
       cells.add(FleetTileMetric(label: 'cache', value: ageLabel(now: now)));
     }

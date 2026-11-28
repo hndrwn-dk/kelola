@@ -225,6 +225,17 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
         if (!mounted) {
           return;
         }
+        bool? cachedHasArgo;
+        try {
+          cachedHasArgo = (await (await ref.read(clusterKindStoreProvider.future))
+                  .read(host.id))
+              ?.argoKnown;
+        } catch (_) {
+          cachedHasArgo = null;
+        }
+        if (!mounted) {
+          return;
+        }
         final k8s = await readFleetK8s(
           facts,
           <T>(Probe<T> p) => runHostProbe(
@@ -236,6 +247,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
             scope: scope,
           ),
           previous: _byId[host.id]?.k8s,
+          cachedHasArgo: cachedHasArgo,
           onClusterKind: (h) => unawaited(
             ref.read(clusterKindStoreProvider.future).then(
                   (s) => s.recordRead(host.id, h, DateTime.now().toUtc()),

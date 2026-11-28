@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/argocd/argo_app.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
 import 'package:kelola/domain/k8s/cluster_kind.dart';
 import 'package:kelola/domain/k8s/openshift_health.dart';
@@ -44,6 +45,7 @@ class FleetK8sSummary {
     this.warningWorkloads = 0,
     this.nodes = const [],
     this.ocp,
+    this.argo,
   });
 
   /// The cluster's state is known: kubectl answered with JSON, or the API
@@ -64,6 +66,10 @@ class FleetK8sSummary {
   /// OpenShift read failed; the rest of the summary stands either way.
   final FleetOcpSummary? ocp;
 
+  /// M49: Argo CD counts from fleet. Null when the cluster has no Argo CD,
+  /// it is not known, or the read failed; the rest of the summary stands.
+  final FleetArgoSummary? argo;
+
   /// Same summary with [names] as the cached node list.
   FleetK8sSummary withNodes(List<String> names) => FleetK8sSummary(
         read: read,
@@ -74,6 +80,7 @@ class FleetK8sSummary {
         warningWorkloads: warningWorkloads,
         nodes: names,
         ocp: ocp,
+        argo: argo,
       );
 
   FleetK8sSummary withOcp(FleetOcpSummary? value) => FleetK8sSummary(
@@ -85,6 +92,19 @@ class FleetK8sSummary {
         warningWorkloads: warningWorkloads,
         nodes: nodes,
         ocp: value,
+        argo: argo,
+      );
+
+  FleetK8sSummary withArgo(FleetArgoSummary? value) => FleetK8sSummary(
+        read: read,
+        apiReachable: apiReachable,
+        nodesReady: nodesReady,
+        nodesTotal: nodesTotal,
+        failedWorkloads: failedWorkloads,
+        warningWorkloads: warningWorkloads,
+        nodes: nodes,
+        ocp: ocp,
+        argo: value,
       );
 
   static const unreadable = FleetK8sSummary(read: false);
@@ -139,6 +159,7 @@ class FleetK8sSummary {
         'warn': warningWorkloads,
         if (nodes.isNotEmpty) 'nodes': nodes,
         if (ocp != null) 'ocp': ocp!.toJson(),
+        if (argo != null) 'argo': argo!.toJson(),
       });
 
   /// Null for empty (host has no kubectl) or junk.
@@ -165,6 +186,7 @@ class FleetK8sSummary {
               if (v is String) v,
         ],
         ocp: FleetOcpSummary.fromJson(m['ocp']),
+        argo: FleetArgoSummary.fromJson(m['argo']),
       );
     } on FormatException {
       return null;
@@ -295,6 +317,87 @@ class FleetOcpSummary {
         for (final d in OpenShiftDistro.values)
           if (d.name == raw['d']) d,
       ].firstOrNull,
+    );
+  }
+}
+
+/// M49: what fleet keeps of an Argo CD read. Counts only; no names, URLs or
+/// revisions reach the fleet cache.
+class FleetArgoSummary {
+  const FleetArgoSummary({
+    this.apps = 0,
+    this.outOfSync = 0,
+    this.degraded = 0,
+    this.syncFailed = 0,
+  });
+
+  factory FleetArgoSummary.from(ArgoApps a) {
+    return FleetArgoSummary(
+      apps: a.apps.length,
+      outOfSync: a.apps.where((x) => x.sync == ArgoSync.outOfSync).length,
+      degraded: a.apps
+          .where(
+            (x) =>
+                x.health == ArgoHealth.degraded ||
+                x.health == ArgoHealth.missing,
+          )
+          .length,
+      syncFailed: a.syncFailed,
+    );
+  }
+
+  final int apps;
+  final int outOfSync;
+  final int degraded;
+  final int syncFailed;
+
+  /// `Argo 12 · ok`, or `Argo 12 · 2 out of sync · 1 degraded · 1 sync failed`.
+  String get tileLine {
+    final parts = [
+      if (outOfSync > 0) '$outOfSync out of sync',
+      if (degraded > 0) '$degraded degraded',
+      if (syncFailed > 0) '$syncFailed sync failed',
+    ];
+    return ['Argo $apps', if (parts.isEmpty) 'ok' else ...parts].join(' · ');
+  }
+
+  /// Short value for the tile's `argo` cell (3-column phone grid).
+  String get tileValue {
+    if (syncFailed > 0) {
+      return '$syncFailed fail';
+    }
+    if (degraded > 0) {
+      return '$degraded deg';
+    }
+    if (outOfSync > 0) {
+      return '$outOfSync oos';
+    }
+    return 'ok';
+  }
+
+  HealthStatus get health => (syncFailed > 0 || degraded > 0)
+      ? HealthStatus.failed
+      : outOfSync > 0
+          ? HealthStatus.warning
+          : HealthStatus.healthy;
+
+  Map<String, Object?> toJson() => {
+        'n': apps,
+        'oos': outOfSync,
+        'deg': degraded,
+        'fail': syncFailed,
+      };
+
+  static FleetArgoSummary? fromJson(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    int n(Object? v) => v is int ? v : 0;
+    return FleetArgoSummary(
+      apps: n(raw['n']),
+      outOfSync: n(raw['oos']),
+      degraded: n(raw['deg']),
+      syncFailed: n(raw['fail']),
     );
   }
 }
