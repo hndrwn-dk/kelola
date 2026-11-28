@@ -22,18 +22,23 @@ class ArgoGitOpsBlock extends StatelessWidget {
     required this.apps,
     required this.now,
     required this.onOpenApps,
+    this.onOpenApp,
   });
 
   final ArgoApps apps;
   final DateTime now;
   final VoidCallback onOpenApps;
 
+  /// Opens one Application's detail, from its finding row.
+  final ValueChanged<ArgoApp>? onOpenApp;
+
   @override
   Widget build(BuildContext context) {
     final c = context.kc;
     final n = apps.apps.length;
     final overall = apps.overall(now);
-    final findings = apps.findings(now);
+    final findings = apps.findingsByApp(now);
+    final open = onOpenApp;
     final failed = apps.syncFailed;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -43,23 +48,22 @@ class ArgoGitOpsBlock extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Can hold an app name and its message: server text, mono, as
+              // on the Application detail band.
               Text(
                 apps.summary(now),
-                style: KelolaType.display(
-                  color: c.text,
-                  size: 14,
-                  weight: FontWeight.w600,
-                ),
+                style: KelolaType.mono(color: c.text, size: 13),
               ),
               if (findings.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 K8sRows(
                   rows: [
-                    for (final f in findings)
+                    for (final e in findings)
                       K8sListRow(
-                        name: f.subject,
-                        meta: f.message,
-                        status: f.health,
+                        name: e.finding.subject,
+                        meta: e.finding.message,
+                        status: e.finding.health,
+                        onTap: open == null ? null : () => open(e.app),
                       ),
                   ],
                   limit: 3,

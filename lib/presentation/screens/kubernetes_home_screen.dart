@@ -28,6 +28,7 @@ import 'package:kelola/domain/probes/openshift_health_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/screens/argo_app_detail_screen.dart';
 import 'package:kelola/presentation/screens/argo_apps_screen.dart';
 import 'package:kelola/presentation/screens/k8s_resource_detail_screen.dart';
 import 'package:kelola/presentation/screens/k8s_resource_list_screen.dart';
@@ -1293,6 +1294,26 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
       apps: apps,
       now: _now(),
       onOpenApps: () => _openArgoApps(apps),
+      onOpenApp: (app) => _openArgoApp(apps, app),
+    );
+  }
+
+  /// Same arguments as the Applications list uses for its rows.
+  void _openArgoApp(ArgoApps apps, ArgoApp app) {
+    final host = _host;
+    final facts = _facts;
+    if (host == null || facts == null) {
+      return;
+    }
+    _push(
+      ArgoAppDetailScreen(
+        host: host,
+        facts: facts,
+        app: app,
+        workloads: _inv.rows,
+        readAt: _argoReadAt ?? apps.readAt,
+        now: _now,
+      ),
     );
   }
 

@@ -29,6 +29,7 @@ import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/k8s_reader_probes.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
+import 'package:kelola/presentation/screens/argo_app_detail_screen.dart';
 import 'package:kelola/presentation/screens/argo_apps_screen.dart';
 import 'package:kelola/presentation/screens/kubernetes_home_screen.dart';
 import 'package:kelola/presentation/widgets/argo_gitops_block.dart';
@@ -388,6 +389,30 @@ void main() {
     }
     expect(pool.probes.whereType<ArgoAppsProbe>(), hasLength(1));
     expect(find.text('1 app · all synced and healthy'), findsOneWidget);
+  });
+
+  testWidgets('band text is mono; a finding row opens that app',
+      (tester) async {
+    pool.cluster = _cluster(argo: true);
+    pool.argoStdout = _apps('apps_degraded.json');
+    await pumpHome(tester);
+
+    final band = find.textContaining('bad-image: ');
+    expect(band, findsOneWidget);
+    expect(tester.widget<Text>(band).style?.fontFamily, 'IBMPlexMono');
+
+    final row = find.descendant(
+      of: find.byType(ArgoGitOpsBlock),
+      matching: find.text('bad-image'),
+    );
+    expect(row, findsOneWidget);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    final detail = tester.widget<ArgoAppDetailScreen>(
+      find.byType(ArgoAppDetailScreen),
+    );
+    expect(detail.app.name, 'bad-image');
+    expect(detail.readAt, _now);
   });
 
   testWidgets('a slow fresh Argo read does not hold back the other sections',

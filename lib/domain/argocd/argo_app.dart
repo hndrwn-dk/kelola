@@ -330,11 +330,19 @@ class ArgoApps {
       .length;
 
   /// All app findings, worst first (stable within a level).
-  List<ArgoFinding> findings(DateTime now) {
-    final all = [for (final a in apps) ...a.findings(now)];
+  List<ArgoFinding> findings(DateTime now) =>
+      [for (final e in findingsByApp(now)) e.finding];
+
+  /// [findings] with the Application each one is about, same order.
+  List<({ArgoApp app, ArgoFinding finding})> findingsByApp(DateTime now) {
+    final all = [
+      for (final a in apps)
+        for (final f in a.findings(now)) (app: a, finding: f),
+    ];
     final indexed = [for (var i = 0; i < all.length; i++) (i, all[i])];
     indexed.sort((x, y) {
-      final byRank = _rank(y.$2.health).compareTo(_rank(x.$2.health));
+      final byRank =
+          _rank(y.$2.finding.health).compareTo(_rank(x.$2.finding.health));
       return byRank != 0 ? byRank : x.$1.compareTo(y.$1);
     });
     return [for (final e in indexed) e.$2];
