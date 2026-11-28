@@ -29,6 +29,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/k8s/kubectl.dart';
 
 const kelolaReaderNamespace = 'kelola';
@@ -427,16 +428,33 @@ K8sReaderResult parseK8sReaderOutput(String stdout) {
 
 /// Whether the login has a reader kubeconfig, and until when.
 class K8sReaderStatus {
-  const K8sReaderStatus({required this.present, this.expires});
+  const K8sReaderStatus({
+    required this.present,
+    this.expires,
+    this.roleCurrent,
+  });
 
   final bool present;
   final DateTime? expires;
 
+  /// Whether the role still grants the newest rule Kelola added. Null when
+  /// it could not be told (an expired token, an unreachable API, no CLI).
+  final bool? roleCurrent;
+
   bool expiredAt(DateTime now) => expires != null && !expires!.isAfter(now);
+
+  /// A reader set up before the newest rule: Renew re-applies the role.
+  bool get roleOutdated => present && roleCurrent == false;
 }
 
 const k8sReaderPresentMarker = 'KELOLA_K8S_READER_PRESENT';
 const k8sReaderAbsentMarker = 'KELOLA_K8S_READER_ABSENT';
+const k8sReaderRoleMarker = 'KELOLA_K8S_READER_ROLE=';
+
+/// Host details' and the Kubernetes home's copy for an old reader role.
+const kelolaReaderRoleOutdatedCopy =
+    'The read-only $kelolaReaderName role is outdated. '
+    'Re-run Enable Kelola sudo.';
 
 /// Never prints the token: only the expiry comment line.
 const k8sReaderStatusCommand =
@@ -445,16 +463,53 @@ const k8sReaderStatusCommand =
     'echo $k8sReaderPresentMarker; '
     'else echo $k8sReaderAbsentMarker; fi';
 
+/// The newest rule Kelola added to [kelolaReaderRules], as a `can-i` check.
+/// Move it to the newest rule whenever [kelolaReaderRules] grows.
+const _roleProbeResource = 'applications.argoproj.io';
+
+/// [k8sReaderStatusCommand], plus, for a host with a reader CLI, whether the
+/// role still allows [_roleProbeResource]. Only a clear `yes` or `no` from
+/// `can-i` counts (and a `no` only while the API answers), so an expired
+/// token or a transient error prints nothing and never reads as outdated.
+/// Never prints the token.
+String k8sReaderStatusCommandFor(HostFacts facts) {
+  final reader = kubectlReaderCli(facts);
+  if (reader == null) return k8sReaderStatusCommand;
+  return 'if [ -r $kelolaReaderKubeconfig ]; then '
+      "sed -n 's/^$k8sReaderExpiresComment//p' $kelolaReaderKubeconfig | head -n 1; "
+      'echo $k8sReaderPresentMarker; '
+      'r=\$($reader auth can-i list $_roleProbeResource --all-namespaces 2>/dev/null); '
+      'if [ "\$r" = yes ]; then echo ${k8sReaderRoleMarker}yes; '
+      'elif [ "\$r" = no ] && $reader get --raw=/version >/dev/null 2>&1; '
+      'then echo ${k8sReaderRoleMarker}no; fi; '
+      'else echo $k8sReaderAbsentMarker; fi';
+}
+
 K8sReaderStatus parseK8sReaderStatus(String stdout) {
   if (!stdout.contains(k8sReaderPresentMarker)) {
     return const K8sReaderStatus(present: false);
   }
   final first = stdout.split('\n').first.trim();
+  bool? roleCurrent;
+  for (final line in stdout.split('\n')) {
+    final l = line.trim();
+    if (l.startsWith(k8sReaderRoleMarker)) {
+      final v = l.substring(k8sReaderRoleMarker.length);
+      roleCurrent = v == 'yes'
+          ? true
+          : v == 'no'
+          ? false
+          : null;
+    }
+  }
   return K8sReaderStatus(
     present: true,
-    expires: first.isEmpty || first == k8sReaderPresentMarker
+    expires: first.isEmpty ||
+            first == k8sReaderPresentMarker ||
+            first.startsWith(k8sReaderRoleMarker)
         ? null
         : DateTime.tryParse(first)?.toUtc(),
+    roleCurrent: roleCurrent,
   );
 }
 

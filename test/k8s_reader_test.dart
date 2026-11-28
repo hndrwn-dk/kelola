@@ -505,6 +505,7 @@ void main() {
       expect(users, {
         'lib/domain/k8s/k8s_reader.dart',
         'lib/domain/k8s/kubectl.dart',
+        'lib/domain/probes/argo_probes.dart',
         'lib/domain/probes/cluster_health_probe.dart',
         'lib/domain/probes/cluster_resource_probes.dart',
         'lib/domain/probes/container_list_probe.dart',

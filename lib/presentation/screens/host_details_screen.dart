@@ -7,6 +7,7 @@ import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/facts/serial_mask.dart';
 import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/k8s/k8s_reader.dart';
 import 'package:kelola/domain/sudo/kelola_sudo_files.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo_hint.dart';
@@ -23,6 +24,7 @@ class HostDetailsScreen extends StatefulWidget {
     this.onEdit,
     this.onRevealSerial,
     this.checkSudoRules,
+    this.checkReaderRole,
     this.readSudoFiles,
     this.readSudoFilesWithPassword,
     this.removeSudoRule,
@@ -38,6 +40,9 @@ class HostDetailsScreen extends StatefulWidget {
 
   /// Resolves true when the host's Kelola sudo rules are outdated.
   final Future<bool> Function()? checkSudoRules;
+
+  /// Resolves true when the read-only Kubernetes reader role is outdated.
+  final Future<bool> Function()? checkReaderRole;
 
   /// Reads the Kelola sudo files without a password ([KelolaSudoFilesProbe]).
   /// Null hides the "Kelola sudo rules" section (no live session).
@@ -60,6 +65,7 @@ class HostDetailsScreen extends StatefulWidget {
 class _HostDetailsScreenState extends State<HostDetailsScreen> {
   bool _serialRevealed = false;
   bool _sudoRulesOutdated = false;
+  bool _readerRoleOutdated = false;
 
   /// The Kelola sudo files as last read; null until the first read.
   KelolaSudoFiles? _sudoFiles;
@@ -70,7 +76,24 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
   void initState() {
     super.initState();
     _checkSudoRules();
+    _checkReaderRole();
     _readSudoFiles();
+  }
+
+  Future<void> _checkReaderRole() async {
+    final check = widget.checkReaderRole;
+    if (check == null) {
+      return;
+    }
+    try {
+      final outdated = await check();
+      if (mounted) {
+        setState(() => _readerRoleOutdated = outdated);
+      }
+    } catch (_) {
+      // A warning that cannot be checked stays hidden.
+      if (mounted) setState(() => _readerRoleOutdated = false);
+    }
   }
 
   Future<void> _checkSudoRules() async {
@@ -185,6 +208,7 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
     if (!mounted) return;
     await _readSudoFiles();
     await _checkSudoRules();
+    await _checkReaderRole();
   }
 
   List<Widget> _sudoRulesSection(BuildContext context) {
@@ -407,6 +431,12 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
                 const FactEntry(
                   label: 'Kelola sudo',
                   value: kelolaSudoRulesOutdatedCopy,
+                  mono: false,
+                ),
+              if (_readerRoleOutdated)
+                const FactEntry(
+                  label: 'Kubernetes reader',
+                  value: kelolaReaderRoleOutdatedCopy,
                   mono: false,
                 ),
             ],
