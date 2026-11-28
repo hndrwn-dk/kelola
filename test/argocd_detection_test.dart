@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/k8s/cluster_health_parser.dart';
+import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/probes/cluster_health_probe.dart';
 import 'package:kelola/domain/probes/fleet_k8s_probe.dart';
 
@@ -74,7 +75,7 @@ void main() {
           '{ echo ---ARGO_CRD_FAIL---; { kubectl get crd '
           'applications.argoproj.io -o name --request-timeout=5s || '
           'sudo -n kubectl get crd applications.argoproj.io -o name '
-          '--request-timeout=5s; } 2>&1 >/dev/null | tail -4; }; } '
+          '--request-timeout=5s; } 2>&1 >/dev/null | $kubectlDecisiveLines; }; } '
           '2>/dev/null )',
         ),
       );
@@ -89,7 +90,7 @@ void main() {
           '2>/dev/null || kubectl get applications.argoproj.io -A -o name '
           '--request-timeout=5s 2>/dev/null || sudo -n kubectl get '
           'applications.argoproj.io -A -o name --request-timeout=5s && '
-          'echo ---ARGO_NS_OK---; } 2>&1 | tail -4 ;; esac',
+          'echo ---ARGO_NS_OK---; } 2>&1 | $kubectlDecisiveLines ;; esac',
         ),
       );
     });
@@ -159,6 +160,29 @@ void main() {
       );
     });
 
+    test('a decisive line behind discovery noise still decides', () {
+      final noise = List.filled(
+        6,
+        'E1110 09:06:00.000000 1 memcache.go:265] couldn\'t get current '
+        'server API group list: Get "http://localhost:8080/api": dial tcp '
+        '127.0.0.1:8080: connect: connection refused',
+      ).join('\n');
+      // What kubectlDecisiveLines leaves: the decisive line, then the last.
+      expect(
+        parseHasArgo('---ARGO_CRD---\n---ARGO_CRD_FAIL---\n'
+            'Error from server (NotFound): customresourcedefinitions'
+            '.apiextensions.k8s.io "applications.argoproj.io" not found\n'
+            'The connection to the server localhost:8080 was refused'),
+        isFalse,
+      );
+      expect(
+        parseHasArgo('---ARGO_CRD---\n---ARGO_CRD_FAIL---\n$noise\n'
+            'Error from server (Forbidden): customresourcedefinitions is '
+            'forbidden\n---ARGO_NS---\n---ARGO_NS_OK---'),
+        isTrue,
+      );
+    });
+
     test('anything else → null', () {
       expect(
         parseHasArgo('---ARGO_CRD---\n---ARGO_CRD_FAIL---\n'
@@ -210,5 +234,57 @@ void main() {
     expect(empty.health.hasArgo, isTrue);
     final read = probe.parse(_clusterOut(argo: argo), '', 0);
     expect(read.nodesRead, isTrue);
+  });
+  // Runs the awk stage for real. Windows has no POSIX sh on PATH in CI.
+  group('kubectlDecisiveLines in a shell', skip: Platform.isWindows, () {
+    Future<String> filter(String input) async {
+      final r = await Process.run('sh', [
+        '-c',
+        'printf \'%s\n\' "\$IN" | $kubectlDecisiveLines',
+      ], environment: {'IN': input});
+      expect(r.exitCode, 0);
+      return (r.stdout as String).trim();
+    }
+
+    const memcache =
+        'E1110 memcache.go:265] couldn\'t get current server API group '
+        'list: dial tcp 127.0.0.1:8080: connect: connection refused';
+    final noise = List.filled(6, memcache).join('\n');
+    const refused = 'The connection to the server localhost:8080 was refused';
+    const forbidden = 'Error from server (Forbidden): customresourcedefinitions'
+        '.apiextensions.k8s.io "applications.argoproj.io" is forbidden';
+    const notFound = 'Error from server (NotFound): customresourcedefinitions'
+        '.apiextensions.k8s.io "applications.argoproj.io" not found';
+
+    test('six memcache lines then Forbidden: Forbidden kept', () async {
+      expect(await filter('$noise\n$forbidden'), forbidden);
+    });
+
+    test('NotFound before sudo noise: NotFound kept, plus the last line',
+        () async {
+      final out = await filter('$notFound\n$noise\n$refused');
+      expect(out, '$notFound\n$refused');
+      expect(parseHasArgo('---ARGO_CRD---\n---ARGO_CRD_FAIL---\n$out'),
+          isFalse);
+    });
+
+    test('Forbidden before noise still reaches the namespaced read', () async {
+      final out = await filter('$forbidden\n$noise\n$refused');
+      expect(out, contains('orbidden'));
+    });
+
+    test('no decisive line: the last two lines', () async {
+      expect(await filter('$noise\n$refused'), '$memcache\n$refused');
+      expect(await filter('only one line'), 'only one line');
+    });
+
+    test('the namespaced read keeps its OK marker after a Forbidden',
+        () async {
+      expect(
+        await filter('$forbidden\napplication.argoproj.io/guestbook\n'
+            '---ARGO_NS_OK---'),
+        '$forbidden\n---ARGO_NS_OK---',
+      );
+    });
   });
 }

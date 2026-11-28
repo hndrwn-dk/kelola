@@ -22,14 +22,15 @@ String _commandFor(HostFacts facts) {
     // says why the read fell back to the login's own identity.
     if (reader != null)
       'if [ -r $kelolaReaderKubeconfig ] && '
-          '$reader get --raw=/version >/dev/null 2>&1 && '
-          '[ "\$($reader auth can-i list applications.argoproj.io --all-namespaces 2>/dev/null)" = no ]; '
+          '$reader get --raw=/version --request-timeout=5s >/dev/null 2>&1 && '
+          '[ "\$($reader auth can-i list applications.argoproj.io --all-namespaces --request-timeout=5s 2>/dev/null)" = no ]; '
           'then echo ---READER_DENIED---; fi',
     'echo ---APPS---',
     // On failure, re-run once with stderr kept so the section can say why
-    // (Forbidden) instead of reading as empty.
+    // (Forbidden) instead of reading as empty; the decisive line survives
+    // sudo and discovery noise.
     '{ ${kubectlRead(facts, _getApps)} || { echo ---APPS_ERR---; '
-        '{ ${kubectlRun(facts, _getApps)}; } 2>&1 >/dev/null | tail -4 | '
+        '{ ${kubectlRun(facts, _getApps)}; } 2>&1 >/dev/null | $kubectlDecisiveLines | '
         'sed \'s/^/$kOcpErrorPrefix/\'; }; }; echo',
     'true',
   ].join('\n');

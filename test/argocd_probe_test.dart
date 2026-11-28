@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
 import 'package:kelola/domain/k8s/k8s_reader.dart';
+import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/probes/argo_probes.dart';
 import 'package:kelola/domain/risk/risk_level.dart';
 
@@ -27,9 +28,13 @@ void main() {
         expect(cmd, contains('---READER_DENIED---'));
         expect(cmd.indexOf(_check), lessThan(cmd.indexOf('echo ---APPS---')));
         // Denied only on a clear "no", never on a transient can-i error.
-        expect(cmd, contains('$_check 2>/dev/null)" = no ]'));
+        // Both reader checks are bounded by a request timeout.
+        expect(cmd, contains('$_check --request-timeout=5s 2>/dev/null)" = no ]'));
         expect(cmd, isNot(contains('! ')));
-        expect(cmd, contains('get --raw=/version'));
+        expect(cmd, contains('get --raw=/version --request-timeout=5s'));
+        // The error re-run keeps the decisive line, not a blind tail.
+        expect(cmd, contains('2>&1 >/dev/null | $kubectlDecisiveLines | '));
+        expect(cmd, isNot(contains('tail -4')));
         expect(cmd, contains(kelolaReaderKubeconfig));
         expect(cmd, contains(_get));
         expect(cmd, contains('|| '));

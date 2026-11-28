@@ -37,11 +37,13 @@ class ClusterHealthProbe extends Probe<ClusterHealth> {
       // M49: Argo CD present? The reader cannot read CRDs, so the CRD read
       // uses the login; a Forbidden falls back to listing Applications
       // through the reader. Skipped when readyz failed (section missing).
+      // stderr keeps its decisive line (kubectlDecisiveLines): a NotFound
+      // lost behind sudo noise would keep a cached `true` forever.
       'if [ "\$readyz_failed" != 1 ]; then',
       'echo ---ARGO_CRD---',
-      'argo_crd=\$( { ${kubectlTry(facts, _argoCrd)} || { echo ---ARGO_CRD_FAIL---; { ${kubectlRun(facts, _argoCrd)}; } 2>&1 >/dev/null | tail -4; }; } 2>/dev/null )',
+      'argo_crd=\$( { ${kubectlTry(facts, _argoCrd)} || { echo ---ARGO_CRD_FAIL---; { ${kubectlRun(facts, _argoCrd)}; } 2>&1 >/dev/null | $kubectlDecisiveLines; }; } 2>/dev/null )',
       r'''printf '%s\n' "$argo_crd"''',
-      'case "\$argo_crd" in *orbidden*) echo ---ARGO_NS---; { ${kubectlRead(facts, _argoApps)} && echo ---ARGO_NS_OK---; } 2>&1 | tail -4 ;; esac',
+      'case "\$argo_crd" in *orbidden*) echo ---ARGO_NS---; { ${kubectlRead(facts, _argoApps)} && echo ---ARGO_NS_OK---; } 2>&1 | $kubectlDecisiveLines ;; esac',
       'fi',
       // M48: kubeconfig context (local, no API call), so a cached
       // OpenShift/Kubernetes label can tell when the cluster changed. The
