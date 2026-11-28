@@ -341,9 +341,10 @@ class ArgoApps {
   }
 
   /// Worst app status (failed > warning > unknown > healthy). Healthy only
-  /// when every app is synced and healthy; unknown on a section error.
+  /// when every app is synced and healthy; unknown on a section error and
+  /// with no apps (nothing to call healthy).
   HealthStatus overall(DateTime now) {
-    if (error != null) {
+    if (error != null || apps.isEmpty) {
       return HealthStatus.unknown;
     }
     var worst = HealthStatus.healthy;

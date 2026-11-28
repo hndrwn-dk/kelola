@@ -108,28 +108,34 @@ String stripRepoCredentials(String url) {
 /// 7-character commit SHA; tags, branches and chart versions unchanged.
 String shortRevision(String rev) => shortArgoRevision(rev);
 
-final _urlInText = RegExp(r'([A-Za-z][A-Za-z0-9+.\-]*://)([^\s/?#]*)');
+/// Scheme, authority, path, then the rest of the token (`?…` / `#…`).
+final _urlInText = RegExp(
+  r'([A-Za-z][A-Za-z0-9+.\-]*://)([^\s/?#]*)([^\s?#]*)(\S*)',
+);
 
 /// Drops credentials from every `scheme://…@` URL inside free text (Argo CD
-/// messages can echo a repo URL). Only the authority is touched, by the
-/// same rule as [stripRepoCredentials]: ssh keeps its user name.
+/// messages can echo a repo URL), by the same rule as
+/// [stripRepoCredentials]: ssh keeps its user name, and an http(s) URL also
+/// loses its query and fragment (they can carry an access key).
 String redactUrlCredentials(String text) {
   return text.replaceAllMapped(_urlInText, (m) {
     final prefix = m.group(1)!;
     final authority = m.group(2)!;
+    final path = m.group(3)!;
+    final name = prefix.substring(0, prefix.length - 3).toLowerCase();
+    final tail = name == 'http' || name == 'https' ? '' : m.group(4)!;
     final at = authority.lastIndexOf('@');
     if (at < 0) {
-      return m.group(0)!;
+      return '$prefix$authority$path$tail';
     }
-    final name = prefix.substring(0, prefix.length - 3).toLowerCase();
     final host = authority.substring(at + 1);
     if (name == 'ssh' || name == 'git+ssh') {
       final user = authority.substring(0, at).split(RegExp('[:@]')).first;
       if (user.isNotEmpty) {
-        return '$prefix$user@$host';
+        return '$prefix$user@$host$path$tail';
       }
     }
-    return '$prefix$host';
+    return '$prefix$host$path$tail';
   });
 }
 
@@ -173,7 +179,8 @@ ArgoApp _app(Map<dynamic, dynamic> raw) {
   return ArgoApp(
     name: _str(meta['name']),
     namespace: _str(meta['namespace']),
-    project: _str(spec['project']),
+    // Argo CD treats an empty project as `default`; say so everywhere.
+    project: _str(spec['project']).isEmpty ? 'default' : _str(spec['project']),
     sources: sources,
     destServer: server.isNotEmpty ? server : _str(dest['name']),
     destNamespace: _str(dest['namespace']),

@@ -375,12 +375,6 @@ class FleetArgoSummary {
     return 'ok';
   }
 
-  HealthStatus get health => (syncFailed > 0 || degraded > 0)
-      ? HealthStatus.failed
-      : outOfSync > 0
-          ? HealthStatus.warning
-          : HealthStatus.healthy;
-
   Map<String, Object?> toJson() => {
         'n': apps,
         'oos': outOfSync,

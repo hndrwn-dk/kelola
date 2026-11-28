@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/argocd/argo_app.dart';
 import 'package:kelola/domain/argocd/argo_parser.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
@@ -159,22 +158,6 @@ void main() {
       );
       expect(const FleetArgoSummary(apps: 9, outOfSync: 2).tileValue, '2 oos');
       expect(const FleetArgoSummary(apps: 9).tileValue, 'ok');
-    });
-
-    test('health: failed, warning, healthy', () {
-      expect(
-        const FleetArgoSummary(apps: 1, syncFailed: 1).health,
-        HealthStatus.failed,
-      );
-      expect(
-        const FleetArgoSummary(apps: 1, degraded: 1).health,
-        HealthStatus.failed,
-      );
-      expect(
-        const FleetArgoSummary(apps: 1, outOfSync: 1).health,
-        HealthStatus.warning,
-      );
-      expect(const FleetArgoSummary(apps: 1).health, HealthStatus.healthy);
     });
 
     test('JSON round trip and key names', () {

@@ -392,6 +392,22 @@ void main() {
       expect(redactUrlCredentials(''), '');
     });
 
+    test('redactUrlCredentials drops http(s) query and fragment', () {
+      expect(
+        redactUrlCredentials(
+          'fetch https://u:p@host/r.git?private_token=abc#frag failed',
+        ),
+        'fetch https://host/r.git failed',
+      );
+      expect(
+        redactUrlCredentials('see http://host/x?sig=1 and https://h#k'),
+        'see http://host/x and https://h',
+      );
+      // Other schemes keep theirs; plain text is untouched.
+      expect(redactUrlCredentials('oci://reg/c?x=1'), 'oci://reg/c?x=1');
+      expect(redactUrlCredentials('why? no #url'), 'why? no #url');
+    });
+
     test('messages lose URL credentials at parse time', () {
       const msg = 'rpc error: fetch https://user:tok@host/x failed';
       final app = _parse(
@@ -409,6 +425,16 @@ void main() {
       expect(app.resources.single.healthMessage, clean);
       expect(app.toString(), isNot(contains('tok')));
       expect(app.toString(), isNot(contains('user:')));
+    });
+
+    test('an empty project reads as default, like Argo CD', () {
+      final apps = _parse(
+        '---APPS---\n{"items":[{"metadata":{"name":"a"},"spec":{}},'
+        '{"metadata":{"name":"b"},"spec":{"project":""}},'
+        '{"metadata":{"name":"c"},"spec":{"project":"team"}}]}\n',
+      ).apps;
+      expect(apps.map((a) => a.project), ['default', 'default', 'team']);
+      expect(argoProjectCounts(apps), {'default': 2, 'team': 1});
     });
 
     test('shortRevision', () {
@@ -450,6 +476,14 @@ void main() {
       expect(ArgoAppFilter.outOfSync.label, 'Out of sync');
       expect(ArgoAppFilter.syncFailed.emptyCopy, 'No failed syncs.');
       expect(ArgoAppFilter.all.matches(apps.first), isTrue);
+    });
+
+    test('degraded also matches missing apps', () {
+      final withMissing = [...apps, a('7', h: ArgoHealth.missing)];
+      expect(ArgoAppFilter.degraded.count(withMissing), 2);
+      expect(ArgoAppFilter.degraded.matches(withMissing.last), isTrue);
+      expect(ArgoAppFilter.degraded.matches(a('8', h: ArgoHealth.suspended)),
+          isFalse);
     });
 
     test('project counts', () {

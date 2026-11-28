@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/app.dart';
 import 'package:kelola/design/kelola_components.dart';
+import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/argocd/argo_app.dart';
 import 'package:kelola/domain/argocd/argo_filters.dart';
 import 'package:kelola/domain/argocd/argo_parser.dart';
@@ -11,6 +12,7 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/presentation/screens/argo_app_detail_screen.dart';
 import 'package:kelola/presentation/screens/workload_detail_screen.dart';
+import 'package:kelola/presentation/widgets/argo_resource_sheet.dart';
 import 'package:kelola/providers.dart';
 
 final _now = DateTime.utc(2026, 11, 10, 12);
@@ -353,5 +355,18 @@ void main() {
     expect(ArgoResourceFilter.degraded.count(all), 1);
     expect(ArgoResourceFilter.prune.count(all), 1);
     expect(ArgoResourceFilter.prune.emptyCopy, 'No resources to prune.');
+  });
+
+  test('ArgoResourceFilter.degraded also matches missing resources', () {
+    const missing = ArgoResource(
+      kind: 'Service',
+      namespace: 'prod',
+      name: 'gone',
+      sync: ArgoSync.outOfSync,
+      health: ArgoHealth.missing,
+    );
+    expect(ArgoResourceFilter.degraded.matches(missing), isTrue);
+    expect(ArgoResourceFilter.degraded.count(const [_web, _cfg, missing]), 2);
+    expect(argoResourceStatus(missing), HealthStatus.failed);
   });
 }

@@ -308,9 +308,9 @@ void main() {
       );
     });
 
-    test('no apps', () {
+    test('no apps is unknown, never a green band', () {
       final a = apps(const []);
-      expect(a.overall(_now), HealthStatus.healthy);
+      expect(a.overall(_now), HealthStatus.unknown);
       expect(a.summary(_now), '0 apps');
     });
   });

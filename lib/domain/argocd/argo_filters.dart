@@ -16,7 +16,9 @@ enum ArgoAppFilter {
   bool matches(ArgoApp app) => switch (this) {
         ArgoAppFilter.all => true,
         ArgoAppFilter.outOfSync => app.sync == ArgoSync.outOfSync,
-        ArgoAppFilter.degraded => app.health == ArgoHealth.degraded,
+        // Missing reads as failed in severity and fleet too.
+        ArgoAppFilter.degraded => app.health == ArgoHealth.degraded ||
+            app.health == ArgoHealth.missing,
         ArgoAppFilter.progressing => app.health == ArgoHealth.progressing,
         ArgoAppFilter.syncFailed => app.opPhase == ArgoOpPhase.failed ||
             app.opPhase == ArgoOpPhase.error,
@@ -40,7 +42,9 @@ enum ArgoResourceFilter {
   bool matches(ArgoResource r) => switch (this) {
         ArgoResourceFilter.all => true,
         ArgoResourceFilter.outOfSync => r.sync == ArgoSync.outOfSync,
-        ArgoResourceFilter.degraded => r.health == ArgoHealth.degraded,
+        // Same as argoResourceStatus: a missing resource is red.
+        ArgoResourceFilter.degraded => r.health == ArgoHealth.degraded ||
+            r.health == ArgoHealth.missing,
         ArgoResourceFilter.prune => r.requiresPruning,
       };
 
