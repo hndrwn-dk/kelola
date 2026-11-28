@@ -108,6 +108,31 @@ String stripRepoCredentials(String url) {
 /// 7-character commit SHA; tags, branches and chart versions unchanged.
 String shortRevision(String rev) => shortArgoRevision(rev);
 
+final _urlInText = RegExp(r'([A-Za-z][A-Za-z0-9+.\-]*://)([^\s/?#]*)');
+
+/// Drops credentials from every `scheme://…@` URL inside free text (Argo CD
+/// messages can echo a repo URL). Only the authority is touched, by the
+/// same rule as [stripRepoCredentials]: ssh keeps its user name.
+String redactUrlCredentials(String text) {
+  return text.replaceAllMapped(_urlInText, (m) {
+    final prefix = m.group(1)!;
+    final authority = m.group(2)!;
+    final at = authority.lastIndexOf('@');
+    if (at < 0) {
+      return m.group(0)!;
+    }
+    final name = prefix.substring(0, prefix.length - 3).toLowerCase();
+    final host = authority.substring(at + 1);
+    if (name == 'ssh' || name == 'git+ssh') {
+      final user = authority.substring(0, at).split(RegExp('[:@]')).first;
+      if (user.isNotEmpty) {
+        return '$prefix$user@$host';
+      }
+    }
+    return '$prefix$host';
+  });
+}
+
 ArgoApp _app(Map<dynamic, dynamic> raw) {
   final meta = _map(raw['metadata']);
   final spec = _map(raw['spec']);
@@ -159,13 +184,16 @@ ArgoApp _app(Map<dynamic, dynamic> raw) {
     prune: automated && auto['prune'] == true,
     selfHeal: automated && auto['selfHeal'] == true,
     opPhase: _phase(op['phase']),
-    opMessage: opMessage.isEmpty ? null : opMessage,
+    opMessage: opMessage.isEmpty ? null : redactUrlCredentials(opMessage),
     opStartedAt: _time(op['startedAt']),
     opFinishedAt: _time(op['finishedAt']),
     conditions: [
       for (final c in _list(status['conditions']))
         if (c is Map)
-          ArgoCondition(type: _str(c['type']), message: _str(c['message'])),
+          ArgoCondition(
+            type: _str(c['type']),
+            message: redactUrlCredentials(_str(c['message'])),
+          ),
     ],
     resources: [
       for (final r in _list(status['resources']))
@@ -196,7 +224,7 @@ ArgoSource _source(Map<dynamic, dynamic> raw) {
 
 ArgoResource _resource(Map<dynamic, dynamic> raw) {
   final health = _map(raw['health']);
-  final message = _str(health['message']);
+  final message = redactUrlCredentials(_str(health['message']));
   return ArgoResource(
     group: _str(raw['group']),
     kind: _str(raw['kind']),

@@ -377,6 +377,40 @@ void main() {
       );
     });
 
+    test('redactUrlCredentials', () {
+      expect(
+        redactUrlCredentials('rpc error: https://user:tok@host/x failed'),
+        'rpc error: https://host/x failed',
+      );
+      expect(
+        redactUrlCredentials('a ssh://git:pw@h/r and http://t@h2:8080'),
+        'a ssh://git@h/r and http://h2:8080',
+      );
+      expect(redactUrlCredentials('https://host/a@b'), 'https://host/a@b');
+      const plain = 'successfully synced (all tasks run): user@example ok';
+      expect(redactUrlCredentials(plain), plain);
+      expect(redactUrlCredentials(''), '');
+    });
+
+    test('messages lose URL credentials at parse time', () {
+      const msg = 'rpc error: fetch https://user:tok@host/x failed';
+      final app = _parse(
+        '---APPS---\n{"items":[{"metadata":{"name":"m"},"status":{'
+        '"operationState":{"phase":"Failed","message":"$msg"},'
+        '"conditions":[{"type":"ComparisonError","message":"$msg"},'
+        '{"type":"SyncError","message":"plain text"}],'
+        '"resources":[{"kind":"Pod","name":"p",'
+        '"health":{"status":"Degraded","message":"$msg"}}]}}]}\n',
+      ).apps.single;
+      const clean = 'rpc error: fetch https://host/x failed';
+      expect(app.opMessage, clean);
+      expect(app.conditions.first.message, clean);
+      expect(app.conditions.last.message, 'plain text');
+      expect(app.resources.single.healthMessage, clean);
+      expect(app.toString(), isNot(contains('tok')));
+      expect(app.toString(), isNot(contains('user:')));
+    });
+
     test('shortRevision', () {
       expect(
         shortRevision('723b86e01bea11dcf72316cb172868fcbf05d69e'),
