@@ -117,7 +117,7 @@ void main() {
         reconciledAt: _ago(10),
       );
       expect(app.findings(_now), isEmpty);
-      expect(app.status(_now), HealthStatus.healthy);
+      expect(app.status(_now), HealthStatus.unknown);
     });
 
     test('out of sync, automated, reconcile at 10:01 is not converging', () {
@@ -185,7 +185,17 @@ void main() {
     test('suspended is a fact', () {
       final app = _app(health: ArgoHealth.suspended);
       expect(app.findings(_now), isEmpty);
-      expect(app.status(_now), HealthStatus.healthy);
+      expect(app.status(_now), HealthStatus.unknown);
+    });
+
+    test('progressing for 5 min is a neutral fact', () {
+      final app = _app(health: ArgoHealth.progressing, opStartedAt: _ago(5));
+      expect(app.findings(_now), isEmpty);
+      expect(app.status(_now), HealthStatus.unknown);
+    });
+
+    test('synced and healthy is the only green', () {
+      expect(_app().status(_now), HealthStatus.healthy);
     });
 
     test('out of sync, automated, recent reconcile is a fact', () {
@@ -195,6 +205,7 @@ void main() {
         reconciledAt: _ago(2),
       );
       expect(app.findings(_now), isEmpty);
+      expect(app.status(_now), HealthStatus.unknown);
     });
 
     test('unknown sync and health is no finding and unknown status', () {
@@ -206,7 +217,7 @@ void main() {
     test('unknown health alone is no finding', () {
       final app = _app(health: ArgoHealth.unknown);
       expect(app.findings(_now), isEmpty);
-      expect(app.status(_now), HealthStatus.healthy);
+      expect(app.status(_now), HealthStatus.unknown);
     });
   });
 
@@ -262,6 +273,7 @@ void main() {
       ]);
       expect(a.findings(_now), isEmpty);
       expect(a.summary(_now), '3 apps · 2 synced · 2 healthy');
+      expect(a.overall(_now), HealthStatus.unknown);
     });
 
     test('worst finding first in summary and findings', () {

@@ -272,17 +272,17 @@ class ArgoApp {
     return out;
   }
 
-  /// Worst finding; [HealthStatus.unknown] when Argo CD reports neither sync
-  /// nor health and nothing is wrong; healthy otherwise.
+  /// Worst finding; healthy only when synced and healthy; otherwise
+  /// [HealthStatus.unknown] (a neutral fact, never green and never a finding).
   HealthStatus status(DateTime now) {
     final f = findings(now);
     if (f.isNotEmpty) {
       return f.first.health;
     }
-    if (sync == ArgoSync.unknown && health == ArgoHealth.unknown) {
-      return HealthStatus.unknown;
+    if (sync == ArgoSync.synced && health == ArgoHealth.healthy) {
+      return HealthStatus.healthy;
     }
-    return HealthStatus.healthy;
+    return HealthStatus.unknown;
   }
 
   @override
@@ -340,22 +340,20 @@ class ArgoApps {
     return [for (final e in indexed) e.$2];
   }
 
+  /// Worst app status (failed > warning > unknown > healthy). Healthy only
+  /// when every app is synced and healthy; unknown on a section error.
   HealthStatus overall(DateTime now) {
     if (error != null) {
       return HealthStatus.unknown;
     }
     var worst = HealthStatus.healthy;
-    var allUnknown = apps.isNotEmpty;
     for (final a in apps) {
       final s = a.status(now);
-      if (s != HealthStatus.unknown) {
-        allUnknown = false;
-        if (_rank(s) > _rank(worst)) {
-          worst = s;
-        }
+      if (_rank(s) > _rank(worst)) {
+        worst = s;
       }
     }
-    return allUnknown ? HealthStatus.unknown : worst;
+    return worst;
   }
 
   /// Band text: worst finding (`<app>: <message>`), or

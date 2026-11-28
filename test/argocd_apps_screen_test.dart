@@ -100,7 +100,9 @@ void main() {
       (tester) async {
     await _pump(tester, _mixed());
     final order = [
-      for (final n in ['charlie', 'echo', 'bravo', 'alpha', 'delta', 'foxtrot'])
+      // delta (progressing, recent) is a neutral fact: after warnings, before
+      // the green rows.
+      for (final n in ['charlie', 'echo', 'bravo', 'delta', 'alpha', 'foxtrot'])
         tester.getTopLeft(find.text(n)).dy,
     ];
     expect(order, orderedEquals([...order]..sort()));
