@@ -23,7 +23,7 @@ String _commandFor(HostFacts facts) {
     if (reader != null)
       'if [ -r $kelolaReaderKubeconfig ] && '
           '$reader get --raw=/version >/dev/null 2>&1 && '
-          '! $reader auth can-i list applications.argoproj.io --all-namespaces >/dev/null 2>&1; '
+          '[ "\$($reader auth can-i list applications.argoproj.io --all-namespaces 2>/dev/null)" = no ]; '
           'then echo ---READER_DENIED---; fi',
     'echo ---APPS---',
     // On failure, re-run once with stderr kept so the section can say why

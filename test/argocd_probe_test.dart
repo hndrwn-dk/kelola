@@ -26,6 +26,10 @@ void main() {
         expect(cmd, contains(_check));
         expect(cmd, contains('---READER_DENIED---'));
         expect(cmd.indexOf(_check), lessThan(cmd.indexOf('echo ---APPS---')));
+        // Denied only on a clear "no", never on a transient can-i error.
+        expect(cmd, contains('$_check 2>/dev/null)" = no ]'));
+        expect(cmd, isNot(contains('! ')));
+        expect(cmd, contains('get --raw=/version'));
         expect(cmd, contains(kelolaReaderKubeconfig));
         expect(cmd, contains(_get));
         expect(cmd, contains('|| '));
