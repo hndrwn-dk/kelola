@@ -59,6 +59,7 @@ class ClusterKindRecord {
     this.kubeContext = '',
     this.seenContext,
     this.distro,
+    this.hasArgo,
   });
 
   final bool isOpenShift;
@@ -75,6 +76,13 @@ class ClusterKindRecord {
 
   /// M48.1: OKD vs OCP, when known. Null = unknown (label stays OpenShift).
   final OpenShiftDistro? distro;
+
+  /// M49: whether Argo CD is installed. Null = unknown (section hidden).
+  final bool? hasArgo;
+
+  /// [hasArgo], or null once a newer read reported a different context:
+  /// the cached answer belongs to another cluster.
+  bool? get argoKnown => contextMatches ? hasArgo : null;
 
   /// False when a newer read reported a different context: the cached kind
   /// belongs to another cluster. An unknown context on either side is not
@@ -134,6 +142,12 @@ ClusterKindRecord? mergeClusterKind(
                   _sameContext(previous.kubeContext, read.kubeContext)
               ? previous.distro
               : null),
+      hasArgo:
+          read.hasArgo ??
+          (previous != null &&
+                  _sameContext(previous.kubeContext, read.kubeContext)
+              ? previous.hasArgo
+              : null),
     );
   }
   if (previous == null || read.kubeContext.isEmpty) {
@@ -145,6 +159,7 @@ ClusterKindRecord? mergeClusterKind(
     kubeContext: previous.kubeContext,
     seenContext: read.kubeContext,
     distro: previous.distro,
+    hasArgo: previous.hasArgo,
   );
 }
 
@@ -167,5 +182,6 @@ ClusterKindRecord withDistro(
     kubeContext: record.kubeContext,
     seenContext: record.seenContext,
     distro: distro,
+    hasArgo: record.hasArgo,
   );
 }
