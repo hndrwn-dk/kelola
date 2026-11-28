@@ -78,9 +78,10 @@ class KelolaSudoersSpec {
 /// hosts the rule is left out and `sudo -n` fails as it would with no rule.
 ///
 /// [units] (M52d) are services whose lifecycle verbs get exact lines on a
-/// systemd host whose sudo has no regex, where the Services group has no
-/// rule of its own. Names that are not safe in a sudoers line are dropped.
-/// Ignored when regex rules cover every unit.
+/// systemd host. Names that are not safe in a sudoers line are dropped.
+/// Every sudo tier gets these exact lines (PR #12): there is no services
+/// regex, so each web server unit can be checked on the host before its
+/// lines are kept (`WebUnitGate`). A service found later needs Enable again.
 KelolaSudoersSpec buildKelolaSudoersSpec({
   required String user,
   required HostFacts facts,
@@ -106,11 +107,7 @@ KelolaSudoersSpec buildKelolaSudoersSpec({
     cmds.addAll(const ['/usr/sbin/reboot ""', '/usr/sbin/poweroff ""']);
   }
   if (groups.contains(KelolaSudoersGroup.services)) {
-    if (regex) {
-      cmds.addAll(_serviceRegexCommands(facts.init));
-    } else {
-      cmds.addAll(exactUnitCommands(facts.init, units));
-    }
+    cmds.addAll(exactUnitCommands(facts.init, units));
   }
   if (regex && groups.contains(KelolaSudoersGroup.processes)) {
     cmds.addAll(_processRegexCommands);
@@ -130,9 +127,9 @@ KelolaSudoersSpec buildKelolaSudoersSpec({
   return KelolaSudoersSpec(user: user, groups: groups, commands: cmds);
 }
 
-/// Groups that have at least one rule on this host. Services and Processes
-/// are all variable values, so they drop out without regex support; Services
-/// comes back there when [units] names a unit for exact lines.
+/// Groups that have at least one rule on this host. Processes is a regex
+/// rule, so it drops out without regex support. Services is in only when
+/// [units] names a unit for exact lines, on every tier.
 Set<KelolaSudoersGroup> defaultKelolaSudoersGroups(
   HostFacts facts, {
   required SudoFlavor sudo,
@@ -145,8 +142,7 @@ Set<KelolaSudoersGroup> defaultKelolaSudoersGroups(
   if (!facts.hasJournald) {
     out.add(KelolaSudoersGroup.logs);
   }
-  if (!sudo.supportsArgRegex &&
-      exactUnitCommands(facts.init, units).isNotEmpty) {
+  if (exactUnitCommands(facts.init, units).isNotEmpty) {
     out.add(KelolaSudoersGroup.services);
   }
   if (facts.pkg != PackageManager.unknown) {
@@ -156,9 +152,6 @@ Set<KelolaSudoersGroup> defaultKelolaSudoersGroups(
     out.add(KelolaSudoersGroup.firewall);
   }
   if (sudo.supportsArgRegex) {
-    if (_serviceRegexCommands(facts.init).isNotEmpty) {
-      out.add(KelolaSudoersGroup.services);
-    }
     out.add(KelolaSudoersGroup.processes);
   }
   if (facts.runtimes.contains('docker')) {
@@ -173,9 +166,22 @@ String? kelolaSudoersTierNote(SudoFlavor sudo) {
     return null;
   }
   return 'This host\'s sudo cannot limit a value that changes, so upgrading '
-      'one package, changing a firewall port, service actions and process '
-      'signals still need your own sudo.';
+      'one package, changing a firewall port and process signals still need '
+      'your own sudo.';
 }
+
+/// Shown on the Enable sheet and in Help with the Services group: its lines
+/// are exact, for the units Enable was given (PR #12).
+const kelolaServicesFoundNote =
+    'Service lines cover the services Kelola has found. A service found '
+    'later needs Enable Kelola sudo again.';
+
+/// Shown on the Enable sheet and in Help whenever the Services group is
+/// written. Only nginx and Apache units get the host-side config check
+/// (`WebUnitGate`); other services' configs are not checked.
+const kelolaServicesConfigAsRootNote =
+    "Passwordless service restart runs that service's config as root. "
+    'Only enable it where service configs are root-owned.';
 
 const kelolaSudoRulesOutdatedCopy =
     'Kelola sudo rules are outdated. Re-run Enable Kelola sudo.';
@@ -417,29 +423,18 @@ List<String> _firewallRegexCommands(FirewallBackend fw) {
   }
 }
 
-/// One unit, for lifecycle verbs only. `enable`, `disable`, `link` and `edit`
-/// are left out on purpose: they take a unit file path, so allowing them
-/// passwordless would let this login run anything as root. The first character
-/// rules out options such as `--host` and `--root`, and the class rules out a
-/// path. `\:` in the class also admits a backslash, which is how systemd
-/// escapes unit names such as `foo\x2dbar.service`.
-List<String> _serviceRegexCommands(InitSystem init) {
-  if (init != InitSystem.systemd) {
-    return const [];
-  }
-  return const [
-    '/usr/bin/systemctl ^(start|stop|restart|reload) $_unitNameRegex\$',
-  ];
-}
-
+/// One safe unit name. The first character rules out options such as
+/// `--host` and `--root`, and the class rules out a path. `\:` in the class
+/// also admits a backslash, which is how systemd escapes unit names such as
+/// `foo\x2dbar.service` ([exactUnitCommands] drops those).
 const _unitNameRegex = r'[a-zA-Z0-9][a-zA-Z0-9\:_.@-]*';
 
 /// The verbs a service rule allows. `enable`, `disable`, `link` and `edit`
 /// act on unit files, so they are never passwordless.
 const kelolaUnitLifecycleVerbs = ['start', 'stop', 'restart', 'reload'];
 
-/// M52d: exact lifecycle lines for each of [units], for a systemd host whose
-/// sudo has no regex. A name with a backslash is dropped: systemd escapes
+/// M52d: exact lifecycle lines for each of [units], for a systemd host (every
+/// sudo tier since PR #12). A name with a backslash is dropped: systemd escapes
 /// such as `foo\x2dbar` would need escaping again for sudoers. Other unsafe
 /// names are dropped too, since they come from the host's output.
 List<String> exactUnitCommands(InitSystem init, Iterable<String> units) {

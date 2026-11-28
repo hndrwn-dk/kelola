@@ -3,8 +3,14 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:kelola/domain/exceptions.dart';
+import 'package:kelola/domain/facts/enums.dart';
+import 'package:kelola/domain/facts/host_facts.dart';
+import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/web_lens_probe.dart';
+import 'package:kelola/domain/risk/risk_level.dart';
 import 'package:kelola/domain/services/service_catalog.dart';
+import 'package:kelola/domain/services/service_detection.dart';
+import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo/unit_sudoers_grant.dart';
 
 /// M52 §7b: exact read rules for the web lenses. Written only from a lens,
@@ -419,12 +425,19 @@ String buildWebGrantScript(
 ///
 /// Fail-closed: `set -e` does not apply inside `kelola_cfg` (it runs as an
 /// `if` condition), so every step checks its own status.
+///
+/// [flag] is the variable set to 1 on a pass, and [marker] the text printed
+/// before the failing path and reason. With [walkBinary], [bin] itself must
+/// pass `kelola_walk` first (the unit gates: [webUnitConfigGateShell]).
 String _configTrustShell(
   ServiceId id,
   String bin,
   List<String> configFiles,
   List<String> owners, {
   required String prefix,
+  String flag = 'KELOLA_CFG',
+  String marker = webGrantConfigMarker,
+  bool walkBinary = false,
 }) {
   if (prefix.isNotEmpty && !isGrantableWebPath(prefix)) {
     throw ArgumentError.value(prefix, 'prefix');
@@ -554,6 +567,9 @@ String _configTrustShell(
     ..writeln('  kelola_pseen=')
     ..writeln('  kelola_at=')
     ..writeln('  kelola_why=');
+  if (walkBinary && bin.isNotEmpty) {
+    b.writeln('  kelola_walk ${decoded(bin)} || return 1');
+  }
 
   // Dump-named files first in Dart: one that cannot be checked, or too
   // many, fails before anything runs.
@@ -684,10 +700,10 @@ String _configTrustShell(
   }
   b
     ..writeln('}')
-    ..writeln('KELOLA_CFG=0')
+    ..writeln('$flag=0')
     ..writeln(
-      "if kelola_cfg; then KELOLA_CFG=1; else printf '%s %s %s\\n' "
-      "'$webGrantConfigMarker' "
+      "if kelola_cfg; then $flag=1; else printf '%s %s %s\\n' "
+      "'$marker' "
       r'''"$(printf '%s' "$kelola_at" | base64 | tr -d '\n')" '''
       r'"${kelola_why:-unreadable}"; fi',
     );
@@ -1376,4 +1392,212 @@ class WebGrantRefusedException extends KelolaException {
 
   final List<String> skipped;
   final WebGrantConfigRefusal? config;
+}
+
+/// Which web server a systemd [unit] starts: `nginx` / `nginx.service`, or
+/// Apache's `apache2` / `httpd` (with or without `.service`). Null for
+/// anything else, including look-alikes such as `nginx-exporter`.
+ServiceId? webServerForUnit(String unit) {
+  final base = unit.endsWith('.service')
+      ? unit.substring(0, unit.length - '.service'.length)
+      : unit;
+  return switch (base) {
+    'nginx' => ServiceId.nginx,
+    'apache2' || 'httpd' => ServiceId.apache,
+    _ => null,
+  };
+}
+
+/// A web server unit whose lifecycle lines (start, stop, restart, reload)
+/// Kelola writes only when its config is root-controlled: a start, restart
+/// or reload as root loads the same config and modules as the config test
+/// ([_configTrustShell]), and Apache's stop goes through `apachectl`, which
+/// sources `envvars` as root.
+class WebUnitGate {
+  const WebUnitGate({required this.unit, required this.id, this.binary});
+
+  /// As detected or as the hint named it; [isSudoersSafeUnitName].
+  final String unit;
+  final ServiceId id;
+
+  /// The server binary the check asks for its config path (nginx `-V`), as
+  /// the probes pick it ([safeWebBinary]); it must pass its own walk. Null
+  /// when unknown: nginx then fails closed, Apache needs none.
+  final String? binary;
+}
+
+/// The gates for the host's own web server units in [services] (never a
+/// container), plus [hintUnit] when it is a web server unit, one per unit.
+/// Empty when none is a web server, so nothing changes for other hosts.
+List<WebUnitGate> webUnitGatesFor({
+  required Iterable<DetectedService> services,
+  String? hintUnit,
+}) {
+  final out = <WebUnitGate>[];
+  void add(String? unit, ServiceId? id, Map<String, String> binaries) {
+    if (unit == null || id == null) return;
+    if (!isSudoersSafeUnitName(unit) || unit.contains(r'\')) return;
+    if (webServerForUnit(unit) != id) return;
+    if (out.any((g) => g.unit == unit)) return;
+    out.add(
+      WebUnitGate(
+        unit: unit,
+        id: id,
+        binary: safeWebBinary(binaries, webConfigTestBinaryNames(id)),
+      ),
+    );
+  }
+
+  for (final s in services) {
+    if (s.inContainer) continue;
+    add(s.unit, s.id, s.binaries);
+  }
+  if (hintUnit != null) {
+    final id = webServerForUnit(hintUnit);
+    final known = services.where((s) => !s.inContainer && s.id == id);
+    add(hintUnit, id, known.isEmpty ? const {} : known.first.binaries);
+  }
+  return out;
+}
+
+/// The exact `/etc/sudoers.d/kelola` lines [user] gets for [unit]
+/// ([exactUnitCommands]).
+List<String> webUnitLines(String user, String unit) => [
+  for (final c in exactUnitCommands(InitSystem.systemd, [unit]))
+    '$user ALL=(root) NOPASSWD: $c',
+];
+
+/// Shell (for `set -eu`, as the login, no sudo) that sets `KELOLA_U<j>=1`
+/// for each of [gates] whose config passes the config test's check
+/// ([_configTrustShell], with the binary walked first). A failing gate
+/// prints `<marker> <unit b64> <path b64> <reason>` and leaves `KELOLA_U<j>`
+/// at 0. nginx with no known binary fails closed without running anything.
+///
+/// [owners] and [prefix] exist for tests only, as in [buildWebGrantScript].
+String webUnitConfigGateShell(
+  List<WebUnitGate> gates,
+  String marker, [
+  @visibleForTesting List<String> owners = const ['root'],
+  @visibleForTesting String prefix = '',
+]) {
+  if (gates.isEmpty) return '';
+  String b64(String s) => base64Encode(utf8.encode(s));
+  final b = StringBuffer(_trustShell(const [], const [], owners));
+  for (final (j, g) in gates.indexed) {
+    final m = '$marker ${b64(g.unit)}';
+    final bin = g.binary;
+    if (g.id == ServiceId.nginx &&
+        (bin == null ||
+            !webConfigTestBinaryNames(g.id)
+                .any((n) => isGrantableWebBinary(bin, n)))) {
+      b
+        ..writeln('KELOLA_U$j=0')
+        ..writeln("printf '%s %s %s\n' '$m' - unreadable");
+      continue;
+    }
+    b.write(
+      _configTrustShell(
+        g.id,
+        bin ?? '',
+        const [],
+        owners,
+        prefix: prefix,
+        flag: 'KELOLA_U$j',
+        marker: m,
+        walkBinary: true,
+      ),
+    );
+  }
+  return b.toString();
+}
+
+/// One web unit whose lifecycle lines the host left out, and why.
+class WebUnitRefusal {
+  const WebUnitRefusal({required this.unit, required this.refusal});
+
+  final String unit;
+  final WebGrantConfigRefusal refusal;
+}
+
+/// `<unit> start, stop, restart and reload not granted: <path> <why>.`,
+/// split around the path.
+({String lead, String path, String tail}) webUnitRefusalCopyParts(
+  WebUnitRefusal r,
+) {
+  final p = webGrantConfigCopyParts(r.refusal);
+  return (
+    lead: '${r.unit} start, stop, restart and reload not granted: ',
+    path: p.path,
+    tail: p.tail,
+  );
+}
+
+String webUnitRefusalCopy(WebUnitRefusal r) {
+  final p = webUnitRefusalCopyParts(r);
+  return '${p.lead}${p.path}${p.tail}';
+}
+
+/// The config test rules (`<bin> -t`, `-T`, `-S`) that a `sudo -n -l`
+/// listing ([listed], from [parseSudoListing]) grants for [id]'s binaries in
+/// [webGrantSystemDirs]. Lines granted before PR #3 stay on hosts; the web
+/// lens checks them against today's config.
+List<String> webListedConfigTestLines({
+  required List<String> listed,
+  required ServiceId id,
+}) {
+  final names = webConfigTestBinaryNames(id);
+  final out = <String>[];
+  for (final raw in listed) {
+    final rule = normalizeSudoRule(raw).trim();
+    final parts = rule.split(' ');
+    if (parts.length != 2) continue;
+    if (!const ['-t', '-T', '-S'].contains(parts[1])) continue;
+    if (!names.any((n) => isGrantableWebBinary(parts[0], n))) continue;
+    if (!out.contains(rule)) out.add(rule);
+  }
+  return out;
+}
+
+/// Printed by [WebConfigTrustProbe] when the config passes.
+const webConfigTrustOkMarker = 'KELOLA_WEB_CONFIG_TRUSTED';
+
+/// Read-only: runs the config test's host-side check ([_configTrustShell])
+/// as the login, without sudo and without writing anything. Returns the
+/// refusal, or null when the config passes or no verdict came back.
+class WebConfigTrustProbe extends Probe<WebGrantConfigRefusal?> {
+  const WebConfigTrustProbe({required this.id, required this.binary});
+
+  final ServiceId id;
+
+  /// The server binary (`/usr/sbin/nginx`); must be grantable for nginx.
+  final String binary;
+
+  @override
+  String get auditTitle => 'Checked web server config ownership';
+
+  @override
+  String command(HostFacts facts) {
+    final names = webConfigTestBinaryNames(id);
+    if (id == ServiceId.nginx &&
+        !names.any((n) => isGrantableWebBinary(binary, n))) {
+      return 'exit 2';
+    }
+    return 'set -eu\n'
+        '${_trustShell(const [], const [], const ['root'])}'
+        '${_configTrustShell(id, binary, const [], const ['root'], prefix: '', walkBinary: true)}'
+        "if [ \"\$KELOLA_CFG\" = 1 ]; then printf '%s\n' "
+        "'$webConfigTrustOkMarker'; fi\n";
+  }
+
+  @override
+  WebGrantConfigRefusal? parse(String stdout, String stderr, int exitCode) {
+    if (exitCode != 0) return null;
+    return webGrantConfigRefusal(stdout);
+  }
+
+  @override
+  bool get needsSudo => false;
+
+  @override
+  RiskLevel get risk => RiskLevel.read;
 }

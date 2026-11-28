@@ -145,6 +145,7 @@ class WebLens {
     this.accessLogStat,
     this.loginGroups,
     this.vhostCertsUnlinked = false,
+    this.configTestViaSudo = false,
   });
 
   final ServiceId id;
@@ -152,6 +153,11 @@ class WebLens {
 
   /// null = the test could not run.
   final bool? configOk;
+
+  /// The config test ran through `sudo -n` (the login alone could not run
+  /// it) and sudo did not refuse: a NOPASSWD rule allowed it. The lens then
+  /// checks whether that rule is an outdated config-test grant.
+  final bool configTestViaSudo;
   final List<String> configErrors;
   final List<WebVhost> vhosts;
   final Map<String, WebCert> certsByPath;

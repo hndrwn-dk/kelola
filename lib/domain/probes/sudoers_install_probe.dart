@@ -14,6 +14,7 @@ class SudoersInstallProbe extends Probe<SudoersInstallResult> {
     this.user,
     this.retireUnits = false,
     this.journalGroup = false,
+    this.webUnitGates = const [],
   });
 
   final KelolaSudoersSpec spec;
@@ -28,6 +29,10 @@ class SudoersInstallProbe extends Probe<SudoersInstallResult> {
   /// Add this login to `systemd-journal` so logs read without sudo.
   final bool journalGroup;
 
+  /// Web server units whose lifecycle lines are kept only when their config
+  /// is root-controlled on the host ([WebUnitGate]).
+  final List<WebUnitGate> webUnitGates;
+
   @override
   String get auditTitle => 'Installed $kelolaSudoersPath ($groupsLabel)';
 
@@ -35,7 +40,8 @@ class SudoersInstallProbe extends Probe<SudoersInstallResult> {
   String auditCommand(HostFacts facts) =>
       'kelola-sudoers-install $kelolaSudoersPath ${spec.contentHash}'
       '${retireUnits ? ' retire=$kelolaUnitSudoersPath' : ''}'
-      '${journalGroup ? ' group=$kelolaJournalGroup' : ''}';
+      '${journalGroup ? ' group=$kelolaJournalGroup' : ''}'
+      '${webUnitGates.isEmpty ? '' : ' gate=${webUnitGates.map((g) => g.unit).join(',')}'}';
 
   @override
   String command(HostFacts facts) => buildSudoersInstallScript(
@@ -43,6 +49,7 @@ class SudoersInstallProbe extends Probe<SudoersInstallResult> {
     user: user,
     retireUnits: retireUnits,
     journalGroup: journalGroup,
+    webUnitGates: webUnitGates,
   );
 
   @override
@@ -52,6 +59,8 @@ class SudoersInstallProbe extends Probe<SudoersInstallResult> {
       stderr: stderr,
       exitCode: exitCode,
       expectedContent: spec.content,
+      user: user,
+      webUnitGates: webUnitGates,
     );
     if (!result.ok) {
       throw KelolaException(result.errorSummary ?? 'sudoers install failed');

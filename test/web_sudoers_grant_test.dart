@@ -911,7 +911,28 @@ echo "subject=CN = shop.example.com"''');
         if (_pinnedElsewhere.contains(g)) continue;
         expect(snap.keys.any((k) => k.startsWith('${g.name}/')), isTrue);
       }
-      now.forEach((k, v) => expect(v, snap[k], reason: k));
+      // PR #12 (owner decision): no services regex on any tier, so the one
+      // systemctl pattern is the only line that left the pre-M52 output;
+      // every other byte is unchanged. With no units named, nothing replaces
+      // it here.
+      const serviceRegex =
+          r'hendr ALL=(root) NOPASSWD: /usr/bin/systemctl '
+          r'^(start|stop|restart|reload) [a-zA-Z0-9][a-zA-Z0-9\:_.@-]*$'
+          '\n';
+      var dropped = 0;
+      now.forEach((k, v) {
+        final before = snap[k]!;
+        if (before.contains(serviceRegex)) {
+          dropped++;
+          var after = before.replaceFirst(serviceRegex, '');
+          // No rule left: the header alone, as for a host without regex.
+          if (after.endsWith('\n\n')) after = after.substring(0, after.length - 1);
+          expect(v, after, reason: k);
+        } else {
+          expect(v, before, reason: k);
+        }
+      });
+      expect(dropped, 6);
       // No lens rule ever reaches the Enable file.
       for (final v in now.values) {
         expect(v, isNot(contains('x509')));

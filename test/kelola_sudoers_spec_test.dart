@@ -288,6 +288,8 @@ void main() {
 
   group('default groups', () {
     test('are the full available set where regex works', () {
+      // PR #12: Services is exact lines for known units on every tier, so
+      // with no unit named it is not in the set.
       expect(
         defaultKelolaSudoersGroups(facts(), sudo: regexSudo),
         {
@@ -295,9 +297,16 @@ void main() {
           KelolaSudoersGroup.firewall,
           KelolaSudoersGroup.hostPower,
           KelolaSudoersGroup.caches,
-          KelolaSudoersGroup.services,
           KelolaSudoersGroup.processes,
         },
+      );
+      expect(
+        defaultKelolaSudoersGroups(
+          facts(),
+          sudo: regexSudo,
+          units: const ['nginx.service'],
+        ),
+        contains(KelolaSudoersGroup.services),
       );
     });
 
@@ -430,8 +439,29 @@ void main() {
           }
         }
         final spec = fullSpec(facts(), sudo);
-        for (final cmd in [...serviceCommands(), ...processCommands()]) {
+        for (final cmd in processCommands()) {
           expect(sudoAllows(spec, cmd), isTrue, reason: cmd);
+        }
+        // PR #12: service actions only for the units Enable was told about,
+        // as on every other tier.
+        for (final cmd in serviceCommands()) {
+          expect(sudoAllows(spec, cmd), isFalse, reason: cmd);
+        }
+        const units = ['nginx.service', 'getty@tty1.service', 'nginx'];
+        final withUnits = buildKelolaSudoersSpec(
+          user: 'hendr',
+          facts: facts(),
+          groups: defaultKelolaSudoersGroups(
+            facts(),
+            sudo: sudo,
+            units: units,
+          ),
+          sudo: sudo,
+          units: units,
+        );
+        for (final cmd in serviceCommands()) {
+          final named = units.any((u) => cmd.endsWith(' $u'));
+          expect(sudoAllows(withUnits, cmd), named, reason: cmd);
         }
       });
     }
@@ -907,17 +937,26 @@ User u may run the following commands on h:
       expect(exactUnitCommands(InitSystem.openrc, const ['nginx']), isEmpty);
     });
 
-    test('a host with regex keeps the one pattern and no unit lines', () {
+    test('a host with regex gets the same exact unit lines, no pattern', () {
+      // PR #12 (owner decision): the services regex is gone on every tier.
+      const units = ['nginx.service'];
       final spec = buildKelolaSudoersSpec(
         user: 'hendr',
         facts: facts(),
-        groups: defaultKelolaSudoersGroups(facts(), sudo: regexSudo),
+        groups: defaultKelolaSudoersGroups(
+          facts(),
+          sudo: regexSudo,
+          units: units,
+        ),
         sudo: regexSudo,
-        units: const ['nginx.service'],
+        units: units,
       );
       expect(
         spec.commands.where((c) => c.startsWith('/usr/bin/systemctl')),
-        hasLength(1),
+        [
+          for (final v in kelolaUnitLifecycleVerbs)
+            '/usr/bin/systemctl $v nginx.service',
+        ],
       );
     });
 

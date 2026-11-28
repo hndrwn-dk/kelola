@@ -225,6 +225,9 @@ class WebLensProbe extends Probe<WebLens> {
       r'if o=$("$B" -t 2>&1); then r=0; else',
       r'  o=$(sudo -n "$B" -t 2>&1); r=$?',
       "  if ${webSudoRefusedCondition('r', 'o')}; then r=nosudo; o=; fi",
+      // Script-authored: the test ran through sudo -n (see
+      // `WebLens.configTestViaSudo`).
+      r'  case "$r" in nosudo) ;; *) echo @elevated=1 ;; esac',
       'fi',
       r'out "$o"',
       r'echo "@rc=$r"',
