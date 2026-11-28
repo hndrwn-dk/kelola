@@ -74,6 +74,9 @@ class K8sRbacRule {
 ///   cronjobs: workload and pod lists (named columns only) and logs.
 /// - serviceaccounts, networkpolicies, clusterrolebindings: Security.
 /// - `metrics.k8s.io` pods and nodes: top.
+/// - `argoproj.io` applications, applicationsets, appprojects: GitOps (M49).
+///   Application specs can carry inline Helm values; Kelola's parser drops
+///   them (`lib/domain/argocd/`).
 const kelolaReaderRules = [
   K8sRbacRule(
     [''],
@@ -97,6 +100,10 @@ const kelolaReaderRules = [
   K8sRbacRule(['networking.k8s.io'], ['networkpolicies']),
   K8sRbacRule(['rbac.authorization.k8s.io'], ['clusterrolebindings']),
   K8sRbacRule(['metrics.k8s.io'], ['pods', 'nodes']),
+  K8sRbacRule(
+    ['argoproj.io'],
+    ['applications', 'applicationsets', 'appprojects'],
+  ),
 ];
 
 /// Resources the role must never name, whatever the group.

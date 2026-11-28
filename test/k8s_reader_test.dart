@@ -78,9 +78,26 @@ void main() {
         'rbac.authorization.k8s.io/clusterrolebindings',
         'metrics.k8s.io/pods',
         'metrics.k8s.io/nodes',
+        'argoproj.io/applications',
+        'argoproj.io/applicationsets',
+        'argoproj.io/appprojects',
       ]) {
         expect(granted, contains(needed), reason: needed);
       }
+    });
+
+    test('argo rule is read-only and names no secrets', () {
+      final argo = kelolaReaderRules.where(
+        (r) => r.apiGroups.contains('argoproj.io'),
+      );
+      expect(argo, hasLength(1));
+      expect(argo.single.verbs, ['get', 'list']);
+      expect(argo.single.resources, [
+        'applications',
+        'applicationsets',
+        'appprojects',
+      ]);
+      expect(kelolaReaderManifest(), contains('apiGroups: ["argoproj.io"]'));
     });
 
     test('the manifest names the four objects with Kelola labels', () {
