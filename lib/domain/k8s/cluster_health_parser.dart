@@ -68,7 +68,40 @@ ClusterHealth parseClusterHealth(
     isOpenShift: authExpired ? null : parseIsOpenShift(stdout),
     authExpired: authExpired,
     kubeContext: parseKubeContext(stdout),
+    // Same as isOpenShift: an expired login answers nothing about Argo CD.
+    hasArgo: authExpired ? null : parseHasArgo(stdout),
   );
+}
+
+/// M49. `true` when the Argo CD Application CRD is listed or the namespaced
+/// Application read answered; `false` when the CRD or the resource type is
+/// not found; `null` when the section is missing, forbidden or junk.
+bool? parseHasArgo(String stdout) {
+  final crd = _section(stdout, 'ARGO_CRD');
+  if (crd == null) {
+    return null;
+  }
+  if (crd.contains(
+    'customresourcedefinition.apiextensions.k8s.io/applications.argoproj.io',
+  )) {
+    return true;
+  }
+  if (stdout.contains('---ARGO_NS_OK---')) {
+    return true;
+  }
+  final fail = _section(stdout, 'ARGO_CRD_FAIL');
+  if (fail == null) {
+    return crd.trim().isEmpty ? false : null;
+  }
+  if (!fail.contains('orbidden') &&
+      RegExp('NotFound|not found').hasMatch(fail)) {
+    return false;
+  }
+  final ns = _section(stdout, 'ARGO_NS') ?? '';
+  if (ns.contains("doesn't have a resource type")) {
+    return false;
+  }
+  return null;
 }
 
 /// M48 §1b. `true` when the API discovery doc for `config.openshift.io/v1`
