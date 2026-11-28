@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -311,6 +312,83 @@ void main() {
     expect(find.byKey(const ValueKey('argo-stat-synced')), findsNothing);
   });
 
+  Future<void> refresh(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Refresh'));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump();
+    }
+  }
+
+  Future<void> cacheArgo() => kinds.write(
+        host.id,
+        ClusterKindRecord(
+          isOpenShift: false,
+          readAt: _now.subtract(const Duration(hours: 1)),
+          hasArgo: true,
+        ),
+      );
+
+  testWidgets('refresh true then false hides the section and its apps',
+      (tester) async {
+    pool.cluster = _cluster(argo: true);
+    pool.argoStdout = _apps('apps_guestbook_synced.json');
+    await pumpHome(tester);
+    expect(find.text('ARGO CD'), findsOneWidget);
+
+    pool.cluster = _cluster(argo: false);
+    await refresh(tester);
+    expect(find.text('ARGO CD'), findsNothing);
+    expect(find.byKey(const ValueKey('argo-tool-apps')), findsNothing);
+    expect(pool.probes.whereType<ArgoAppsProbe>(), hasLength(1));
+    expect(find.text('1 app · all synced and healthy'), findsNothing);
+  });
+
+  testWidgets('a late cache-path result from an older load is dropped',
+      (tester) async {
+    await cacheArgo();
+    pool.cluster = _cluster();
+    pool.argoStdout = _apps('apps_guestbook_synced.json');
+    pool.argoGate = Completer<void>();
+    await pumpHome(tester);
+    expect(find.text('ARGO CD'), findsOneWidget);
+    expect(pool.probes.whereType<ArgoAppsProbe>(), hasLength(1));
+
+    // The next load says no Argo CD; then the old read finishes.
+    pool.cluster = _cluster(argo: false);
+    await refresh(tester);
+    expect(find.text('ARGO CD'), findsNothing);
+    pool.argoGate!.complete();
+    for (var i = 0; i < 8; i++) {
+      await tester.pump();
+    }
+    expect(find.text('ARGO CD'), findsNothing);
+    expect(find.text('1 app · all synced and healthy'), findsNothing);
+    expect(find.byKey(const ValueKey('argo-tool-apps')), findsNothing);
+  });
+
+  testWidgets('a refresh while a cache-path read is pending reuses it',
+      (tester) async {
+    await cacheArgo();
+    pool.cluster = _cluster();
+    pool.argoStdout = _apps('apps_guestbook_synced.json');
+    pool.argoGate = Completer<void>();
+    await pumpHome(tester);
+    expect(pool.probes.whereType<ArgoAppsProbe>(), hasLength(1));
+
+    await refresh(tester);
+    // Unknown fresh answer: the section stays up while the cache answers.
+    expect(find.text('ARGO CD'), findsOneWidget);
+    expect(pool.probes.whereType<ClusterHealthProbe>(), hasLength(2));
+    expect(pool.probes.whereType<ArgoAppsProbe>(), hasLength(1));
+
+    pool.argoGate!.complete();
+    for (var i = 0; i < 8; i++) {
+      await tester.pump();
+    }
+    expect(pool.probes.whereType<ArgoAppsProbe>(), hasLength(1));
+    expect(find.text('1 app · all synced and healthy'), findsOneWidget);
+  });
+
   group('argoSlabLabel', () {
     test('Argo CD by default and while unread', () {
       expect(argoSlabLabel(null), 'Argo CD');
@@ -341,6 +419,9 @@ class _ArgoPool extends SshSessionPool {
 
   /// What ArgoAppsProbe's command prints; parsed by the real probe.
   String argoStdout = '';
+
+  /// When set, ArgoAppsProbe waits on it (a slow Applications read).
+  Completer<void>? argoGate;
   final probes = <Probe<dynamic>>[];
 
   @override
@@ -380,6 +461,7 @@ class _ArgoPool extends SshSessionPool {
       return const <K8sRevision>[] as T;
     }
     if (probe is ArgoAppsProbe) {
+      await argoGate?.future;
       return ArgoAppsProbe(now: () => _now).parse(argoStdout, '', 0) as T;
     }
     // Reader status and anything else: a failed section, never a crash.

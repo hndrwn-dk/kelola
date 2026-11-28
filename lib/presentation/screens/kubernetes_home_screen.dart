@@ -104,6 +104,11 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
   _SectionError? _argoError;
   DateTime? _argoReadAt;
 
+  /// The Argo CD read in flight, shared by every load: a refresh never
+  /// starts a second `get applications -A` while one is pending (sshd
+  /// MaxSessions, see [_inFlight]).
+  Future<({ArgoApps? value, _SectionError? error})>? _argoPending;
+
   /// M52e: the `kelola-reader` kubeconfig on this host; null where the host
   /// gets no reader (oc) or the check failed.
   K8sReaderStatus? _reader;
@@ -201,9 +206,7 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
           _inv = const WorkloadInventory(rows: []);
           _ocp = null;
           _ocpError = null;
-          _argoKnown = null;
-          _argo = null;
-          _argoError = null;
+          _setArgoKnown(null);
         });
         return;
       }
@@ -235,7 +238,11 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
         _facts = facts;
         _cluster = cluster.withCoreDns(dns);
         _inv = inv;
-        _argoKnown = argoKnown;
+        // Unknown keeps the current state until the cache answers, so a
+        // refresh does not hide and re-show the section.
+        if (argoKnown != null) {
+          _setArgoKnown(argoKnown);
+        }
       });
       // Host key is pinned by now, so these can share the pooled client.
       // OpenShift health runs alongside Wave 2, only on OpenShift.
@@ -245,7 +252,7 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
       // M49: no SSH call unless Argo CD is known to be installed. Unknown
       // now: the cached record (same context only) decides, on its own.
       final argoFuture = argoKnown == true
-          ? _argoSection(host, facts)
+          ? _argoRead(host, facts)
           : null;
       if (argoKnown == null) {
         unawaited(_argoFromCache(host, facts, cluster, cachedKind, gen));
@@ -345,11 +352,14 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
   ) async {
     final cached = await cachedKind;
     final known = mergeClusterKind(cached, cluster, _now())?.argoKnown;
-    if (!mounted || gen != _loadGen || known != true) {
+    if (!mounted || gen != _loadGen) {
       return;
     }
-    setState(() => _argoKnown = true);
-    final r = await _argoSection(host, facts);
+    setState(() => _setArgoKnown(known));
+    if (known != true) {
+      return;
+    }
+    final r = await _argoRead(host, facts);
     if (!mounted || gen != _loadGen) {
       return;
     }
@@ -357,6 +367,27 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
       _argo = r.value;
       _argoError = r.error;
       _argoReadAt = _now();
+    });
+  }
+
+  /// Call inside setState. Anything but true also drops the last apps, so
+  /// a read from another context cannot reappear later.
+  void _setArgoKnown(bool? known) {
+    _argoKnown = known;
+    if (known != true) {
+      _argo = null;
+      _argoError = null;
+      _argoReadAt = null;
+    }
+  }
+
+  /// The pending Argo CD read, or a new one when none is in flight.
+  Future<({ArgoApps? value, _SectionError? error})> _argoRead(
+    Host host,
+    HostFacts facts,
+  ) {
+    return _argoPending ??= _argoSection(host, facts).whenComplete(() {
+      _argoPending = null;
     });
   }
 
