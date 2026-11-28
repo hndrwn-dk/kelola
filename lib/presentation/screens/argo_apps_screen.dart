@@ -8,6 +8,7 @@ import 'package:kelola/domain/hosts/host.dart';
 import 'package:kelola/domain/k8s/cluster_resources.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/screens/argo_app_detail_screen.dart';
 import 'package:kelola/presentation/screens/k8s_resource_list_screen.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
 
@@ -33,7 +34,7 @@ class ArgoAppsScreen extends ConsumerStatefulWidget {
   final DateTime readAt;
   final DateTime Function()? now;
 
-  /// Row tap. Null leaves the rows inert.
+  /// Row tap override for tests. Null pushes [ArgoAppDetailScreen].
   final void Function(BuildContext context, ArgoApp app)? onOpenApp;
 
   @override
@@ -70,7 +71,6 @@ class _ArgoAppsScreenState extends ConsumerState<ArgoAppsScreen> {
 
     final stale = now.difference(widget.readAt.toUtc()) > Host.attentionFreshFor;
     final age = stale ? k8sAge(widget.readAt.toUtc(), now.toUtc()) : '';
-    final onOpen = widget.onOpenApp;
 
     return KelolaWashScaffold(
       appBar: KelolaHostAppBar(
@@ -92,11 +92,31 @@ class _ArgoAppsScreenState extends ConsumerState<ArgoAppsScreen> {
                 name: e.app.name,
                 meta: e.app.rowMeta,
                 status: e.status,
-                onTap: onOpen == null ? null : () => onOpen(context, e.app),
+                onTap: () => _open(context, e.app),
               ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  void _open(BuildContext context, ArgoApp app) {
+    final override = widget.onOpenApp;
+    if (override != null) {
+      override(context, app);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ArgoAppDetailScreen(
+          host: widget.host,
+          facts: widget.facts,
+          app: app,
+          workloads: widget.workloads,
+          readAt: widget.readAt,
+          now: widget.now,
+        ),
       ),
     );
   }

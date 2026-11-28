@@ -5,6 +5,7 @@ import 'package:kelola/app.dart';
 import 'package:kelola/domain/argocd/argo_app.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/presentation/screens/argo_app_detail_screen.dart';
 import 'package:kelola/presentation/screens/argo_apps_screen.dart';
 import 'package:kelola/providers.dart';
 
@@ -176,12 +177,19 @@ void main() {
     expect(find.textContaining('as of'), findsNothing);
   });
 
-  testWidgets('rows are tappable only with onOpenApp', (tester) async {
+  testWidgets('onOpenApp overrides the default push', (tester) async {
     ArgoApp? opened;
     await _pump(tester, [_app('alpha')],
         onOpenApp: (_, a) => opened = a);
     await tester.tap(find.text('alpha'));
     await tester.pump();
     expect(opened?.name, 'alpha');
+  });
+  testWidgets('without onOpenApp a row pushes the app detail', (tester) async {
+    await _pump(tester, [_app('alpha')]);
+    await tester.tap(find.text('alpha'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(ArgoAppDetailScreen), findsOneWidget);
   });
 }
