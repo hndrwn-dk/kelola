@@ -408,6 +408,23 @@ void main() {
       expect(redactUrlCredentials('why? no #url'), 'why? no #url');
     });
 
+    test('redactUrlCredentials catches URLs glued to another', () {
+      final json = redactUrlCredentials(
+        '{"url":"https://a/x","other":"https://u2:p2@b/y"}',
+      );
+      expect(json, '{"url":"https://a/x","other":"https://b/y"}');
+      final comma = redactUrlCredentials('http://a/x,https://u:tok@b/y');
+      expect(comma, 'http://a/x,https://b/y');
+      final oci = redactUrlCredentials('oci://reg/c?x=1,https://u:tok@b');
+      expect(oci, 'oci://reg/c?x=1,https://b');
+      for (final out in [json, comma, oci]) {
+        expect(out, isNot(contains('u2:p2')));
+        expect(out, isNot(contains('u:tok')));
+      }
+      expect(redactUrlCredentials('see (https://h/x?sig=1) now'),
+          'see (https://h/x) now');
+    });
+
     test('messages lose URL credentials at parse time', () {
       const msg = 'rpc error: fetch https://user:tok@host/x failed';
       final app = _parse(

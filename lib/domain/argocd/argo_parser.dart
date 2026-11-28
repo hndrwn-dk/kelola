@@ -108,35 +108,41 @@ String stripRepoCredentials(String url) {
 /// 7-character commit SHA; tags, branches and chart versions unchanged.
 String shortRevision(String rev) => shortArgoRevision(rev);
 
-/// Scheme, authority, path, then the rest of the token (`?…` / `#…`).
-final _urlInText = RegExp(
-  r'([A-Za-z][A-Za-z0-9+.\-]*://)([^\s/?#]*)([^\s?#]*)(\S*)',
+/// Scheme and authority of every URL in free text. Only the authority is
+/// matched, so a URL glued to the one before it (`a/x,https://u:p@b`) is
+/// still found.
+final _urlInText = RegExp(r'([A-Za-z][A-Za-z0-9+.\-]*://)([^\s/?#]*)');
+
+/// An http(s) URL's query or fragment, up to whitespace or a delimiter
+/// (quote, bracket, comma) that cannot be part of it.
+final _httpQueryInText = RegExp(
+  r'''(https?://[^\s?#"'<>),\]]*)[?#][^\s"'<>),\]]*''',
+  caseSensitive: false,
 );
 
 /// Drops credentials from every `scheme://…@` URL inside free text (Argo CD
 /// messages can echo a repo URL), by the same rule as
-/// [stripRepoCredentials]: ssh keeps its user name, and an http(s) URL also
-/// loses its query and fragment (they can carry an access key).
+/// [stripRepoCredentials]: ssh keeps its user name. A second pass drops an
+/// http(s) URL's query and fragment (they can carry an access key).
 String redactUrlCredentials(String text) {
-  return text.replaceAllMapped(_urlInText, (m) {
+  final noCreds = text.replaceAllMapped(_urlInText, (m) {
     final prefix = m.group(1)!;
     final authority = m.group(2)!;
-    final path = m.group(3)!;
-    final name = prefix.substring(0, prefix.length - 3).toLowerCase();
-    final tail = name == 'http' || name == 'https' ? '' : m.group(4)!;
     final at = authority.lastIndexOf('@');
     if (at < 0) {
-      return '$prefix$authority$path$tail';
+      return m.group(0)!;
     }
+    final name = prefix.substring(0, prefix.length - 3).toLowerCase();
     final host = authority.substring(at + 1);
     if (name == 'ssh' || name == 'git+ssh') {
       final user = authority.substring(0, at).split(RegExp('[:@]')).first;
       if (user.isNotEmpty) {
-        return '$prefix$user@$host$path$tail';
+        return '$prefix$user@$host';
       }
     }
-    return '$prefix$host$path$tail';
+    return '$prefix$host';
   });
+  return noCreds.replaceAllMapped(_httpQueryInText, (m) => m.group(1)!);
 }
 
 ArgoApp _app(Map<dynamic, dynamic> raw) {
