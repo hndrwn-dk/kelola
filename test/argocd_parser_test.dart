@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelola/domain/argocd/argo_app.dart';
+import 'package:kelola/domain/argocd/argo_filters.dart';
 import 'package:kelola/domain/argocd/argo_parser.dart';
 
 String _fixture(String name) =>
@@ -385,6 +386,41 @@ void main() {
       expect(shortRevision('19.6.4'), '19.6.4');
       expect(shortRevision('abc'), 'abc');
       expect(shortRevision(''), '');
+    });
+  });
+
+  group('filters', () {
+    ArgoApp a(
+      String n, {
+      String p = 'default',
+      ArgoSync s = ArgoSync.synced,
+      ArgoHealth h = ArgoHealth.healthy,
+      ArgoOpPhase o = ArgoOpPhase.none,
+    }) =>
+        ArgoApp(name: n, project: p, sync: s, health: h, opPhase: o);
+    final apps = [
+      a('1'),
+      a('2', s: ArgoSync.outOfSync, p: 'x'),
+      a('3', h: ArgoHealth.degraded, p: 'x'),
+      a('4', h: ArgoHealth.progressing),
+      a('5', o: ArgoOpPhase.error),
+      a('6', o: ArgoOpPhase.failed),
+    ];
+
+    test('counts, matches and labels', () {
+      expect(ArgoAppFilter.all.count(apps), 6);
+      expect(ArgoAppFilter.outOfSync.count(apps), 1);
+      expect(ArgoAppFilter.degraded.count(apps), 1);
+      expect(ArgoAppFilter.progressing.count(apps), 1);
+      expect(ArgoAppFilter.syncFailed.count(apps), 2);
+      expect(ArgoAppFilter.outOfSync.label, 'Out of sync');
+      expect(ArgoAppFilter.syncFailed.emptyCopy, 'No failed syncs.');
+      expect(ArgoAppFilter.all.matches(apps.first), isTrue);
+    });
+
+    test('project counts', () {
+      expect(argoProjectCounts(apps), {'default': 4, 'x': 2});
+      expect(argoProjectCounts(const []), isEmpty);
     });
   });
 }
