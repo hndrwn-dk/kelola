@@ -58,7 +58,8 @@ ArgoApps parseArgoApps(String stdout, {required DateTime readAt}) {
 
 /// Drops credentials from a repo URL before it is stored or shown.
 ///
-/// - `scheme://` (http, https, oci, …): userinfo, query and fragment go.
+/// - `scheme://` (http, https, oci, …): credentials before `@`, query and
+///   fragment go. Only an `@` inside the authority counts.
 /// - `ssh://`: keeps the user name only (`git:pw@` → `git@`).
 /// - scp-like `user:pw@host:path`: keeps `user@host:path`.
 /// - anything else holding `@`: everything up to the last `@` goes.
@@ -74,7 +75,9 @@ String stripRepoCredentials(String url) {
     final isSsh = name == 'ssh' || name == 'git+ssh';
     var rest = s.substring(scheme.end);
     var user = '';
-    final at = rest.lastIndexOf('@');
+    final authEnd = rest.indexOf(RegExp('[/?#]'));
+    final at = (authEnd < 0 ? rest : rest.substring(0, authEnd))
+        .lastIndexOf('@');
     if (at >= 0) {
       if (isSsh) {
         user = rest.substring(0, at).split(RegExp('[:@]')).first;
@@ -227,7 +230,9 @@ List<ArgoHistoryEntry> _history(Object? raw) {
     out.add((
       order++,
       ArgoHistoryEntry(
-        id: id is num ? id.toInt() : 0,
+        id: id is int
+            ? id
+            : (id is double && id.isFinite ? id.toInt() : 0),
         revision: shortArgoRevision(rev),
         deployedAt: _time(h['deployedAt']),
       ),

@@ -269,6 +269,14 @@ void main() {
       expect(app.resources.single.kind, '');
     });
 
+    test('a non-finite history id does not throw', () {
+      final app = _parse(
+        '---APPS---\n{"items":[{"metadata":{"name":"x"},'
+        '"status":{"history":[{"id":1e999,"revision":"v1"}]}}]}\n',
+      ).apps.single;
+      expect(app.history.single.id, 0);
+    });
+
     test('300 resources parse', () {
       final app = _parseJson('apps_300_resources.json').apps.single;
       expect(app.resources, hasLength(300));
@@ -361,6 +369,11 @@ void main() {
       expect(stripRepoCredentials('ghcr.io/o/charts'), 'ghcr.io/o/charts');
       expect(stripRepoCredentials('weird//tok@host/x'), 'host/x');
       expect(stripRepoCredentials(''), '');
+      expect(stripRepoCredentials('https://host/a@b'), 'https://host/a@b');
+      expect(
+        stripRepoCredentials('https://github.com/o/r.git?x=a@b'),
+        'https://github.com/o/r.git',
+      );
     });
 
     test('shortRevision', () {
