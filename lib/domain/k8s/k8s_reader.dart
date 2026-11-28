@@ -463,24 +463,39 @@ const k8sReaderStatusCommand =
     'echo $k8sReaderPresentMarker; '
     'else echo $k8sReaderAbsentMarker; fi';
 
-/// The newest rule Kelola added to [kelolaReaderRules], as a `can-i` check.
-/// Move it to the newest rule whenever [kelolaReaderRules] grows.
+/// The newest rule Kelola added to [kelolaReaderRules], as a line of
+/// `can-i --list`. Move it to the newest rule whenever [kelolaReaderRules]
+/// grows.
 const _roleProbeResource = 'applications.argoproj.io';
 
+/// [_roleProbeResource] as a grep pattern for the start of a rule line.
+final _roleProbePattern = '^${_roleProbeResource.replaceAll('.', r'\.')} ';
+
 /// [k8sReaderStatusCommand], plus, for a host with a reader CLI, whether the
-/// role still allows [_roleProbeResource]. Only a clear `yes` or `no` from
-/// `can-i` counts (and a `no` only while the API answers), so an expired
-/// token or a transient error prints nothing and never reads as outdated.
-/// Never prints the token.
+/// role still grants [_roleProbeResource].
+///
+/// It reads the role's own rules (`auth can-i --list`), not a `can-i` check
+/// on the resource: that check goes through API discovery, and on a cluster
+/// without the Argo CD CRD kubectl cannot resolve the resource, asks with an
+/// empty group and gets a `no`, so every reader there would read as outdated
+/// and Renew could not clear it. The rule listing does not depend on which
+/// CRDs are installed.
+///
+/// Only a clear answer counts: `yes` when a rule line names the resource,
+/// `no` only when the listing came back (its header line) without one and
+/// the API answers. An expired token or a transient error prints nothing and
+/// never reads as outdated. Never prints the token.
 String k8sReaderStatusCommandFor(HostFacts facts) {
   final reader = kubectlReaderCli(facts);
   if (reader == null) return k8sReaderStatusCommand;
   return 'if [ -r $kelolaReaderKubeconfig ]; then '
       "sed -n 's/^$k8sReaderExpiresComment//p' $kelolaReaderKubeconfig | head -n 1; "
       'echo $k8sReaderPresentMarker; '
-      'r=\$($reader auth can-i list $_roleProbeResource --all-namespaces 2>/dev/null); '
-      'if [ "\$r" = yes ]; then echo ${k8sReaderRoleMarker}yes; '
-      'elif [ "\$r" = no ] && $reader get --raw=/version >/dev/null 2>&1; '
+      'r=\$($reader auth can-i --list --request-timeout=5s 2>/dev/null); '
+      "if printf '%s\\n' \"\$r\" | grep -q '$_roleProbePattern'; "
+      'then echo ${k8sReaderRoleMarker}yes; '
+      "elif printf '%s\\n' \"\$r\" | grep -q '^Resources ' && "
+      '$reader get --raw=/version --request-timeout=5s >/dev/null 2>&1; '
       'then echo ${k8sReaderRoleMarker}no; fi; '
       'else echo $k8sReaderAbsentMarker; fi';
 }

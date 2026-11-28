@@ -84,7 +84,7 @@ class K8sReaderStatusProbe extends Probe<K8sReaderStatus> {
   @override
   String command(HostFacts facts) => kelolaReaderSupported(kubectlFlavor(facts))
       ? k8sReaderStatusCommandFor(facts)
-      :'echo $k8sReaderAbsentMarker';
+      : 'echo $k8sReaderAbsentMarker';
 
   @override
   K8sReaderStatus parse(String stdout, String stderr, int exitCode) =>

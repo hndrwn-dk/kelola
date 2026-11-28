@@ -69,12 +69,14 @@ void main() {
         HostFacts.undiscovered.copyWith(runtimes: ['k3s']),
       ]) {
         final cmd = k8sReaderStatusCommandFor(facts);
-        expect(cmd, contains('auth can-i list applications.argoproj.io'));
-        expect(cmd, contains('--all-namespaces'));
-        // Only a clear yes / no from can-i counts.
-        expect(cmd, contains(r'[ "$r" = yes ]'));
-        expect(cmd, contains(r'[ "$r" = no ]'));
-        expect(cmd, contains('get --raw=/version'));
+        // The role's rules, not API discovery: a cluster without the Argo CD
+        // CRD cannot resolve the resource, and `can-i list` would say no.
+        expect(cmd, contains('auth can-i --list --request-timeout=5s'));
+        expect(cmd, isNot(contains('can-i list applications')));
+        expect(cmd, contains(r"grep -q '^applications\.argoproj\.io '"));
+        // A no only from a real rule listing while the API answers.
+        expect(cmd, contains("grep -q '^Resources '"));
+        expect(cmd, contains('get --raw=/version --request-timeout=5s'));
         expect(cmd, contains('${k8sReaderRoleMarker}yes'));
         expect(cmd, contains('${k8sReaderRoleMarker}no'));
         expect(cmd, contains("sed -n 's/^# kelola-expires: //p'"));
