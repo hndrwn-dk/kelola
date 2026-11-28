@@ -93,11 +93,16 @@ bool? parseHasArgo(String stdout) {
   if (fail == null) {
     return crd.trim().isEmpty ? false : null;
   }
+  // Only the API's own NotFound counts; a shell `command not found` or
+  // `sh: kubectl: not found` says nothing about the cluster.
   if (!fail.contains('orbidden') &&
-      RegExp('NotFound|not found').hasMatch(fail)) {
+      RegExp(r'\(NotFound\)|"applications\.argoproj\.io" not found')
+          .hasMatch(fail)) {
     return false;
   }
   final ns = _section(stdout, 'ARGO_NS') ?? '';
+  // Rarely reached: kubectlRead drops stderr from all but its last
+  // attempt, so this text shows only when that one says it; null otherwise.
   if (ns.contains("doesn't have a resource type")) {
     return false;
   }

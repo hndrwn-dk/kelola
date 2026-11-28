@@ -94,6 +94,19 @@ void main() {
       );
     });
 
+    for (final runtimes in [
+      ['k3s'],
+      ['oc'],
+    ]) {
+      test('${runtimes.first} flavor carries the Argo section', () {
+        final cmd = const ClusterHealthProbe().command(_facts(runtimes));
+        expect(cmd, contains('echo ---ARGO_CRD---'));
+        expect(cmd, contains('echo ---ARGO_CRD_FAIL---'));
+        expect(cmd, contains('echo ---ARGO_NS---'));
+        expect(cmd, contains('esac'));
+      });
+    }
+
     test('no kubectl: no Argo section', () {
       final cmd = const ClusterHealthProbe().command(_facts(['docker']));
       expect(cmd, isNot(contains('ARGO')));
@@ -130,6 +143,20 @@ void main() {
     test('forbidden CRD and forbidden namespaced read → null', () {
       expect(parseHasArgo(_fixture('crd_forbidden_ns_forbidden.txt')),
           isNull);
+    });
+
+    test('shell "command not found" is not evidence → null', () {
+      expect(
+        parseHasArgo('---ARGO_CRD---\n---ARGO_CRD_FAIL---\n'
+            'The connection to the server localhost:8080 was refused\n'
+            'sudo: kubectl: command not found'),
+        isNull,
+      );
+      expect(
+        parseHasArgo('---ARGO_CRD---\n---ARGO_CRD_FAIL---\n'
+            'sh: kubectl: not found'),
+        isNull,
+      );
     });
 
     test('anything else → null', () {
