@@ -1,0 +1,3 @@
+# synthetic: M49 hand-written ARGO_CRD section, CRD read succeeded (Argo CD installed)
+---ARGO_CRD---
+customresourcedefinition.apiextensions.k8s.io/applications.argoproj.io

@@ -1,0 +1,4 @@
+# synthetic: M49 hand-written ArgoAppsProbe stdout, listing Applications is forbidden
+---APPS---
+---APPS_ERR---
+KELOLA_ERR Error from server (Forbidden): applications.argoproj.io is forbidden: User "system:serviceaccount:kelola:kelola-reader" cannot list resource "applications" in API group "argoproj.io" at the cluster scope

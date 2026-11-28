@@ -10,6 +10,8 @@ import 'package:kelola/presentation/widgets/kelola_chrome.dart';
 /// Screens that take a host and operate on it. A new file matching the
 /// constructor pattern must use [KelolaHostAppBar] or this test fails.
 final hostScopedScreenFiles = [
+  'lib/presentation/screens/argo_app_detail_screen.dart',
+  'lib/presentation/screens/argo_apps_screen.dart',
   'lib/presentation/screens/container_detail_screen.dart',
   'lib/presentation/screens/container_images_screen.dart',
   'lib/presentation/screens/containers_screen.dart',

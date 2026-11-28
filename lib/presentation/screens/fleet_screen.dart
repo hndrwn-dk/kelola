@@ -236,6 +236,10 @@ class _FleetScreenState extends ConsumerState<FleetScreen> {
             scope: scope,
           ),
           previous: _byId[host.id]?.k8s,
+          cachedHasArgo: () async =>
+              (await (await ref.read(clusterKindStoreProvider.future))
+                      .read(host.id))
+                  ?.argoKnown,
           onClusterKind: (h) => unawaited(
             ref.read(clusterKindStoreProvider.future).then(
                   (s) => s.recordRead(host.id, h, DateTime.now().toUtc()),

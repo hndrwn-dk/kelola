@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kelola/data/ssh/ssh_error_text.dart';
 import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
+import 'package:kelola/domain/argocd/argo_app.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/fleet/fleet_k8s.dart';
 import 'package:kelola/domain/hosts/host.dart';
@@ -18,6 +19,7 @@ import 'package:kelola/domain/k8s/openshift_health.dart';
 import 'package:kelola/domain/k8s/workload.dart';
 import 'package:kelola/domain/k8s/workload_home_summary.dart';
 import 'package:kelola/domain/k8s/workload_view.dart';
+import 'package:kelola/domain/probes/argo_probes.dart';
 import 'package:kelola/domain/probes/cluster_health_probe.dart';
 import 'package:kelola/domain/probes/cluster_resource_probes.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
@@ -26,10 +28,13 @@ import 'package:kelola/domain/probes/openshift_health_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/workload_probes.dart';
 import 'package:kelola/presentation/host_session.dart';
+import 'package:kelola/presentation/screens/argo_app_detail_screen.dart';
+import 'package:kelola/presentation/screens/argo_apps_screen.dart';
 import 'package:kelola/presentation/screens/k8s_resource_detail_screen.dart';
 import 'package:kelola/presentation/screens/k8s_resource_list_screen.dart';
 import 'package:kelola/presentation/screens/workload_detail_screen.dart';
 import 'package:kelola/presentation/screens/workloads_screen.dart';
+import 'package:kelola/presentation/widgets/argo_gitops_block.dart';
 import 'package:kelola/presentation/widgets/enable_kelola_sudo_flow.dart';
 import 'package:kelola/presentation/widgets/k8s_reader_flow.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart' show KelolaEmpty;
@@ -93,6 +98,18 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
   DateTime? _ocpReadAt;
   OcpOperatorFilter _opFilter = OcpOperatorFilter.all;
 
+  // M49: GitOps section. Only read when Argo CD is known to be installed
+  // (fresh detection, else the cached record for the same context).
+  bool? _argoKnown;
+  ArgoApps? _argo;
+  _SectionError? _argoError;
+  DateTime? _argoReadAt;
+
+  /// The Argo CD read in flight, shared by every load: a refresh never
+  /// starts a second `get applications -A` while one is pending (sshd
+  /// MaxSessions, see [_inFlight]).
+  Future<({ArgoApps? value, _SectionError? error})>? _argoPending;
+
   /// M52e: the `kelola-reader` kubeconfig on this host; null where the host
   /// gets no reader (oc) or the check failed.
   K8sReaderStatus? _reader;
@@ -108,11 +125,16 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
   /// and can exceed sshd's MaxSessions (10) on the pooled connection.
   bool _inFlight = false;
 
+  /// M49: bumps per load, so a late GitOps result from an older load is
+  /// dropped.
+  int _loadGen = 0;
+
   Future<void> _load() async {
     if (_inFlight) {
       return;
     }
     _inFlight = true;
+    final gen = ++_loadGen;
     setState(() {
       _loading = true;
       _error = null;
@@ -169,6 +191,9 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
       if (!mounted) {
         return;
       }
+      // M49: the cached record, read once. Never awaited on the main path:
+      // only the GitOps section waits on it, when the fresh read cannot say.
+      final cachedKind = _readClusterKind(host.id);
       // Cache the kind the band title is about to show, for the dashboard
       // tile. Only a read that answered replaces it.
       // Never awaited: a cache write must not delay or break the read.
@@ -182,6 +207,7 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
           _inv = const WorkloadInventory(rows: []);
           _ocp = null;
           _ocpError = null;
+          _setArgoKnown(null);
         });
         return;
       }
@@ -206,17 +232,34 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
           return;
         }
       }
+      // M49: a fresh Argo CD answer wins; null waits for the cache below.
+      final argoKnown = cluster.hasArgo;
       setState(() {
         _host = host;
         _facts = facts;
         _cluster = cluster.withCoreDns(dns);
         _inv = inv;
+        // Unknown keeps the current state until the cache answers, so a
+        // refresh does not hide and re-show the section.
+        if (argoKnown != null) {
+          _setArgoKnown(argoKnown);
+        }
       });
       // Host key is pinned by now, so these can share the pooled client.
       // OpenShift health runs alongside Wave 2, only on OpenShift.
       final ocpFuture = cluster.isOpenShift == true
           ? _section(host, facts, const OpenShiftHealthProbe())
           : null;
+      // M49: no SSH call unless Argo CD is known to be installed. Unknown
+      // now: the cached record (same context only) decides, on its own.
+      // Either way the GitOps result lands on its own, so the sections
+      // below never wait on a slow `get applications -A`. A refresh while
+      // it runs shares the pending read ([_argoPending]), never a second.
+      if (argoKnown == true) {
+        unawaited(_argoApply(host, facts, gen));
+      } else if (argoKnown == null) {
+        unawaited(_argoFromCache(host, facts, cluster, cachedKind, gen));
+      }
       final results = await Future.wait([
         _section(host, facts, const ClusterEventsProbe()),
         _section(host, facts, const ServiceListProbe()),
@@ -291,6 +334,86 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
         error: _SectionError(describeSshError(e), fromServer: false),
       );
     }
+  }
+
+  /// M49: fresh detection could not tell (null). Use the cached answer,
+  /// folded with this read as the store will hold it, so a record from
+  /// another kubeconfig context counts as unknown. Unknown or false: hidden,
+  /// and no SSH call.
+  Future<void> _argoFromCache(
+    Host host,
+    HostFacts facts,
+    ClusterHealth cluster,
+    Future<ClusterKindRecord?> cachedKind,
+    int gen,
+  ) async {
+    final cached = await cachedKind;
+    final known = mergeClusterKind(cached, cluster, _now())?.argoKnown;
+    if (!mounted || gen != _loadGen) {
+      return;
+    }
+    setState(() => _setArgoKnown(known));
+    if (known != true) {
+      return;
+    }
+    await _argoApply(host, facts, gen);
+  }
+
+  /// Reads Argo CD (or joins the read in flight) and shows it, unless a
+  /// newer load started meanwhile.
+  Future<void> _argoApply(Host host, HostFacts facts, int gen) async {
+    final r = await _argoRead(host, facts);
+    if (!mounted || gen != _loadGen) {
+      return;
+    }
+    setState(() {
+      _argo = r.value;
+      _argoError = r.error;
+      _argoReadAt = _now();
+    });
+  }
+
+  /// Call inside setState. Anything but true also drops the last apps, so
+  /// a read from another context cannot reappear later.
+  void _setArgoKnown(bool? known) {
+    _argoKnown = known;
+    if (known != true) {
+      _argo = null;
+      _argoError = null;
+      _argoReadAt = null;
+    }
+  }
+
+  /// The pending Argo CD read, or a new one when none is in flight.
+  Future<({ArgoApps? value, _SectionError? error})> _argoRead(
+    Host host,
+    HostFacts facts,
+  ) {
+    return _argoPending ??= _argoSection(host, facts).whenComplete(() {
+      _argoPending = null;
+    });
+  }
+
+  /// M49: [ArgoAppsProbe] reports an unreadable section on the value
+  /// (Forbidden, timeout) instead of throwing; the home shows it as the
+  /// section error, never as an empty list.
+  Future<({ArgoApps? value, _SectionError? error})> _argoSection(
+    Host host,
+    HostFacts facts,
+  ) async {
+    final r = await _section(host, facts, ArgoAppsProbe(now: _now));
+    final apps = r.value as ArgoApps?;
+    final reason = apps?.error;
+    if (reason != null) {
+      return (
+        value: null,
+        error: _SectionError(
+          K8sReadException('Argo CD applications', reason).toString(),
+          fromServer: true,
+        ),
+      );
+    }
+    return (value: apps, error: r.error);
   }
 
   DateTime _now() => widget.now?.call() ?? DateTime.now().toUtc();
@@ -425,6 +548,11 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
               clusterKindLabel(true, distro: _distro(cluster)),
             ),
             _openShiftBlock(c, cluster),
+          ],
+          if (_argoKnown == true) ...[
+            const SizedBox(height: 10),
+            SectionSlab(argoSlabLabel(_argo)),
+            _argoBlock(c),
           ],
           const SizedBox(height: 10),
           const SectionSlab('Workloads'),
@@ -1033,6 +1161,16 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
     }
   }
 
+  Future<ClusterKindRecord?> _readClusterKind(String hostId) async {
+    try {
+      final store = await ref.read(clusterKindStoreProvider.future);
+      return await store.read(hostId);
+    } catch (_) {
+      // Cache only; unknown hides the GitOps section.
+      return null;
+    }
+  }
+
   Future<void> _saveClusterKind(String hostId, ClusterHealth cluster) async {
     try {
       final store = await ref.read(clusterKindStoreProvider.future);
@@ -1138,6 +1276,63 @@ class _KubernetesHomeScreenState extends ConsumerState<KubernetesHomeScreen> {
           onTap: () => _openOperator(op),
         ),
     ];
+  }
+
+  // ---- M49: Argo CD ----------------------------------------------------
+
+  Widget _argoBlock(KelolaColors c) {
+    final apps = _argo;
+    if (_argoError != null || apps == null) {
+      return _sectionBody<ArgoApps>(
+        c,
+        value: apps,
+        error: _argoError,
+        build: (_) => const [],
+      );
+    }
+    return ArgoGitOpsBlock(
+      apps: apps,
+      now: _now(),
+      onOpenApps: () => _openArgoApps(apps),
+      onOpenApp: (app) => _openArgoApp(apps, app),
+    );
+  }
+
+  /// Same arguments as the Applications list uses for its rows.
+  void _openArgoApp(ArgoApps apps, ArgoApp app) {
+    final host = _host;
+    final facts = _facts;
+    if (host == null || facts == null) {
+      return;
+    }
+    _push(
+      ArgoAppDetailScreen(
+        host: host,
+        facts: facts,
+        app: app,
+        workloads: _inv.rows,
+        readAt: _argoReadAt ?? apps.readAt,
+        now: _now,
+      ),
+    );
+  }
+
+  void _openArgoApps(ArgoApps apps) {
+    final host = _host;
+    final facts = _facts;
+    if (host == null || facts == null) {
+      return;
+    }
+    _push(
+      ArgoAppsScreen(
+        host: host,
+        facts: facts,
+        apps: apps,
+        workloads: _inv.rows,
+        readAt: _argoReadAt ?? apps.readAt,
+        now: _now,
+      ),
+    );
   }
 
   Widget _openShiftBlock(KelolaColors c, ClusterHealth cluster) {

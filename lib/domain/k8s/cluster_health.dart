@@ -126,6 +126,7 @@ class ClusterHealth {
     this.authExpired = false,
     this.kubeconfigDenied = false,
     this.kubeContext = '',
+    this.hasArgo,
   });
 
   final bool apiReachable;
@@ -163,6 +164,10 @@ class ClusterHealth {
 
   /// `config current-context` on the host. Empty when unknown.
   final String kubeContext;
+
+  /// M49: the cluster serves Argo CD `applications.argoproj.io`. Null =
+  /// unknown (section skipped, forbidden, or junk).
+  final bool? hasArgo;
 
   /// M48.1: distro hinted by node OS images, before ClusterVersion is
   /// read. Null unless the cluster is known to be OpenShift.
@@ -248,6 +253,7 @@ class ClusterHealth {
       authExpired: authExpired,
       kubeconfigDenied: kubeconfigDenied,
       kubeContext: kubeContext,
+      hasArgo: hasArgo,
     );
   }
 }

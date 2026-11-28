@@ -283,13 +283,14 @@ String k8sReaderStatusLine(K8sReaderStatus status, DateTime now) {
         'read-only $kelolaReaderName account with your sudo password.';
   }
   final exp = status.expires;
-  if (exp == null) {
-    return 'Reads use the read-only $kelolaReaderName account.';
-  }
-  if (status.expiredAt(now)) {
+  if (exp != null && status.expiredAt(now)) {
     return 'The $kelolaReaderName token expired on '
         '${k8sReaderDateLabel(exp)}. Reads use your own kubeconfig until you '
         'renew it.';
+  }
+  if (status.roleOutdated) return kelolaReaderRoleOutdatedCopy;
+  if (exp == null) {
+    return 'Reads use the read-only $kelolaReaderName account.';
   }
   return 'Reads use the read-only $kelolaReaderName account. Token until '
       '${k8sReaderDateLabel(exp)}.';

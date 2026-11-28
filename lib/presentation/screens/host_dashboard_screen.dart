@@ -15,7 +15,10 @@ import 'package:kelola/domain/hosts/dashboard_status.dart';
 import 'package:kelola/domain/fleet/fleet_k8s.dart';
 import 'package:kelola/domain/k8s/cluster_kind.dart';
 import 'package:kelola/domain/k8s/coreos_node.dart';
+import 'package:kelola/domain/k8s/k8s_reader.dart';
+import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/probes/coreos_node_probe.dart';
+import 'package:kelola/domain/probes/k8s_reader_probes.dart';
 import 'package:kelola/domain/probes/dashboard_probe.dart';
 import 'package:kelola/domain/probes/host_facts_probe.dart';
 import 'package:kelola/domain/probes/service_detect_probe.dart';
@@ -1187,6 +1190,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
           connected: ref.read(sessionPoolProvider).hasLiveSession(host.id),
           onEdit: _openEdit,
           checkSudoRules: _sudoRulesCheck(host),
+          checkReaderRole: _readerRoleCheck(host),
           readSudoFiles: _sudoFilesRead(host),
           readSudoFilesWithPassword: _sudoFilesRead(host) == null
               ? null
@@ -1312,6 +1316,26 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
             facts: facts,
           );
       return sudoRulesOutdated(snapshot, user: host.username, facts: facts);
+    };
+  }
+
+  /// Host details' "Kubernetes reader" row: whether the read-only role
+  /// predates the newest rule. Only for hosts that can have a reader, on a
+  /// live session (a read, no password).
+  Future<bool> Function()? _readerRoleCheck(Host host) {
+    final facts = _facts;
+    if (facts == null ||
+        !kelolaReaderSupported(kubectlFlavor(facts)) ||
+        !ref.read(sessionPoolProvider).hasLiveSession(host.id)) {
+      return null;
+    }
+    return () async {
+      final status = await ref.read(sessionPoolProvider).execute(
+            host,
+            const K8sReaderStatusProbe(),
+            facts: facts,
+          );
+      return status.roleOutdated;
     };
   }
 

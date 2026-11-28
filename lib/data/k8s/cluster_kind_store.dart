@@ -76,6 +76,7 @@ class ClusterKindStore {
             'ctx': e.value.kubeContext,
             if (e.value.seenContext != null) 'seen': e.value.seenContext,
             if (e.value.distro != null) 'distro': e.value.distro!.name,
+            if (e.value.hasArgo != null) 'argo': e.value.hasArgo,
           },
       }),
     );
@@ -109,6 +110,7 @@ class ClusterKindStore {
             kubeContext: v['ctx'] is String ? v['ctx'] as String : '',
             seenContext: v['seen'] is String ? v['seen'] as String : null,
             distro: _distro(v['distro']),
+            hasArgo: v['argo'] is bool ? v['argo'] as bool : null,
           );
         }
       }

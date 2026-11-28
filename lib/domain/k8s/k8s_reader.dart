@@ -29,6 +29,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/k8s/kubectl.dart';
 
 const kelolaReaderNamespace = 'kelola';
@@ -74,6 +75,9 @@ class K8sRbacRule {
 ///   cronjobs: workload and pod lists (named columns only) and logs.
 /// - serviceaccounts, networkpolicies, clusterrolebindings: Security.
 /// - `metrics.k8s.io` pods and nodes: top.
+/// - `argoproj.io` applications, applicationsets, appprojects: GitOps (M49).
+///   Application specs can carry inline Helm values; Kelola's parser drops
+///   them (`lib/domain/argocd/`).
 const kelolaReaderRules = [
   K8sRbacRule(
     [''],
@@ -97,6 +101,10 @@ const kelolaReaderRules = [
   K8sRbacRule(['networking.k8s.io'], ['networkpolicies']),
   K8sRbacRule(['rbac.authorization.k8s.io'], ['clusterrolebindings']),
   K8sRbacRule(['metrics.k8s.io'], ['pods', 'nodes']),
+  K8sRbacRule(
+    ['argoproj.io'],
+    ['applications', 'applicationsets', 'appprojects'],
+  ),
 ];
 
 /// Resources the role must never name, whatever the group.
@@ -420,16 +428,33 @@ K8sReaderResult parseK8sReaderOutput(String stdout) {
 
 /// Whether the login has a reader kubeconfig, and until when.
 class K8sReaderStatus {
-  const K8sReaderStatus({required this.present, this.expires});
+  const K8sReaderStatus({
+    required this.present,
+    this.expires,
+    this.roleCurrent,
+  });
 
   final bool present;
   final DateTime? expires;
 
+  /// Whether the role still grants the newest rule Kelola added. Null when
+  /// it could not be told (an expired token, an unreachable API, no CLI).
+  final bool? roleCurrent;
+
   bool expiredAt(DateTime now) => expires != null && !expires!.isAfter(now);
+
+  /// A reader set up before the newest rule: Renew re-applies the role.
+  bool get roleOutdated => present && roleCurrent == false;
 }
 
 const k8sReaderPresentMarker = 'KELOLA_K8S_READER_PRESENT';
 const k8sReaderAbsentMarker = 'KELOLA_K8S_READER_ABSENT';
+const k8sReaderRoleMarker = 'KELOLA_K8S_READER_ROLE=';
+
+/// Host details' and the Kubernetes home's copy for an old reader role.
+const kelolaReaderRoleOutdatedCopy =
+    'The read-only $kelolaReaderName role is outdated. '
+    'Re-run Enable Kelola sudo.';
 
 /// Never prints the token: only the expiry comment line.
 const k8sReaderStatusCommand =
@@ -438,16 +463,68 @@ const k8sReaderStatusCommand =
     'echo $k8sReaderPresentMarker; '
     'else echo $k8sReaderAbsentMarker; fi';
 
+/// The newest rule Kelola added to [kelolaReaderRules], as a line of
+/// `can-i --list`. Move it to the newest rule whenever [kelolaReaderRules]
+/// grows.
+const _roleProbeResource = 'applications.argoproj.io';
+
+/// [_roleProbeResource] as a grep pattern for the start of a rule line.
+final _roleProbePattern = '^${_roleProbeResource.replaceAll('.', r'\.')} ';
+
+/// [k8sReaderStatusCommand], plus, for a host with a reader CLI, whether the
+/// role still grants [_roleProbeResource].
+///
+/// It reads the role's own rules (`auth can-i --list`), not a `can-i` check
+/// on the resource: that check goes through API discovery, and on a cluster
+/// without the Argo CD CRD kubectl cannot resolve the resource, asks with an
+/// empty group and gets a `no`, so every reader there would read as outdated
+/// and Renew could not clear it. The rule listing does not depend on which
+/// CRDs are installed.
+///
+/// Only a clear answer counts: `yes` when a rule line names the resource,
+/// `no` only when the listing came back (its header line) without one and
+/// the API answers. An expired token or a transient error prints nothing and
+/// never reads as outdated. Never prints the token.
+String k8sReaderStatusCommandFor(HostFacts facts) {
+  final reader = kubectlReaderCli(facts);
+  if (reader == null) return k8sReaderStatusCommand;
+  return 'if [ -r $kelolaReaderKubeconfig ]; then '
+      "sed -n 's/^$k8sReaderExpiresComment//p' $kelolaReaderKubeconfig | head -n 1; "
+      'echo $k8sReaderPresentMarker; '
+      'r=\$($reader auth can-i --list --request-timeout=5s 2>/dev/null); '
+      "if printf '%s\\n' \"\$r\" | grep -q '$_roleProbePattern'; "
+      'then echo ${k8sReaderRoleMarker}yes; '
+      "elif printf '%s\\n' \"\$r\" | grep -q '^Resources ' && "
+      '$reader get --raw=/version --request-timeout=5s >/dev/null 2>&1; '
+      'then echo ${k8sReaderRoleMarker}no; fi; '
+      'else echo $k8sReaderAbsentMarker; fi';
+}
+
 K8sReaderStatus parseK8sReaderStatus(String stdout) {
   if (!stdout.contains(k8sReaderPresentMarker)) {
     return const K8sReaderStatus(present: false);
   }
   final first = stdout.split('\n').first.trim();
+  bool? roleCurrent;
+  for (final line in stdout.split('\n')) {
+    final l = line.trim();
+    if (l.startsWith(k8sReaderRoleMarker)) {
+      final v = l.substring(k8sReaderRoleMarker.length);
+      roleCurrent = v == 'yes'
+          ? true
+          : v == 'no'
+          ? false
+          : null;
+    }
+  }
   return K8sReaderStatus(
     present: true,
-    expires: first.isEmpty || first == k8sReaderPresentMarker
+    expires: first.isEmpty ||
+            first == k8sReaderPresentMarker ||
+            first.startsWith(k8sReaderRoleMarker)
         ? null
         : DateTime.tryParse(first)?.toUtc(),
+    roleCurrent: roleCurrent,
   );
 }
 

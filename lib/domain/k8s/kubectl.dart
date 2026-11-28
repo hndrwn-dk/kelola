@@ -44,6 +44,18 @@ String? kubectlBin(HostFacts facts) {
 /// `OC=…;` so the result still composes after `LC_ALL=C` and after a pipe.
 const kOcBinary = r'"$(command -v oc || echo "$HOME/.crc/bin/oc/oc")"';
 
+/// A pipe stage for a failed read's stderr. Keeps the lines that decide what
+/// the failure means (Forbidden, NotFound, `not found`, Unauthorized, no
+/// such resource type; at most 3) plus the last line, so a decisive line
+/// survives sudo and API-discovery (`memcache.go`) noise that a plain
+/// `tail` would keep instead. With no decisive line, the last two lines.
+/// POSIX awk. The parsers still tell a shell `command not found` from the
+/// API's own NotFound.
+const kubectlDecisiveLines =
+    "awk '/orbidden|[(]NotFound[)]|not found|Unauthorized|resource type/ "
+    "{ if (n < 3) { print; n++; p = NR } } { l2 = l1; l1 = \$0 } "
+    "END { if (n == 0 && NR > 1) print l2; if (NR > 0 && p != NR) print l1 }'";
+
 /// Facts pick the binary. k3s usually needs passwordless sudo; kubectl does not.
 ///
 /// Plain reads with the login's own kubeconfig (or a sudo rule the admin

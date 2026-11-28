@@ -4,6 +4,7 @@ import 'package:kelola/domain/fleet/fleet_k8s.dart';
 import 'package:kelola/domain/k8s/cluster_health.dart';
 import 'package:kelola/domain/k8s/kubectl.dart';
 import 'package:kelola/domain/k8s/workload.dart';
+import 'package:kelola/domain/probes/argo_probes.dart';
 import 'package:kelola/domain/probes/fleet_k8s_probe.dart';
 import 'package:kelola/domain/probes/probe.dart';
 import 'package:kelola/domain/probes/probe_scope.dart';
@@ -21,6 +22,8 @@ Future<FleetK8sSummary?> readFleetK8s(
   FleetProbeRunner run, {
   FleetK8sSummary? previous,
   void Function(ClusterHealth health)? onClusterKind,
+  // Lazy: only asked when the fresh read could not tell whether Argo CD runs.
+  Future<bool?> Function()? cachedHasArgo,
 }) async {
   if (kubectlFlavor(facts) == KubectlFlavor.none) {
     return null;
@@ -49,22 +52,45 @@ Future<FleetK8sSummary?> readFleetK8s(
         inv = null;
       }
     }
-    final summary = fleetK8sSummary(cluster, inv, previous: previous);
+    var summary = fleetK8sSummary(cluster, inv, previous: previous);
+    if (!summary.read) {
+      return summary;
+    }
     // M48 §5: OpenShift rides the call fleet already made. A failure leaves
     // ocp null and keeps the rest of the summary.
-    if (cluster.health.isOpenShift != true || !summary.read) {
-      return summary;
+    if (cluster.health.isOpenShift == true) {
+      try {
+        const ocpProbe = FleetOpenShiftProbe();
+        assertFleetReadOnly(ocpProbe, scope: ProbeScope.fleet);
+        final ocp = await run(ocpProbe);
+        summary = summary.withOcp(
+          FleetOcpSummary.from(ocp.withNodes(cluster.health.nodes)),
+        );
+      } catch (_) {
+        // ocp stays null.
+      }
     }
-    try {
-      const ocpProbe = FleetOpenShiftProbe();
-      assertFleetReadOnly(ocpProbe, scope: ProbeScope.fleet);
-      final ocp = await run(ocpProbe);
-      return summary.withOcp(
-        FleetOcpSummary.from(ocp.withNodes(cluster.health.nodes)),
-      );
-    } catch (_) {
-      return summary;
+    // M49: Argo CD, independent of OpenShift. Fresh detection wins over the
+    // cached kind; unknown on both sides never probes.
+    var hasArgo = cluster.health.hasArgo;
+    if (hasArgo == null && cachedHasArgo != null) {
+      try {
+        hasArgo = await cachedHasArgo();
+      } catch (_) {
+        hasArgo = null;
+      }
     }
+    if (hasArgo == true) {
+      try {
+        const argoProbe = FleetArgoProbe();
+        assertFleetReadOnly(argoProbe, scope: ProbeScope.fleet);
+        final apps = await run(argoProbe);
+        summary = summary.withArgo(FleetArgoSummary.from(apps));
+      } catch (_) {
+        // argo stays null.
+      }
+    }
+    return summary;
   } catch (_) {
     return FleetK8sSummary.unreadable;
   }
