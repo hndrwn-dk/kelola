@@ -1,0 +1,45 @@
+{
+  "_synthetic": true,
+  "apiVersion": "v1",
+  "items": [
+    {
+      "apiVersion": "argoproj.io/v1alpha1",
+      "kind": "Application",
+      "metadata": {"name": "bad-image", "namespace": "argocd"},
+      "spec": {
+        "destination": {"namespace": "bad-image", "server": "https://kubernetes.default.svc"},
+        "project": "default",
+        "source": {
+          "path": "bad-image",
+          "repoURL": "https://git.example.com/lab/apps.git",
+          "targetRevision": "v1.4.0"
+        },
+        "syncPolicy": {"automated": {"selfHeal": true}}
+      },
+      "status": {
+        "health": {"message": "Deployment \"bad-image\" exceeded its progress deadline", "status": "Degraded"},
+        "operationState": {
+          "finishedAt": "2026-11-10T08:30:04Z",
+          "message": "successfully synced (all tasks run)",
+          "phase": "Succeeded",
+          "startedAt": "2026-11-10T08:30:01Z"
+        },
+        "reconciledAt": "2026-11-10T09:05:00Z",
+        "resources": [
+          {
+            "group": "apps",
+            "kind": "Deployment",
+            "name": "bad-image",
+            "namespace": "bad-image",
+            "status": "Synced",
+            "version": "v1",
+            "health": {"message": "Deployment \"bad-image\" exceeded its progress deadline", "status": "Degraded"}
+          }
+        ],
+        "sync": {"revision": "v1.4.0", "status": "Synced"}
+      }
+    }
+  ],
+  "kind": "List",
+  "metadata": {"resourceVersion": ""}
+}

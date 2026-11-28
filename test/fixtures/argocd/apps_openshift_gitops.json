@@ -1,0 +1,39 @@
+{
+  "_synthetic": true,
+  "apiVersion": "v1",
+  "items": [
+    {
+      "apiVersion": "argoproj.io/v1alpha1",
+      "kind": "Application",
+      "metadata": {"name": "cluster-config", "namespace": "openshift-gitops"},
+      "spec": {
+        "destination": {"namespace": "openshift-config", "server": "https://kubernetes.default.svc"},
+        "project": "default",
+        "source": {"path": "cluster", "repoURL": "https://git.example.com/ocp/config.git", "targetRevision": "main"},
+        "syncPolicy": {"automated": {"prune": false, "selfHeal": true}}
+      },
+      "status": {
+        "health": {"status": "Healthy"},
+        "reconciledAt": "2026-11-10T09:05:00Z",
+        "sync": {"revision": "1111111111111111111111111111111111111111", "status": "Synced"}
+      }
+    },
+    {
+      "apiVersion": "argoproj.io/v1alpha1",
+      "kind": "Application",
+      "metadata": {"name": "team-a", "namespace": "openshift-gitops"},
+      "spec": {
+        "destination": {"namespace": "team-a", "server": "https://kubernetes.default.svc"},
+        "project": "teams",
+        "source": {"path": "teams/a", "repoURL": "https://git.example.com/ocp/config.git", "targetRevision": "main"}
+      },
+      "status": {
+        "health": {"status": "Healthy"},
+        "reconciledAt": "2026-11-10T09:05:00Z",
+        "sync": {"revision": "2222222222222222222222222222222222222222", "status": "Synced"}
+      }
+    }
+  ],
+  "kind": "List",
+  "metadata": {"resourceVersion": ""}
+}

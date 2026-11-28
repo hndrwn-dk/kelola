@@ -1,0 +1,4 @@
+# synthetic: M49 hand-written ArgoAppsProbe stdout, truncated JSON and a raw line, no error section
+---APPS---
+{"apiVersion": "v1", "items": [{"metadata": {"name": "half
+oops-raw-line

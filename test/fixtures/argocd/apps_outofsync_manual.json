@@ -1,0 +1,31 @@
+{
+  "_synthetic": true,
+  "apiVersion": "v1",
+  "items": [
+    {
+      "apiVersion": "argoproj.io/v1alpha1",
+      "kind": "Application",
+      "metadata": {"name": "billing", "namespace": "argocd"},
+      "spec": {
+        "destination": {"name": "in-cluster", "namespace": "billing"},
+        "project": "infra",
+        "source": {
+          "path": "apps/billing",
+          "repoURL": "https://git.example.com/platform/deploy.git",
+          "targetRevision": "main"
+        }
+      },
+      "status": {
+        "health": {"status": "Healthy"},
+        "reconciledAt": "2026-11-10T09:05:00Z",
+        "resources": [
+          {"group": "apps", "kind": "Deployment", "name": "billing", "namespace": "billing", "status": "OutOfSync", "version": "v1", "health": {"status": "Healthy"}},
+          {"kind": "ConfigMap", "name": "billing-old", "namespace": "billing", "status": "OutOfSync", "version": "v1", "requiresPruning": true}
+        ],
+        "sync": {"revision": "9f2c1d0e8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e", "status": "OutOfSync"}
+      }
+    }
+  ],
+  "kind": "List",
+  "metadata": {"resourceVersion": ""}
+}

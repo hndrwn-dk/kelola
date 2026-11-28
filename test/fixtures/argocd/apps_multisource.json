@@ -1,0 +1,39 @@
+{
+  "_synthetic": true,
+  "apiVersion": "v1",
+  "items": [
+    {
+      "apiVersion": "argoproj.io/v1alpha1",
+      "kind": "Application",
+      "metadata": {"name": "redis-multi", "namespace": "argocd"},
+      "spec": {
+        "destination": {"namespace": "redis", "server": "https://kubernetes.default.svc"},
+        "project": "default",
+        "sources": [
+          {
+            "chart": "redis",
+            "repoURL": "https://charts.bitnami.com/bitnami",
+            "targetRevision": "19.6.4"
+          },
+          {
+            "path": "redis/overlays/lab",
+            "repoURL": "https://github.com/example/redis-config.git",
+            "ref": "cfg"
+          }
+        ],
+        "syncPolicy": {"automated": {"prune": true}}
+      },
+      "status": {
+        "health": {"status": "Healthy"},
+        "history": [
+          {"deployedAt": "2026-11-10T08:00:07Z", "id": 3, "revisions": ["19.6.4", "0d4f8a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f"]},
+          {"deployedAt": "2026-11-10T09:00:07Z", "id": 4, "revisions": ["19.6.4", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"]}
+        ],
+        "reconciledAt": "2026-11-10T09:05:00Z",
+        "sync": {"revisions": ["19.6.4", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"], "status": "Synced"}
+      }
+    }
+  ],
+  "kind": "List",
+  "metadata": {"resourceVersion": ""}
+}

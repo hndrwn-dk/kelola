@@ -1,0 +1,23 @@
+{
+  "_synthetic": true,
+  "apiVersion": "v1",
+  "items": [
+    {
+      "apiVersion": "argoproj.io/v1alpha1",
+      "kind": "Application",
+      "metadata": {"name": "private-repo", "namespace": "argocd"},
+      "spec": {
+        "destination": {"namespace": "private", "server": "https://kubernetes.default.svc"},
+        "project": "default",
+        "source": {"path": "deploy", "repoURL": "https://ghp_x@github.com/o/r.git?token=y", "targetRevision": ""}
+      },
+      "status": {
+        "health": {"status": "Healthy"},
+        "reconciledAt": "2026-11-10T09:05:00Z",
+        "sync": {"revision": "3333333333333333333333333333333333333333", "status": "Synced"}
+      }
+    }
+  ],
+  "kind": "List",
+  "metadata": {"resourceVersion": ""}
+}
