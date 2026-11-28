@@ -91,7 +91,9 @@ const _kelolaBinaryNames = {
 /// directory. A listing does not say which file a rule came from, so this is
 /// how the read-only fallback picks Kelola's lines.
 bool isKelolaSudoCommand(String command) {
-  final bin = command.split(' ').first;
+  // An old refusal (`!<bin>`) names the binary after the `!`.
+  final c = command.startsWith('!') ? command.substring(1) : command;
+  final bin = c.split(' ').first;
   final i = bin.lastIndexOf('/');
   if (i <= 0) return false;
   return webGrantSystemDirs.contains(bin.substring(0, i)) &&
@@ -103,6 +105,23 @@ bool isKelolaSudoCommand(String command) {
 /// only repeated. Anything unknown reads as "Run `command` as root".
 String describeKelolaSudoRule(String lineOrCommand) {
   final cmd = normalizeSudoRule(kelolaSudoRuleCommand(lineOrCommand));
+  if (cmd == 'ALL') return 'Run any command as root';
+  // Shapes earlier versions wrote ([kelolaSudoRulesOutdated]): a refusal,
+  // which in this file also denies the login's own password sudo; a bare
+  // binary or a trailing `*`, which take any arguments.
+  // "(old rule)" only for Kelola's own binaries.
+  final old = isKelolaSudoCommand(cmd) ? ' (old rule)' : '';
+  if (cmd.startsWith('!')) {
+    return 'Blocks ${cmd.substring(1)} for this login, even with a '
+        'password$old';
+  }
+  if (cmd.startsWith('/') && !cmd.contains(' ')) {
+    return 'Run $cmd with any arguments as root$old';
+  }
+  if (cmd.endsWith(' *')) {
+    return 'Run ${cmd.substring(0, cmd.length - 2)} with any arguments as '
+        'root$old';
+  }
   final sp = cmd.indexOf(' ');
   final bin = sp < 0 ? cmd : cmd.substring(0, sp);
   final args = sp < 0 ? '' : cmd.substring(sp + 1);

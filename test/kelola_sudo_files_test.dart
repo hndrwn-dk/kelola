@@ -112,6 +112,10 @@ void main() {
       expect(isKelolaSudoCommand('/opt/backup/run.sh'), isFalse);
       expect(isKelolaSudoCommand('/usr/local/bin/systemctl reload x'), isFalse);
       expect(isKelolaSudoCommand('ALL'), isFalse);
+      // Old refusals and wide rules of Kelola's own binaries still count,
+      // so a host whose files need the password shows them.
+      expect(isKelolaSudoCommand('!/usr/bin/systemctl'), isTrue);
+      expect(isKelolaSudoCommand('/usr/bin/apt-get install *'), isTrue);
     });
   });
 
@@ -157,7 +161,21 @@ void main() {
       '/usr/sbin/apachectl -S': 'Print the Apache vhosts',
       '/usr/bin/openssl x509 -noout -enddate -subject -ext subjectAltName -in /etc/ssl/a.pem':
           'Read certificate /etc/ssl/a.pem',
-      '/opt/backup/run.sh': 'Run /opt/backup/run.sh as root',
+      // No arguments in a rule means any arguments.
+      '/opt/backup/run.sh':
+          'Run /opt/backup/run.sh with any arguments as root',
+      '/opt/backup/run.sh --daily': 'Run /opt/backup/run.sh --daily as root',
+      '!/opt/x': 'Blocks /opt/x for this login, even with a password',
+      // Shapes earlier Kelola versions wrote (see kelolaSudoRulesOutdated).
+      '!/usr/bin/systemctl': 'Blocks /usr/bin/systemctl for this login, '
+          'even with a password (old rule)',
+      '!/usr/bin/systemctl enable *': 'Blocks /usr/bin/systemctl enable * '
+          'for this login, even with a password (old rule)',
+      '/usr/bin/systemctl': 'Run /usr/bin/systemctl with any arguments as '
+          'root (old rule)',
+      '/usr/bin/apt-get install *': 'Run /usr/bin/apt-get install with any '
+          'arguments as root (old rule)',
+      'ALL': 'Run any command as root',
     };
     cases.forEach((cmd, words) {
       test(words, () {
