@@ -22,7 +22,8 @@ Future<FleetK8sSummary?> readFleetK8s(
   FleetProbeRunner run, {
   FleetK8sSummary? previous,
   void Function(ClusterHealth health)? onClusterKind,
-  bool? cachedHasArgo,
+  // Lazy: only asked when the fresh read could not tell whether Argo CD runs.
+  Future<bool?> Function()? cachedHasArgo,
 }) async {
   if (kubectlFlavor(facts) == KubectlFlavor.none) {
     return null;
@@ -71,7 +72,15 @@ Future<FleetK8sSummary?> readFleetK8s(
     }
     // M49: Argo CD, independent of OpenShift. Fresh detection wins over the
     // cached kind; unknown on both sides never probes.
-    if ((cluster.health.hasArgo ?? cachedHasArgo) == true) {
+    var hasArgo = cluster.health.hasArgo;
+    if (hasArgo == null && cachedHasArgo != null) {
+      try {
+        hasArgo = await cachedHasArgo();
+      } catch (_) {
+        hasArgo = null;
+      }
+    }
+    if (hasArgo == true) {
       try {
         const argoProbe = FleetArgoProbe();
         assertFleetReadOnly(argoProbe, scope: ProbeScope.fleet);

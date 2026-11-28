@@ -249,7 +249,7 @@ void main() {
 
     test('hasArgo false: probe never runs', () async {
       final run = _Runner(hasArgo: false);
-      final s = await readFleetK8s(_kubectl, run.call, cachedHasArgo: true);
+      final s = await readFleetK8s(_kubectl, run.call, cachedHasArgo: () async => true);
       expect(run.ran, isNot(contains(FleetArgoProbe)));
       expect(s!.argo, isNull);
     });
@@ -263,15 +263,56 @@ void main() {
 
     test('hasArgo null and cached false: probe never runs', () async {
       final run = _Runner();
-      await readFleetK8s(_kubectl, run.call, cachedHasArgo: false);
+      await readFleetK8s(_kubectl, run.call, cachedHasArgo: () async => false);
       expect(run.ran, isNot(contains(FleetArgoProbe)));
     });
 
     test('hasArgo null and cached true: probe runs', () async {
       final run = _Runner();
-      final s = await readFleetK8s(_kubectl, run.call, cachedHasArgo: true);
+      final s = await readFleetK8s(_kubectl, run.call, cachedHasArgo: () async => true);
       expect(run.ran, contains(FleetArgoProbe));
       expect(s!.argo, isNotNull);
+    });
+
+    test('cached flag is asked only when fresh hasArgo is null', () async {
+      var asked = 0;
+      Future<bool?> cached() async {
+        asked++;
+        return true;
+      }
+
+      await readFleetK8s(_kubectl, _Runner(hasArgo: true).call,
+          cachedHasArgo: cached);
+      await readFleetK8s(_kubectl, _Runner(hasArgo: false).call,
+          cachedHasArgo: cached);
+      expect(asked, 0);
+      await readFleetK8s(_kubectl, _Runner().call, cachedHasArgo: cached);
+      expect(asked, 1);
+    });
+
+    test('cached flag is never asked without kubectl', () async {
+      var asked = 0;
+      final s = await readFleetK8s(
+        HostFacts.undiscovered,
+        _Runner().call,
+        cachedHasArgo: () async {
+          asked++;
+          return true;
+        },
+      );
+      expect(s, isNull);
+      expect(asked, 0);
+    });
+
+    test('cached flag throwing is treated as unknown', () async {
+      final run = _Runner();
+      final s = await readFleetK8s(
+        _kubectl,
+        run.call,
+        cachedHasArgo: () async => throw StateError('disk'),
+      );
+      expect(run.ran, isNot(contains(FleetArgoProbe)));
+      expect(s!.read, isTrue);
     });
 
     test('Argo probe throwing leaves argo null and keeps the rest', () async {
