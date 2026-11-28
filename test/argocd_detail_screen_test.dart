@@ -265,6 +265,57 @@ void main() {
     expect(find.byType(WorkloadDetailScreen), findsOneWidget);
   });
 
+  testWidgets('same name in another namespace opens the sheet',
+      (tester) async {
+    await _pump(
+      tester,
+      _app(),
+      workloads: const [
+        K8sWorkload(
+          kind: K8sKind.deployment,
+          namespace: 'staging',
+          name: 'web',
+          ready: 1,
+          desired: 1,
+        ),
+      ],
+    );
+    await tester.tap(find.text('web'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(WorkloadDetailScreen), findsNothing);
+    expect(find.byType(KelolaSheet), findsOneWidget);
+  });
+
+  testWidgets('a Deployment from another API group opens the sheet',
+      (tester) async {
+    await _pump(
+      tester,
+      _app(resources: const [
+        ArgoResource(
+          group: 'example.com',
+          kind: 'Deployment',
+          namespace: 'prod',
+          name: 'web',
+        ),
+      ]),
+      workloads: const [
+        K8sWorkload(
+          kind: K8sKind.deployment,
+          namespace: 'prod',
+          name: 'web',
+          ready: 1,
+          desired: 1,
+        ),
+      ],
+    );
+    await tester.tap(find.text('web'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(WorkloadDetailScreen), findsNothing);
+    expect(find.byType(KelolaSheet), findsOneWidget);
+  });
+
   testWidgets('a ConfigMap row opens the sheet; a Deployment without a '
       'match does too', (tester) async {
     await _pump(tester, _app());

@@ -222,6 +222,10 @@ class _ArgoAppDetailScreenState extends ConsumerState<ArgoAppDetailScreen> {
     if (kind == null || !_workloadKinds.contains(kind)) {
       return null;
     }
+    // Pods are core (empty group); the controllers live in `apps`.
+    if (r.group != (kind == K8sKind.pod ? '' : 'apps')) {
+      return null;
+    }
     for (final w in widget.workloads) {
       if (w.kind == kind && w.namespace == r.namespace && w.name == r.name) {
         return w;
