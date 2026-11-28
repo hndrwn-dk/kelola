@@ -31,7 +31,9 @@ import 'package:kelola/presentation/screens/firewall_screen.dart';
 import 'package:kelola/presentation/screens/files_screen.dart';
 import 'package:kelola/presentation/screens/packages_screen.dart';
 import 'package:kelola/presentation/screens/host_key_mismatch_screen.dart';
+import 'package:kelola/domain/sudo/kelola_sudo_files.dart';
 import 'package:kelola/presentation/screens/host_details_screen.dart';
+import 'package:kelola/presentation/widgets/kelola_sudo_rules_flow.dart';
 import 'package:kelola/presentation/screens/edit_host_screen.dart';
 import 'package:kelola/presentation/screens/journal_screen.dart';
 import 'package:kelola/presentation/screens/metrics_screen.dart';
@@ -1185,6 +1187,24 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
           connected: ref.read(sessionPoolProvider).hasLiveSession(host.id),
           onEdit: _openEdit,
           checkSudoRules: _sudoRulesCheck(host),
+          readSudoFiles: _sudoFilesRead(host),
+          readSudoFilesWithPassword: _sudoFilesRead(host) == null
+              ? null
+              : (ctx) => readKelolaSudoFilesWithPassword(
+                  context: ctx,
+                  ref: ref,
+                  host: host,
+                  facts: _facts,
+                ),
+          removeSudoRule: _sudoFilesRead(host) == null
+              ? null
+              : (ctx, removal) => removeKelolaSudoRule(
+                  context: ctx,
+                  ref: ref,
+                  host: host,
+                  removal: removal,
+                  facts: _facts,
+                ),
           onRevealSerial: () {
             return ref
                 .read(hostRepositoryProvider)
@@ -1266,6 +1286,20 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
 
   /// Null when there is no live session or no facts to compare against: the
   /// details screen must not open a connection to show a warning.
+  /// Host details' "Kelola sudo rules": a read without a password, on a live
+  /// session only (like [_sudoRulesCheck]).
+  Future<KelolaSudoFiles> Function()? _sudoFilesRead(Host host) {
+    final facts = _facts;
+    if (facts == null || !ref.read(sessionPoolProvider).hasLiveSession(host.id)) {
+      return null;
+    }
+    return () => ref.read(sessionPoolProvider).execute(
+      host,
+      const KelolaSudoFilesProbe(),
+      facts: facts,
+    );
+  }
+
   Future<bool> Function()? _sudoRulesCheck(Host host) {
     final facts = _facts;
     if (facts == null || !ref.read(sessionPoolProvider).hasLiveSession(host.id)) {

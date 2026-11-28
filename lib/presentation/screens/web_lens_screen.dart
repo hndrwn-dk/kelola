@@ -16,6 +16,7 @@ import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/service_detection.dart';
 import 'package:kelola/domain/services/web_lens.dart';
 import 'package:kelola/domain/services/web_lens_parser.dart';
+import 'package:kelola/domain/sudo/kelola_sudo_files.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/sudo_hint.dart';
@@ -297,8 +298,8 @@ const webOutdatedGrantTitle = 'Outdated config-test grant';
 /// `sudo -n -l` listed them for [user].
 String webOutdatedGrantFix(String user, List<String> rules) => [
   'These lines run the server config as root without a password. Remove '
-      'them with sudo visudo -f $kelolaWebSudoersPath (or the file that '
-      'holds them):',
+      'them in $kelolaSudoRulesPlace, or with sudo visudo -f '
+      '$kelolaWebSudoersPath (or the file that holds them):',
   for (final r in rules) '$user ALL=(root) NOPASSWD: $r',
 ].join('\n');
 

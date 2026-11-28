@@ -16,7 +16,7 @@
   - LLM redaction path and AssistPreviewGate local/public endpoint classification (must not trust provider type alone)
   - Fleet mode: commands fanned out to many hosts
   - Kubernetes / OpenShift features: kubeconfig and token handling
-  - Privileges the app grants on hosts: `/etc/sudoers.d/kelola*` NOPASSWD rules (exact lines and sudoers regex, including values taken from server output), the login's `systemd-journal` group membership, and on Kubernetes hosts a read-only `kelola-reader` ServiceAccount (Namespace, ClusterRole, ClusterRoleBinding) applied with the cluster's admin kubeconfig through sudo, whose TokenRequest token is written to `~/.kube/kelola.yaml` (0600); all set up with the sudo password in one tap
+  - Privileges the app grants on hosts: `/etc/sudoers.d/kelola*` NOPASSWD rules (exact lines and sudoers regex, including values taken from server output), the login's `systemd-journal` group membership, and on Kubernetes hosts a read-only `kelola-reader` ServiceAccount (Namespace, ClusterRole, ClusterRoleBinding) applied with the cluster's admin kubeconfig through sudo, whose TokenRequest token is written to `~/.kube/kelola.yaml` (0600); all set up with the sudo password in one tap; Host details also lists those three files (`kelola`, `kelola-units`, `kelola-web`) and removes a line or a whole file with the sudo password (destructive, visudo-checked)
 - **Sensitive data handled:** SSH private keys, host fingerprints, server hostnames/IPs, command history and output, kubeconfigs
 - **Private dependencies not in this repo:** hndrwn-dk/kelola-pro (entitlement / Play Billing) — scan separately
 - **Exclude paths:** build/, .dart_tool/, android/.gradle/, ios/Pods/, **/*.g.dart, **/*.freezed.dart, readiness/

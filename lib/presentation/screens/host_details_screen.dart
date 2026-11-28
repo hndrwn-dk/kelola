@@ -5,7 +5,9 @@ import 'package:kelola/design/kelola_components.dart';
 import 'package:kelola/design/kelola_theme.dart';
 import 'package:kelola/domain/facts/host_facts.dart';
 import 'package:kelola/domain/facts/serial_mask.dart';
+import 'package:kelola/domain/exceptions.dart';
 import 'package:kelola/domain/hosts/host.dart';
+import 'package:kelola/domain/sudo/kelola_sudo_files.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo_hint.dart';
 import 'package:kelola/presentation/widgets/kelola_chrome.dart';
@@ -21,6 +23,9 @@ class HostDetailsScreen extends StatefulWidget {
     this.onEdit,
     this.onRevealSerial,
     this.checkSudoRules,
+    this.readSudoFiles,
+    this.readSudoFilesWithPassword,
+    this.removeSudoRule,
   });
 
   final Host host;
@@ -34,6 +39,20 @@ class HostDetailsScreen extends StatefulWidget {
   /// Resolves true when the host's Kelola sudo rules are outdated.
   final Future<bool> Function()? checkSudoRules;
 
+  /// Reads the Kelola sudo files without a password ([KelolaSudoFilesProbe]).
+  /// Null hides the "Kelola sudo rules" section (no live session).
+  final Future<KelolaSudoFiles> Function()? readSudoFiles;
+
+  /// Asks for the sudo password and reads the files with it.
+  final Future<KelolaSudoFiles> Function(BuildContext context)?
+  readSudoFilesWithPassword;
+
+  /// Removes one line or a whole file, after the screen's
+  /// [DestructiveConfirmSheet]: presence, the sudo password, then
+  /// [KelolaSudoRemoveProbe]. Throws on failure.
+  final Future<void> Function(BuildContext context, KelolaSudoRemoval removal)?
+  removeSudoRule;
+
   @override
   State<HostDetailsScreen> createState() => _HostDetailsScreenState();
 }
@@ -42,10 +61,16 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
   bool _serialRevealed = false;
   bool _sudoRulesOutdated = false;
 
+  /// The Kelola sudo files as last read; null until the first read.
+  KelolaSudoFiles? _sudoFiles;
+  bool _sudoBusy = false;
+  String? _sudoError;
+
   @override
   void initState() {
     super.initState();
     _checkSudoRules();
+    _readSudoFiles();
   }
 
   Future<void> _checkSudoRules() async {
@@ -55,12 +80,211 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
     }
     try {
       final outdated = await check();
-      if (outdated && mounted) {
-        setState(() => _sudoRulesOutdated = true);
+      if (mounted) {
+        setState(() => _sudoRulesOutdated = outdated);
       }
     } catch (_) {
       // A warning that cannot be checked stays hidden.
+      if (mounted) setState(() => _sudoRulesOutdated = false);
     }
+  }
+
+  Future<void> _readSudoFiles() async {
+    final read = widget.readSudoFiles;
+    if (read == null) return;
+    await _sudoRead(read);
+  }
+
+  Future<void> _sudoRead(Future<KelolaSudoFiles> Function() read) async {
+    setState(() {
+      _sudoBusy = true;
+      _sudoError = null;
+    });
+    try {
+      final files = await read();
+      if (mounted) setState(() => _sudoFiles = files);
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => _sudoError = e is KelolaException
+              ? e.message
+              : 'Could not read the Kelola sudo rules.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sudoBusy = false);
+    }
+  }
+
+  Future<void> _readSudoFilesWithPassword() async {
+    final read = widget.readSudoFilesWithPassword;
+    if (read == null || _sudoBusy) return;
+    await _sudoRead(() => read(context));
+  }
+
+  /// [DestructiveConfirmSheet] (the exact command for a line, the file name
+  /// for a whole file), then [HostDetailsScreen.removeSudoRule]; then the
+  /// list is read again and the outdated-rules row checked again.
+  Future<void> _confirmRemove(KelolaSudoFile file, String? line) async {
+    final remove = widget.removeSudoRule;
+    if (remove == null || _sudoBusy || widget.host.readOnly) return;
+    final alias = widget.host.alias;
+    final cmd = line == null ? null : kelolaSudoRuleCommand(line);
+    var confirmed = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => KelolaSheet(
+        child: DestructiveConfirmSheet(
+          title: cmd == null
+              ? 'Delete ${file.name}?'
+              : 'Remove this sudo line?',
+          consequence: cmd == null
+              ? 'Kelola deletes ${file.path} on $alias. Every command in it '
+                    'will need your sudo password again.'
+              : 'Kelola removes "${describeKelolaSudoRule(cmd)}" from '
+                    '${file.path} on $alias, checks the file with visudo and '
+                    'confirms it on the host. Removing the last line deletes '
+                    'the file.',
+          warning: cmd == null
+              ? 'Type ${file.name} to confirm.'
+              : 'Type the exact command to confirm.',
+          confirmToken: cmd ?? file.name,
+          onConfirmed: () => confirmed = true,
+        ),
+      ),
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _sudoBusy = true);
+    try {
+      await remove(context, (path: file.path, line: line));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            cmd == null ? 'Deleted ${file.name}' : 'Removed from ${file.name}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is KelolaException ? e.message : 'Could not change ${file.name}',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sudoBusy = false);
+    }
+    if (!mounted) return;
+    await _readSudoFiles();
+    await _checkSudoRules();
+  }
+
+  List<Widget> _sudoRulesSection(BuildContext context) {
+    final c = context.kc;
+    final files = _sudoFiles;
+    final readOnly = widget.host.readOnly;
+    final canRemove =
+        !readOnly && !_sudoBusy && widget.removeSudoRule != null;
+    final note = KelolaType.body(color: c.muted, size: 12);
+    final out = <Widget>[
+      const SizedBox(height: 8),
+      const SectionSlab('Kelola sudo rules'),
+      if (readOnly) Text('Host is read-only.', style: note),
+    ];
+    if (_sudoError != null) {
+      out.add(Text(_sudoError!, style: note));
+    }
+    if (files == null) {
+      if (_sudoBusy) out.add(Text('Reading…', style: note));
+      return out;
+    }
+    final shown = files.shown;
+    if (shown.isEmpty) {
+      out.add(Text('No Kelola sudo files on this host.', style: note));
+      return out;
+    }
+    for (final f in shown) {
+      final lines = f.lines;
+      out
+        ..add(const SizedBox(height: 8))
+        ..add(
+          Text(f.path, style: KelolaType.mono(color: c.text, size: 11.5)),
+        )
+        ..add(const SizedBox(height: 4));
+      if (lines == null) continue;
+      for (final l in lines) {
+        out
+          ..add(
+            ServiceRow(
+              risk: RiskLevel.destructive,
+              compact: true,
+              name: describeKelolaSudoRule(l),
+              meta: kelolaSudoRuleCommand(l),
+              onTap: canRemove ? () => _confirmRemove(f, l) : null,
+            ),
+          )
+          ..add(const SizedBox(height: 4));
+      }
+      out
+        ..add(
+          ServiceRow(
+            risk: RiskLevel.destructive,
+            compact: true,
+            name: 'Remove file',
+            meta: f.name,
+            onTap: canRemove ? () => _confirmRemove(f, null) : null,
+          ),
+        )
+        ..add(const SizedBox(height: 4));
+    }
+    if (files.contentsNeedPassword) {
+      final listed = files.listedKelola;
+      out
+        ..add(const SizedBox(height: 8))
+        ..add(
+          Text(
+            'The file contents need the sudo password. '
+            '${listed.isEmpty ? 'sudo -n -l reports no Kelola rule.' : 'sudo -n -l reports these Kelola rules:'}',
+            style: note,
+          ),
+        )
+        ..add(const SizedBox(height: 4));
+      for (final cmd in listed) {
+        out
+          ..add(
+            ServiceRow(
+              risk: RiskLevel.read,
+              compact: true,
+              name: describeKelolaSudoRule(cmd),
+              meta: cmd,
+            ),
+          )
+          ..add(const SizedBox(height: 4));
+      }
+      if (widget.readSudoFilesWithPassword != null) {
+        out.add(
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: _sudoBusy ? null : _readSudoFilesWithPassword,
+              child: Text(
+                'Read with password',
+                style: KelolaType.display(color: c.amber, size: 13),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    return out;
   }
 
   @override
@@ -192,6 +416,7 @@ class _HostDetailsScreenState extends State<HostDetailsScreen> {
           if (network.isNotEmpty)
             FactGroup(heading: 'Network', entries: network),
           if (gpu.isNotEmpty) FactGroup(heading: 'Gpu', entries: gpu),
+          if (widget.readSudoFiles != null) ..._sudoRulesSection(context),
         ],
       ),
     );

@@ -20,6 +20,7 @@ import 'package:kelola/domain/services/service_catalog.dart';
 import 'package:kelola/domain/services/service_detection.dart';
 import 'package:kelola/domain/services/web_lens.dart';
 import 'package:kelola/presentation/screens/web_lens_screen.dart';
+import 'package:kelola/domain/sudo/kelola_sudo_files.dart';
 import 'package:kelola/domain/sudo/kelola_sudoers_spec.dart';
 import 'package:kelola/domain/sudo/web_sudoers_grant.dart';
 import 'package:kelola/domain/sudo/sudo_flavor.dart';
@@ -649,7 +650,8 @@ Future<bool> confirmExtraWebLensLines({
 const webOneTapCertsLaterNote =
     'Certificate and log lines for each lens are shown for one more tap once '
     'the config can be read, and pass the same checks. Lines already in '
-    '$kelolaWebSudoersPath are kept; remove stale ones on the host by hand.';
+    '$kelolaWebSudoersPath are kept; remove stale ones in '
+    '$kelolaSudoRulesPlace.';
 
 /// The web grant sheet's trade-off line (fix 1: enforced on the host).
 const webGrantSheetFooter =
